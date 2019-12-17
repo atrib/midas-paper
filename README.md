@@ -29,7 +29,7 @@ Kernel Page Table Isolation was introduced in the kernel to prevent Meltdown. It
 
 When booting the Linux kernel, it will start with a temporary clk signal before switching to the standard clock. This switch involves a system call that reads from the memory (marks it) and writes to it afterwards. The write makes the only running thread wait for itself to finish. The problem cannot be solved by switching the permissions in the page table to W because it would also enable writes for the user.
 
-We solve this problem by detecting this condition in the page fault handler and modifying the kernel page table. We follow the path to the faulting address and allocate corresponding kernel nodes on the path. If we detect that the entry has already been allocated (another syscall performed a KPTI bypass), we add our own data. After flushing the TLB and updating the MMU cache, we restart the call.
+We solve this problem by detecting this condition in the page fault handler and modifying the kernel page table. We follow the path to the faulting address and allocate corresponding kernel nodes on the path. If we detect that the entry has already been allocated (another syscall performed a KPTI bypass), we add our own data. After flushing the TLB and updating the MMU cache, we restart the fault. When the system call finishes, we unmap any extra kernel page entries.
 
 ![kptibypass](images/kptibypass.png)
 
