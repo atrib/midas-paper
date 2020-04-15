@@ -94,21 +94,97 @@ Unfortunately, LSM hooks need to be added by the developers by hand and many dri
 \\
 The contribution of this paper are:
 \begin{itemize}
-\item kTikTok: An extension to the Linux kernel that prevents any changes to the system-call arguments by using the virtual memory protection mechanisms.
+\item TikTok: An extension to the Linux kernel that prevents any changes to the system-call arguments by using the virtual memory protection mechanisms.
+\item 
 \item A security analysis of our system and results showing that it is successfull against known double-fetch bugs
 \item A performance analysis of our system where we show that the performance penalty is comparable to recently merged patches
 \end{itemize}
 
 \section{Background}
-In this section we describe the double fetch bugs and user-to-kernel memory interface in the Linux kernel in \ref{sec:doublefetch}. Afterward, in the subsection \ref{sec:vm} we discuss the memory protection mechanisms that we
-use for the implementation of our system.
+In this section we describe the double fetch bugs and user-to-kernel memory interface in the Linux kernel in \ref{sec:doublefetch}. Afterward, in the subsection \ref{sec:vm} we discuss the memory protection mechanisms that we use for the implementation of our system.
+
+\subsection{Interprocess Communication}
+
+The two main types of communication between processes are: \textbf{shared memory} and \textbf{message passing}.
+\\
+\\
+Shared memory relies on processes having a section of memory that both can access. Data tranfer is fast. However, synchronization is problematic. Processes must monitor shared memory for changes, leading to unnecessary busy waiting.
+\\
+\\
+Message passing consists of one process calling send, and another one calling receive to fetch the message. Synchronization is guaranteed, with parties waiting for their calls to be server. However, unnecessary message copying can occur between processes on the same system.
+\\
+\\
+Modern operating systems support both of these approaches. The downsides are usually offset by mixing adding the bare minimum of the other approach (e.g. shared memory with semaphores, or message passing with shared buffers). However, only one of the methods is usually used between two processes. Communication by sending messages and writing to the shared memory at the same time is quite rare.
+
+\subsection{Virtual Memory and Page Tables} \label{sec:vm}
+
+Operating systems (OS) provide an illusion that every process is executing alone on the processor. To accomplish this, OS needs to restore the program state on the context switch between two processes (e.g. CPU registers) and to prevent user processes from accessing each other's memory. Memory is protected by virtualizing it. Processes use virtual addresses that get mapped to the actual (physical) addresses. When the OS moves data to a different physical address, the virtual address refering to the data remains the same.
+\\
+\\
+Virtual memory can be implemented by storing different processes' memory at different offsets in physical memory, and limiting the accesses to the corresponding chunk. Each process's memory chunk is called a segment and the implementation is called \textbf{segmented virtual memory}. Considering that segments need to be continous, the free physical memory could be fragmented such that the OS cannot find a chunk large enough to store a new process.
+\\
+\\
+Paged virtual memory is more flexible. The physical memory is partitioned into fixed-size pages (usually 4 kB). A page in the virtual memory space gets mapped to the corresponding page in the physical memory. The mapping function is defined for each process by a page-table. Page-tables store the number of the physical memory (\textbf{page frame}) the virtual page maps to. It also keeps the permissions the process has when accessing the page (\textbf{read}, \textbf{write}, \textbf{execute}, \textbf{user}, \textbf{superuser}). In case of low memory, rarely accessed pages can be swapped to disk, and replaced by immediately needed pages. This process is called \textbf{swapping}. Similarly, when processing a file, pages don't need to be loaded immediately, but on the first access (\textbf{on-demand paging}). The \textbf{present} bit is added to facilitate this.
+\\
+\\
+Virtual memory spaces are quite large today ($2^{64}$ bytes), so they are organized in a tree with multiple levels. Only the allocated pages use memory for book-keeping, while unused subtrees (memory ranges) are marked so. Every time the processor accesses memory, it needs to perform address translation. Different bits in a virtual address correspond to the path page table traversal needs to take to obtain the page frame number (e.g. the first 8 bits tell CPU which entry on the first level it needs to derefernce). Considering that this process needs to be fast, it is implemented in hardware by the \textbf{memory management unit} (MMU). Reading the page table from memory is slow, so a small cache is added to the MMU to store frequently accessed page entries - \textbf{translation-lookaside buffer} (TLB). On modern processors TLB consists of several levels, and can be even be backed by another MMU cache. 
+
+\subsection{x86-64 Page Tables}
+x86-64 architecture officially supports paged virtual memory model with 5 levels of page tables:
+\begin{itemize}
+    \item page global directory (\textbf{PGD})
+    \item page fourth directory (\textbf{P4D})
+    \item page upper directory (\textbf{PUD})
+    \item page middle directory (\textbf{PMD})
+    \item page table entry (\textbf{PTE})
+\end{itemize}
+
+Every level corresponds to 8 bits in the virtual address, with the remaining 12 bits identifying the offset of the byte in the actual page frame.
+Page table entry includes the following information:
+\begin{itemize}
+    \item Present bit (\textbf{P}) denotes if the page is present in memory
+    \item Read/Write bit (\textbf{R/W}) denotes if the page is writable, or only readable
+    \item User/Superuser bit (\textbf{U/S}) denotes if the page can be accessed by the user, or only by the superuser
+    \item Not Executable bit (\textbf{NX}) denotes if the code stored on the page can be executed
+    \item Page Frame Number denotes the page frame the page maps to
+    \item Four bits free for the OS to use
+\end{itemize}
+
+\subsection{Page-Fault}
+On an invalid access (e.g. wrong permissions, page not present) MMU will trigger a page-fault. The fault is a type of a synchronous interrupt which executes in the context of the faulting (accessing) thread. The page-fault handler loads an absent page from the disk. In case of writes temporarily shared pages it creates an independent copy of the page (\textbf{copy-on-write}) After the fault finishes execution, the faulting instruction is executed again. In case of a permission violation the page-fault handler kills the thread.
+
+\subsection{Copy-from-User and Copy-to-User}
+Linux uses swapping only for user memory. When executing in kernel context, kernel memory is mapped and present. A page fault on kernel memory access is therefore always fatal. However, the kernel needs to access user memory, which can cause a page-fault. User memory is also limited to the lower half of virtual memory space, requiring checks on every access.
+\\
+\\
+To force and encapsulate those checks Linux provides functions and macros for user-memory access from the kernel-space. A page-fault generated in them is handled like a fault in the user process which called the executing system call.
+\\
+\\
+The interface for reading from userspace:
+\begin{itemize}
+    \item \textbf{copy\_from\_user}
+    \item \textbf{\_\_copy\_from\_user}
+    \item \textbf{get\_user}
+    \item \textbf{\_\_get\_user}
+    \item \textbf{user\_strcpy}
+    \item \textbf{user\_strlen}
+\end{itemize}
+\bigskip
+The interface for writing to userspace:
+\begin{itemize}
+    \item \textbf{copy\_to\_user}
+    \item \textbf{\_\_copy\_to\_user}
+    \item \textbf{put\_user}
+    \item \textbf{\_\_put\_user}
+\end{itemize}
+\bigskip
+BSD also provides a similar interface using \textbf{copy\_in} and \textbf{copy\_out} functions.
+
 \subsection{Double Fetch Bugs}
 \label{sec:doublefetch}
-Many software systems feature a concept of the trust boundary. It comprises APIs which are used to connect domains with different levels of trust. Data originating from an area of lower trust needs to be verified in the high-trust domain.
 
 
-\subsection{Virtual Memory, Paging and Page Faults}
-\label{sec:vm}
+
 \section{Ease of Use}
 
 \subsection{Maintaining the Integrity of the Specifications}
