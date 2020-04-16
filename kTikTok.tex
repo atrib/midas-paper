@@ -183,6 +183,103 @@ BSD also provides a similar interface using \textbf{copy\_in} and \textbf{copy\_
 \subsection{Double Fetch Bugs}
 \label{sec:doublefetch}
 
+\section{Design}
+In this section we describe a high-level overview of TikTok.
+
+\subsection{Protecting System Call Arguments from Writes by the User}
+
+System calls access user memory via \texttt{copy\_from\_user} and its variants. When that happens, 
+we \textbf{mark} the entire page storing the argument as \textbf{read-only} in all virtual memory spaces 
+mapping it. Multiple system calls can mark a page at the same time. Marking a page does not affect reads
+from userspace in any way.  When all the system calls that use the page exit, the page is \textbf{unmarked}.
+\\
+\\
+Writes to marked pages will trigger a page-fault. In the page-fault handler we intercept these writes 
+and make them wait for the page to get unmarked. The faulting thread attempts to perform the
+write again.
+
+\subsection{Protecting System Call Aguments from Writes by the Kernel}
+
+Watson mentions in \cite{watson} that the system call wrappers he analyzed don't handle writes from kernelspace
+properly. Unlike those solutions, TikTok doesn't copy arguments to separate pages, leading to complex redirection 
+of userspace pointers. This unables us just to defer the writes until it is safe to perform them.
+\\
+\\
+However, deferring kernel writes the same way as user writes would lead to deadlocks. System call \texttt{rt\_sigaction}
+needs to write to a page it previously marked. Pausing execution would leave the thread in a state where it is waiting for itself
+to exit unmark the page. Temporarily unmarking the page would enable an adversary to edit arbitrary data on it.
+\\
+\\
+Allowing the writes for the kernel is not an option. The adversary could abuse this to change the marked memory. 
+They would execute a read system call into the marked page. System calls execute in the kernel context and would 
+be able to bypass protection. The read system call would then write arbitrary data into the protected area.
+\\
+\\
+Our solution is based on the fact that we already provide partial checkpointing of the system call's view of RAM.
+During its execution, the system call can only see the state of the memory as it was at the beginning of the call.
+All writes from userspace become visible only when the call has finished execution. TikTok extends this policy to 
+writes from kernelspace. Considering that we need to continue execution after a write to a marked page, we buffer 
+all the writes until the system call finish. At that point we unmark the pages and allow them to proceed normally.
+
+\subsection{Two Axes of Linux Memory}
+
+Memory in Linux can be \textbf{file-backed} and \textbf{anonymous}. File-backed pages have map to a corresponding file. 
+Anonymous pages don't have a backing file (e.g. stack and heap).
+\\
+\\
+Another classification is based on privacy: \textbf{private} and \textbf{shared}. Private memory is part of only one virtual memory space.
+This memory space can be accessed by multiple threads in a process, but no threads outside the process have access.
+Shared memory can be accessed from multiple processes.
+\\
+\\
+Unlike private memory and shared anonymous memory, shared file-backed memory can be mapped and unmapped at will. It 
+also preserves its state. This can enable an adversary to map a page as writable and edit it, after it has been marked 
+by another thread. TikTok intercepts mapping of memory and checks the page frame being mapped. The page is then mapped
+with appropriate permissions into the virtual memory space.
+
+\subsection{File Writes}
+\label{sec:filewrites}
+Files in Linux can be accessed in two ways:
+\begin{itemize}
+    \item by mapping the file to memory
+    \item by using system calls to modify the file (e.g. write)
+\end{itemize}
+
+Watson has noticed that protected file-backed pages could still be edited by a write call. TikTok prevents this attacks
+by pausing the write to the corresponding file as long as it has any marked mapped pages.
+
+\subsection{TikTok Deadlocks}
+
+TikTok adds additional synchronization points to multithreaded programs. It is possible for these points to introduce 
+previously non-existant deadlocks to programs. However, deadlocking threads would need to communicate using both 
+shared memory (for TikTok to stop one of them) and message passing system calls (for TikTok to mark memory).
+\\
+\\
+Figure XXX shows an example of a such communication pattern. Thread 1 has tried to write to a page A marked by Thread 2. 
+Thread 2 is still in a system call S that marked A, and is waiting for Thread 1 to reach line 2 to proceed. This situation is
+perculiar:
+\begin{itemize}
+    \item The page A is shared between Thread 1 and Thread 2
+    \item Access to page A isn't protected by a mutex, or a semaphore
+    \item System call S is a blocking system call that receives a signal from another thread
+    \item System call S reads its arguments from the page A
+    \item Thread 1 needs to write to the same page where the arguments for S are stored (page A)
+    \item Even though Threads 1 and 2 can communicate using shared memory, Thread 2 needs to invoke S
+\end{itemize}
+
+While a a synchronization call (locking or signaling) would be a good candidate for S, they are lightweight and their arguments
+are passed in registers, not in memory. A message-passing call fits the description better. Data from page A would need to be marked,
+as it is read by the call. Message-passing can also be synchronous, requiring the other thread to receive the message before proceeding.
+However, why would two threads communicate using both message passing and shared memory?
+\\
+\\
+While it is possible to create deadlocking sequences, they require mixing different inter-process communication
+paradigms for the same data. During testing we haven't encountered a single permanent deadlock.
+\\
+\\
+Similar sequences can be constructed using the write system call protection presented in Subsection \ref{sec:filewrites}. The same argument
+can be applied in that case - the program would need to write to the same data to the file using both memory mapping and a system call. We
+haven't encountered such a problem.
 
 
 \section{Ease of Use}
