@@ -11,46 +11,22 @@
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 
-\title{Conference Paper Title*\\
+\title{TikTok: Kernel TOCTTOU Protection*\\
 {\footnotesize \textsuperscript{*}Note: Sub-titles are not captured in Xplore and
 should not be used}
 \thanks{Identify applicable funding agency here. If none, delete this.}
 }
 
-\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
+\author{\IEEEauthorblockN{1\textsuperscript{st} Uro\v{s} Te\v{s}i\'{c}}
+\IEEEauthorblockA{\textit{HexHive} \\
+\textit{EPFL}\\
+Lausanne, Switzerland \\
+uros.tesic@epfl.ch}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{4\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{5\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{6\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
+\IEEEauthorblockN{2\textsuperscript{nd} Mathias Payer}
+\IEEEauthorblockA{\textit{HexHive} \\
+\textit{EPFL}\\
+Lausanne, Switzerland \\
 email address or ORCID}
 }
 
@@ -101,7 +77,7 @@ The contribution of this paper are:
 \end{itemize}
 
 \section{Background}
-In this section we describe the double fetch bugs and user-to-kernel memory interface in the Linux kernel in \ref{sec:doublefetch}. Afterward, in the subsection \ref{sec:vm} we discuss the memory protection mechanisms that we use for the implementation of our system.
+
 
 \subsection{Interprocess Communication}
 
@@ -221,6 +197,18 @@ All writes from userspace become visible only when the call has finished executi
 writes from kernelspace. Considering that we need to continue execution after a write to a marked page, we buffer 
 all the writes until the system call finish. At that point we unmark the pages and allow them to proceed normally.
 
+\subsection{Ignored System Calls}
+
+Some system calls (e.g. pollfd) rely on writes from userland for some of their functionality. Marking their arguments
+would lead to deadlocks, so they are ignored. Considering that these calls use real-time polling of userland memory,
+we don't consider this a deficiency of TikTok.
+\\
+\\
+Other system calls can be ignored as an optimization. Any unformatted data that is passed to the kernel doesn't need
+to be marked by TikTok. Overwriting this data is equivalent to passing different data to the system call. Considering
+that the write call takes unformatted data as one of its arguments, this optimization leads to a significant reduction
+of pages marked.
+
 \subsection{Two Axes of Linux Memory}
 
 Memory in Linux can be \textbf{file-backed} and \textbf{anonymous}. File-backed pages have map to a corresponding file. 
@@ -236,6 +224,12 @@ Unlike private memory and shared anonymous memory, shared file-backed memory can
 also preserves its state. This can enable an adversary to map a page as writable and edit it, after it has been marked 
 by another thread. TikTok intercepts mapping of memory and checks the page frame being mapped. The page is then mapped
 with appropriate permissions into the virtual memory space.
+\\
+\\
+Devices are treated as files in Linux and can be memory mapped. However, hardware may change its registers at will.
+There are no conceivable ways from protecting from TOCTTOU attacks if the adversary stores his arguments in device
+mapped memory. Considering that mapping device memory to userland is considered bad practice, we rely on Descretionary
+Access Control (DAC) to prevent users from mapping devices in the first place.
 
 \subsection{File Writes}
 \label{sec:filewrites}
@@ -282,17 +276,73 @@ can be applied in that case - the program would need to write to the same data t
 haven't encountered such a problem.
 
 
-\section{Ease of Use}
+\section{Implementation}
 
-\subsection{Maintaining the Integrity of the Specifications}
+\subsection{Storing the Page Frame Information}
 
-The IEEEtran class file is used to format your paper and style the text. All margins, 
-column widths, line spaces, and text fonts are prescribed; please do not 
-alter them. You may note peculiarities. For example, the head margin
-measures proportionately more than is customary. This measurement 
-and others are deliberate, using specifications that anticipate your paper 
-as one part of the entire proceedings, and not as an independent document. 
-Please do not revise any of the current designations.
+Linux divides physical memory into page frames. Each page frame is represented by \texttt{struct page}. Considering that that this structure
+is replicated millions of times, every additional field has a tremendeous impact on memory consumption. What's even worse, the cost would not
+be constant, but linear. Systems with more memory would also waste proportionally more RAM.
+\\
+\\
+To keep the memory consumption low, TikTok uses a single bit in \texttt{struct page} to mark page frames. Considering that the prototype is implemented on x86-64,
+we decided to use one of the flag bits for this purpose. Architectures which have fewer flag bits (such as x86) could decide to recycle some of
+the bits used by other, incompatible features (e.g. Kernel Shared Memory). The marking information is stored separately - in a hashmap.
+Access to these entries is protected by separate mutexes.
+
+\subsection{Keeping Track of Marked Pages}
+
+When TikTok marks a page on x86-64, it uses an extra bit in the PTE to differentiate it from non-marked PTEs. Another bit is used to remember old R/W permission.
+Depending on which exact bits are used, some kernel features may need to be disabled. In the prototype TikTok shares one of the page table bits with page tracking.
+
+\section{Related Work}
+
+Literature relating to TikTok can be broadly divided in 2 groups. The first group are system call wrappers and filters whose main vulnerability TikTok is mitigating.
+The second one are the mitigations and solutions for double-fetches, which are a superclass of TOCTTOU bugs. We describe both groups in this section and discuss the
+benefits TikTok brings to the first group, and the advantages over the second group.
+
+\subsection{System Call Wrappers and Filters}
+
+Watson in \cite{watson} compared security of different system call wrappers. All of the systems were vulnerable to the TOCTTOU attack TikTok is mitigating. 
+In a short paragraph he mentioned that Pawel Dawidek, the creator of CerbNG \cite{cerbng} that he experimented with marking 
+arguments read-only. To our knowledge nothing came out of those experiments. For completeness, CerbNG relies on copying arguments to newly allocated memory 
+pages for protection.
+\\
+\\
+Watson briefly discusses problems the memory marking systems need to solve: 
+\begin{itemize}
+    \item unnecessary page-faults
+    \item bypassing memory marking using IO system calls
+    \item mapping shared memory late
+    \item handling system calls that write to memory correctly
+\end{itemize}
+
+TikTok addresses all of these problems. Unnecessary page-faults are rare and they are used to make the offending thread wait for completion. After the page has been unmarked,
+the write proceeds without any consequences. Write system call does not proceed until there are no marked pages of the file. Memory is marked if needed when it is mapped. 
+TikTok also postpones all writes to marked pages coming from kernelspace, while letting the writing system calls execute correctly.
+
+Modern system call wrappers can be classified in two groups, based on how they approach the TOCTTOU attack. The first group eliminates all functionality vulnerable to the attack.
+Linux's SecComp and eBPF belong to this group. The second group moves the filter checks deeper into the system calls, eliminating the need to read the arguments twice. Landlock
+Linux and Google's KPSI embrace this technique.
+
+SecComp uses BPF (Berekley Packet Filter) to provide small, programmable filters that execute before the system call. Based on the values in registers, Linux can decide whether
+to allow, or to prevent a system call. However, BPF cannot dereference pointers because an adversary would by able to bypass those checks due to the TOCTTOU problem. eBPF 
+(extended Barekley Packet Filter) provides larger filters which can also dereference user pointers. However, eBPF cannot be used for security purposes because it cannot stop
+system calls from executing. It is completely read-only and can be used only for tracing.
+
+Landlock and KPSI use Linux Security Module\cite{lsm} (LSM) hooks to call filter checks after the arguments have already been copied into the kernel. LSM hooks have been imagined
+as a set of places where pointers to functions can be called to perform an arbitrary check. Execution proceeds only if the execution has been successful. Different security modules
+can provide different hooks to provide different guarantees (e.g. SELinux and AppArmor).
+
+Both Landlock and KPSI attach eBPF filters to hooks, allowing users to provide custom rules for system calls. For this solution to work everywhere for perfect syscall filtering, 
+LSM hooks would need to be manually added to all Linux drivers and ioctls. Unfortunately, this is highly impractical and requires a considerable effort from a large group of developers.
+TikTok is a generic solution that doesn't require modifying the drivers, nor the use of LSM hooks. Once it is deployed, double-fetches are eliminated from all the drivers.
+
+\subsection{Double-Fetch Solutions}
+
+Bochspwn and focused on detecting double-fetches by executing the operating system in the emulator. While the emulator slows down fuzz testing considerably,
+the dynamic analysis approach was successful at finding multiple Windows double-fetch bugs.
+
 
 \section{Prepare Your Paper Before Styling}
 Before you begin to format your paper, first write and save the content as a 
