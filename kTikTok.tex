@@ -43,31 +43,20 @@ component, formatting, style, styling, insert
 \end{IEEEkeywords}
 
 \section{Introduction}
-Modern operating systems rely on the concept of the trust boundary to keep the system secure. All input that is passed from the user space to the kernel space is considered untrusted. 
-Before the input is used it needs to be validated. Failing to do so can result in the kernel operating on unsafe or malicious data.
+System call wrappers enable administrators to define system call execution policies. Such policies could prevent the execution of a system call based
+on the ID of the call and its arguments. By setting only necessary access policies for all processes, we would reduce the damage in case that any of 
+the processes gets taken over by an adversary. 
+Filtering could also restrict calls to the exploitable system calls. By excluding some combinations of arguments, the administrator could mitigate
+certain vulnerabilities until a patch is available.
 \\
-Double-fetches occur when the system reads the same data several times from the user space. On a multicore or concurrent system, an adversary can change the values in the user memory.
-When double-fetches can leave the kernel in an inconsistent state, they result in a double-fetch bug. If these bugs can be exploited they are double-fetch vulnerabilities.
 \\
-Recent work on double fetches focused on their classification and detection using various static and dynamic, source-level and binary-level techniques. Static analysis techniques such as Wang's have proved successful in detecting
-double fetches present in the source code. However, they can't detect double fetches introduced by the compiler, or by assigning the address to a different pointer. On the other hand, dynamic techniques such as Bochspwn are successful
-in detecting these types of bugs, but introduce a significant execution overhead by adding the instrumentation and executing the kernel inside an emulator. They also rely on the hardware being present to fuzz the drivers, which static
-analysis techniques don't. Recently, progress has been made by SCHWARZ where they use Flush + Reload side-channel attack to detect double-fetches during fuzzing campaigns. However, all of these techniques require
-developers to fix the actual bugs after detection. With manufacturers dropping the support for old devices, this simply may not be possible.
+Unfortunately, system call wrappers suffer from a flaw in design. System calls are independent from the filters, and execute after them. After a filter
+reads the arguments and approves the invocation, the system call reads them in again. In-between these two reads, the attacker could have swapped values,
+leading to an execution of a forbidden call. This is called a \textbf{time-of-check to time-of-use} bug. It is a consequence of a \textbf{double-fetch} and
+is notoriously hard to mitigate.
 \\
-The most common variant of double-fetch bugs are TOCTTOU (Time-of-Check-to-Time-of-Use) bugs. They occur when the developer refetches an already copied and validated value. The new data is presumed
-to be unchanged and it is used instead of the old one. Unfortunately, an adversary could have swapped it for another value bypassing the checks. This can lead to vulnerabilities such as null pointer
-dereferences and buffer overflows.
 \\
-System call wrappers have been introduced in the early 2000s as a way to filter risky system calls. System call wrappers execute before the system call and analyze the arguments passed. If the call violates
-a previously established policy, it is terminated. However, while this method works for arguments passed by value, arguments passed by reference (buffers) are prone to the TOCTTOU attack by design. Wrappers such as CentNG for FreeBSD have
-tried to address this problem by copying buffers to separate, read-only pages and updating the references. Unfortunately, this adds significant overhead to the execution of these calls. Other wrappers have lowered their security guarantees.
-SecComp doesn't allow any type of pointer dereference. eBPF provides such capabilities, but prevents the developer from influencing the execution of system calls.
-\\
-Recent systems have adopted Linux Security Module (LSM) hooks to bypass this inherent limitation. LSM hooks are calls to function pointers that should be called before a system resource is accessed. These hooks are triggered after the
-copying of the arguments has already happened, so they aren't prone to TOCTTOU attacks. Landlock and KPSI (Google) have added the support for eBPF filters in these hooks, enabling loadable filters without the need to change the kernel.
-Unfortunately, LSM hooks need to be added by the developers by hand and many drivers don't feature them.
-\\
+We present TikTok - a mitigation for double-fetch bugs in Linux kernel. On every access
 The contribution of this paper are:
 \begin{itemize}
 \item TikTok: An extension to the Linux kernel that prevents any changes to the system-call arguments by using the virtual memory protection mechanisms.
@@ -320,28 +309,65 @@ Watson briefly discusses problems the memory marking systems need to solve:
 TikTok addresses all of these problems. Unnecessary page-faults are rare and they are used to make the offending thread wait for completion. After the page has been unmarked,
 the write proceeds without any consequences. Write system call does not proceed until there are no marked pages of the file. Memory is marked if needed when it is mapped. 
 TikTok also postpones all writes to marked pages coming from kernelspace, while letting the writing system calls execute correctly.
-
+\\
+\\
 Modern system call wrappers can be classified in two groups, based on how they approach the TOCTTOU attack. The first group eliminates all functionality vulnerable to the attack.
 Linux's SecComp and eBPF belong to this group. The second group moves the filter checks deeper into the system calls, eliminating the need to read the arguments twice. Landlock
 Linux and Google's KPSI embrace this technique.
 
+\subsubsection{Partial Solutions}
 SecComp uses BPF (Berekley Packet Filter) to provide small, programmable filters that execute before the system call. Based on the values in registers, Linux can decide whether
 to allow, or to prevent a system call. However, BPF cannot dereference pointers because an adversary would by able to bypass those checks due to the TOCTTOU problem. eBPF 
 (extended Barekley Packet Filter) provides larger filters which can also dereference user pointers. However, eBPF cannot be used for security purposes because it cannot stop
 system calls from executing. It is completely read-only and can be used only for tracing.
-
+\\
+\\
+\subsubsection{LSM-based Solutions}
 Landlock and KPSI use Linux Security Module\cite{lsm} (LSM) hooks to call filter checks after the arguments have already been copied into the kernel. LSM hooks have been imagined
 as a set of places where pointers to functions can be called to perform an arbitrary check. Execution proceeds only if the execution has been successful. Different security modules
 can provide different hooks to provide different guarantees (e.g. SELinux and AppArmor).
-
+\\
+\\
 Both Landlock and KPSI attach eBPF filters to hooks, allowing users to provide custom rules for system calls. For this solution to work everywhere for perfect syscall filtering, 
 LSM hooks would need to be manually added to all Linux drivers and ioctls. Unfortunately, this is highly impractical and requires a considerable effort from a large group of developers.
 TikTok is a generic solution that doesn't require modifying the drivers, nor the use of LSM hooks. Once it is deployed, double-fetches are eliminated from all the drivers.
 
 \subsection{Double-Fetch Solutions}
 
-Bochspwn and focused on detecting double-fetches by executing the operating system in the emulator. While the emulator slows down fuzz testing considerably,
-the dynamic analysis approach was successful at finding multiple Windows double-fetch bugs.
+Pengfei Wang et al showed in \cite{wang07} showed that double-fetches appear not only in kernels, but wherever there is a trust boundary to cross (e.g. kernel -- hypervisor).
+By analyzing reported CVEs they classified double-fetches in several groups based on the code context and their effects (i.e. severity). Another interesting point they raised
+is that double-fetches can appear in valid code as a result of compiler optimizations.
+\\
+\\
+
+\subsubsection{Static Analysis Work}
+Static analysis techniques analyze the source code to find double-fetch bugs. Wang et al \cite{usenixwang07} used pattern matching to find potential double-fetches. However, 
+this technique results in a large number of false positives that need to be pruned manually. Xu et al's \cite{xu18} proposed Deadline - an improved technique that is
+able to automatically determine if double-fetches result in a potential vulnerability. Instead of relying of pattern matching they compiled the code into the intermediate representation
+and symbolically executed the code.
+\\
+\\
+While static analysis techniques have the benefits of being able to find the bugs in code that we cannot actually run (e.g. we are missing hardware to test the drivers), it can only 
+detect the bug in the best case. The developers still need to fix it. In case of syscall wrappers, we are aware that the bug is present, but it is there by design. TikTok can prevent
+double-fetches in cases like this, or when we aren't even aware that they are present (e.g. compiler introduced).
+\\
+\\
+
+\subsubsection{Dynamic Analysis Work}
+Google Project Zero's Bochspwn \cite{bochspwn} was an early work on fuzzing kernel code inside an emulator to detect double-fetches. It works on binaries and doesn't require access to the source code.
+However, it is limited to the detection of double-fetches. All found cases need to be manually triaged and fixed by developers. Furthermore, for a double-fetch to be detected it needs
+to be executed, limiting this techniques to the core kernel and to the drivers with the available hardware.
+\\
+\\
+Another dynamic analysis technique has been presented by Schwartz et al \cite{schwarz18}. The first part of the paper introduces DECAF - a framework that used side-channel attacks to
+create a fuzzing oracle for double-fetch bugs. Much like Bochspwn, this technique can detect double-fetches invisible to static analysis, but is orders of magnitude faster. DECAF also prunes
+false positives by trying to automatically exploit double-fetches it has detected.
+\\
+\\
+However, they also discuss a real-time mitigation technique for these bugs - DropIt. Unfortunately, DropIt relies 
+on Intel's Transactional Memory Extensition (TSX). TSX introduces limits to the size of the code that can be protected and instructions that can be used inside the protected section. Because
+of its use in side-channel attacks, both Intel and Linux have dropped supprot for TSX. As a consequence, this technique doesn't work anymore. TikTok has none of the limitations of DropIt and
+relies only on page access control for protection - a technique which has been already been present for several decades.
 
 
 \section{Prepare Your Paper Before Styling}
