@@ -19,7 +19,7 @@
 %   as represented by the Word sample file.
 %
 % - Note that since 2010, USENIX does not require endnotes. If you
-%   want foot of page notes, don't include the endnotes package in the
+%   want foot of page notes, do not include the endnotes package in the
 %   usepackage command, below.
 % - This version uses the latex2e styles, not the very ancient 2.09
 %   stuff.
@@ -64,6 +64,7 @@
 \usepackage{graphicx}
 \usepackage{caption}
 \usepackage{subcaption}
+\usepackage{cleveref}
 
 %-------------------------------------------------------------------------------
 \begin{filecontents}{\jobname.bib}
@@ -76,13 +77,185 @@
   edition={10}
 }
 
+@article{watson2007exploiting,
+  title={Exploiting Concurrency Vulnerabilities in System Call Wrappers.},
+  author={Watson, Robert NM},
+  journal={WOOT},
+  volume={7},
+  pages={1--8},
+  year={2007}
+}
+
+@inproceedings{wang2017double,
+  title={How double-fetch situations turn into double-fetch vulnerabilities: A 
+  study of double fetches in the linux kernel},
+  author={Wang, Pengfei and Krinke, Jens and Lu, Kai and Li, Gen and 
+  Dodier-Lazaro, Steve},
+  booktitle={26th $\{$USENIX$\}$ Security Symposium 
+  ($\{$USENIX$\}$ Security 17)},
+  pages={1--16},
+  year={2017}
+}
+
+@inproceedings{schwarz2018automated,
+  title={Automated detection, exploitation, and elimination of double-fetch bugs
+   using modern CPU features},
+
+  author={Schwarz, Michael and Gruss, Daniel and Lipp, Moritz and Maurice,
+  Cl{\'e}mentine and Schuster, Thomas and Fogh, Anders and Mangard, Stefan},
+
+  booktitle={Proceedings of the 2018 on Asia Conference on Computer and Communications Security},
+  pages={587--600},
+  year={2018}
+}
+
+@inproceedings{xu2018precise,
+  title={Precise and scalable detection of double-fetch bugs in OS kernels},
+  author={Xu, Meng and Qian, Chenxiong and Lu, Kangjie and Backes, Michael
+   and Kim, Taesoo},
+  booktitle={2018 IEEE Symposium on Security and Privacy (SP)},
+  pages={661--678},
+  year={2018},
+  organization={IEEE}
+}
+
+@article{wang2018survey,
+  title={A survey of the double-fetch vulnerabilities},
+  author={Wang, Pengfei and Lu, Kai and Li, Gen and Zhou, Xu},
+  journal={Concurrency and Computation: Practice and Experience},
+  volume={30},
+  number={6},
+  pages={e4345},
+  year={2018},
+  publisher={Wiley Online Library}
+}
+
+@article{jurczyk2013bochspwn,
+  title={Bochspwn: Identifying 0-days via system-wide memory access pattern analysis},
+  author={Jurczyk, GC Mateusz and Coldwind, Gynvael},
+  journal={Black Hat USA Briefings (Black Hat USA)},
+  year={2013}
+}
+
+
+@article{lu2018untrusted,
+  title={Untrusted hardware causes double-fetch problems in the I/O memory},
+  author={Lu, Kai and Wang, Peng-Fei and Li, Gen and Zhou, Xu},
+  journal={Journal of Computer Science and Technology},
+  volume={33},
+  number={3},
+  pages={587--602},
+  year={2018},
+  publisher={Springer}
+}
+
+@inproceedings{payer2012protecting,
+  title={Protecting applications against TOCTTOU races by user-space caching of file metadata},
+  author={Payer, Mathias and Gross, Thomas R},
+  booktitle={Proceedings of the 8th ACM SIGPLAN/SIGOPS conference on Virtual Execution Environments},
+  pages={215--226},
+  year={2012}
+}
+
+@inproceedings{pu2006methodical,
+  title={A methodical defense against tocttou attacks: The edgi approach},
+  author={Pu, Calton and Wei, Jinpeng},
+  booktitle={Proceedings of the 2006 International Symposium on Secure Software Engineering},
+  year={2006}
+}
+
+@article{wei2010modeling,
+  title={Modeling and preventing TOCTTOU vulnerabilities in Unix-style file systems},
+  author={Wei, Jinpeng and Pu, Calton},
+  journal={computers \& security},
+  volume={29},
+  number={8},
+  pages={815--830},
+  year={2010},
+  publisher={Elsevier}
+}
+
+@inproceedings{tsafrir2008portably,
+  title={Portably Solving File TOCTTOU Races with Hardness Amplification.},
+  author={Tsafrir, Dan and Hertz, Tomer and Wagner, David A and Da Silva, Dilma},
+  booktitle={FAST},
+  volume={8},
+  pages={1--18},
+  year={2008}
+}
+
+@misc{zak_frasunek_dawidek,
+  title={CerbNG},
+  url={https://sourceforge.net/projects/cerber/files/cerb-ng/}, 
+  journal={CerbNG}, 
+  author={Zak, Slawek and Frasunek, Przemyslaw and Dawidek, Pawel Jakub}
+} 
+
+@misc{seccomp,
+  title={SecComp},
+  url={https://www.kernel.org/doc/html/latest/userspace-api/seccomp_filter.html}, 
+} 
+
+@misc{ebpf,
+  title={eBPF},
+  url={https://lwn.net/Articles/740157/}, 
+}
+
+@misc{landlock,
+  title={Landlock LSM},
+  url={https://landlock.io/},
+  author={Mickaël Salaün}
+}
+
+@misc{krsi,
+  title={Kernel Runtime Security Instrumentation},
+  url={https://github.com/sinkap/linux-krsi},
+  author={K. P. Singh}
+}
+
+@inproceedings{morris2002linux,
+  title={Linux security modules: General security support for the linux kernel},
+  author={Morris, James and Smalley, Stephen and Kroah-Hartman, Greg},
+  booktitle={USENIX Security Symposium},
+  pages={17--31},
+  year={2002},
+  organization={ACM Berkeley, CA}
+}
+
+@article{smalley2001implementing,
+  title={Implementing SELinux as a Linux security module},
+  author={Smalley, Stephen and Vance, Chris and Salamon, Wayne},
+  journal={NAI Labs Report},
+  volume={1},
+  number={43},
+  pages={139},
+  year={2001}
+}
+
+@misc{gruenbacher2007apparmor,
+  title={AppArmor Technical Documentation},
+  author={Gruenbacher, Andreas and Arnold, Seth},
+  year={2007}
+}
+
+@article{intel64and,
+  title={Intel 64 and IA-32 Architectures Developer's Manual},
+  author={{Intel}},
+  chapter={Programming with Intel® Transactional Synchronization Extensions},
+  volume={1},
+  chapter={16},
+  year={2019}
+}
+
+
+
 \end{filecontents}
 
 %-------------------------------------------------------------------------------
 \begin{document}
 %-------------------------------------------------------------------------------
 
-%don't want date printed
+%do not want date printed
 \date{}
 
 % make title bold and 14 pt font (Latex default is non-bold, 16 pt)
@@ -114,18 +287,26 @@ Not more than 200 words, if possible, and preferably closer to 150.
 % Introduce the main problem - TOCTTOU
 % Brag how our system is the best thing since sliced bread
 \section{Introduction}
-System call wrappers enable administrators to define system call execution policies. Such policies could prevent the execution of a system call based
-on the ID of the call and its arguments. By setting only necessary access policies for all processes, administrators would reduce the damage in case that any of 
-the processes get taken over by an adversary. 
-Filtering could also restrict calls to the exploitable system calls. By excluding some combinations of arguments, the administrator could mitigate
-certain vulnerabilities until a patch is available. Many embedded devices have binary-only drivers which prevent them from updating the kernel.
-Malicious input filtering could be used as a permanent solution in those cases.
+System call wrappers enable administrators to define system call execution
+policies. Such policies could prevent the execution of a system call based 
+on the ID of the call and its arguments. By setting only necessary access
+policies for all processes, administrators would reduce the damage in case 
+of an attack. Filtering could also restrict calls to the exploitable system
+calls. By excluding some combinations of arguments, the administrator could 
+mitigate certain vulnerabilities until a patch is available. Many embedded 
+devices have binary-only drivers that prevent them from updating the 
+kernel. Malicious input filtering could be used as a permanent solution in 
+those cases.
 \\
 \\
-Unfortunately, system call wrappers suffer from a design flaw illustrated in \autoref{fig:tocttou}. System calls are independent of the filters, and execute after them. After a filter
-reads the arguments and validates them, the system call reads them in the second time. In-between these two reads, the attacker could have swapped values,
-leading to an execution of a forbidden call. This is called a \emph{time-of-check to time-of-use} attack (TOCTTOU). It is a consequence of a \emph{double-fetch}
-from the userland and is notoriously hard to detect. Unlike other bugs, double-fetches are benign until the adversary decides to edit the arguments.
+Unfortunately, system call wrappers suffer from a design flaw. Filters execute 
+before system calls. After the filter reads arguments and validates them, the
+system call reads them the second time. In-between these two reads, the attacker
+could change values, leading to an execution of a forbidden call. This is called
+a \emph{time-of-check to time-of-use} attack (TOCTTOU). It is a consequence of a
+\emph{double fetch} from the userland and is notoriously hard to detect. Unlike 
+other bugs, double-fetches are benign until the adversary decides to change the 
+arguments.
 \\
 \\
 \begin{figure}[]
@@ -134,16 +315,23 @@ from the userland and is notoriously hard to detect. Unlike other bugs, double-f
   \caption{Bypassing a system call filter using a TOCTTOU attack}
   \label{fig:tocttou}
 \end{figure}
-We present \emph{TikTok} - a mitigation for double-fetch bugs in Linux kernel. On every access
-The contribution of this paper are:
+
+The contributions of this paper are:
 \begin{itemize}
-\item TikTok - a mitigation for time-of-check to time-of-use attacks on system call arguments
+\item TikTok - mitigation for time-of-check to time-of-use attacks on system 
+      call arguments in the Linux kernel
 \item A technique to postpone the writes from userland
-\item A technique to defer the writes from kernelland, while continuing normal kernel execution
-\item A performance analysis of our system and its security guarantees
+\item A technique to defer the writes from the kernel, while continuing normal
+      kernel execution
+\item Performance analysis of our system and its security guarantees
 \end{itemize}
 
-The rest of the paper is organized as follows: In \autoref{sec:background} we explain inter-process communication, paging, and double-fetch bugs. \autoref{}
+The rest of the paper is organized as follows: \Cref{sec:background} explains 
+inter-process communication, paging, double fetch bugs, and the related
+background. \Cref{sec:design} describes how \emph{TikTok} works in theory, while
+\cref{sec:implementation} elaborates on the x86-64 implementation. Related work
+is discussed in \cref{sec:relatedwork}.
+
 % Cover the theory needed to understand how and why TikTok works
 % 1) IPC - We need this to argue why the deadlocks are almost impossible
 % 2) VM and Page Tables - Why it exists and how it works
@@ -154,36 +342,45 @@ The rest of the paper is organized as follows: In \autoref{sec:background} we ex
 \label{sec:background}
 \subsection{Interprocess Communication}
 
-The two main types of communication between processes are: \emph{shared memory} and \emph{message passing}\cite{silberschatz2018operating}.
+The two main types of communication between processes are \emph{shared memory} 
+and \emph{message passing}\cite{silberschatz2018operating}.
 \\
 \\
-Shared memory relies on processes having a section of memory that both can access. Data tranfer is fast.
-However, synchronization is problematic. Processes must monitor shared memory for changes, leading to unnecessary busy waiting.
+Shared memory relies on processes having a section of memory that both can 
+access. Data transfer is fast. However, synchronization is problematic. 
+Processes must monitor shared memory for changes, leading to unnecessary
+polling.
 \\
 \\
-Message passing consists of one process calling send, and another one calling receive to fetch the message.
-Synchronization is guaranteed, with parties waiting for their calls to be server. However, unnecessary message 
-copying can occur between processes on the same system.
+Message passing consists of one process calling send, and another one calling
+receive to fetch the message. Synchronization is guaranteed, with parties
+waiting for their calls to be served. However, unnecessary message copying can
+occur between processes on the same system.
 \\
 \\
-Modern operating systems support both of these approaches. The downsides are usually offset by adding the 
-bare minimum of the other approach (e.g. shared memory with semaphores, or message passing with shared buffers). 
-However, only one of the methods is usually used between two processes. Communication by sending messages and writing
-to the shared memory at the same time is quite rare.
+Modern operating systems support both of these approaches. The downsides are
+usually offset by adding the  bare minimum of the other approach (e.g. shared
+memory with semaphores, or message passing with shared buffers). Two processes
+usually use only one paradigm to communicate. Sending messages and writing
+to the shared memory at the same time is exceptionally rare.
 
 \subsection{Virtual Memory and Page Tables} \label{sec:vm}
 
-Operating systems (OS) provide an illusion that every process is executing alone on the processor. 
-To accomplish this, OS needs to restore the program state on the context switch between two processes (e.g. CPU registers)
-and to prevent processes from accessing each other's memory. Memory is protected by \emph{virtualization}. Processes use \emph{virtual
-addresses} that get mapped to the actual (physical) addresses. When the OS moves data to a different physical address, the virtual
-address refering to the data remains the same.
+Operating system (OS) provides an illusion that every process is executing alone
+on the processor. To accomplish this, the OS needs to restore the program state
+on the context switch between two processes (e.g. CPU registers) and to prevent 
+processes from accessing each other's memory. Memory is protected by
+\emph{virtualization}. Processes use \emph{virtual addresses} that get mapped to
+the \emph{physical addresses}. When the OS moves data to a different physical 
+address, the virtual address referring to the data remains the same.
 \\
 \\
-Virtual memory can be implemented by storing different processes' data at different offsets in physical memory, and limiting the
-access to corresponding chunks of memory. Each process's memory chunk is called a segment and the implementation is called
-\emph{segmented virtual memory}. The translation is accomplished by adding the offset to the virtual address. 
-Considering that segments need to be continous, the free physical memory can be fragmented
+Virtual memory can be implemented by storing different processes' data at 
+different offsets in physical memory and limiting the access to corresponding 
+memory chunks. Each process's memory chunk is called a segment and the 
+implementation is called \emph{segmented virtual memory}. The translation is 
+accomplished by adding an offset to the virtual address. Considering that 
+segments need to be continuous, the free physical memory can be fragmented
 such that the OS cannot find a part large enough to store a new process.
 \\
 \\
@@ -201,27 +398,36 @@ such that the OS cannot find a part large enough to store a new process.
     \caption{Paged}
   \end{subfigure}
 
-  \caption{Two virtual memory spaces mapped to physical memory using segmented and paged approaches}
+  \caption{Two virtual memory spaces mapped to physical memory using segmented
+  and paged approaches}
 \end{figure}
 
-\emph{Paged virtual memory} is more flexible. The physical memory is partitioned into fixed-size pages (usually 4 kB).
-A page in the virtual memory space gets mapped to the corresponding page in the physical memory. The mapping
-function is defined for each process by a page-table. Page-tables store the number of the physical memory (\emph{page frame})
-the virtual page points to. It also keeps the permissions the process has when accessing the page (\emph{read}, \emph{write},
-\emph{execute}, \emph{user}, \emph{superuser}). In case of low memory, rarely accessed pages can be moved to the disk, and
-replaced by immediately needed pages. This process is called \emph{swapping}. Similarly, when processing a file, pages don't
-need to be loaded immediately, but on the first access (\emph{on-demand paging}). The \emph{present} bit is added to differentiate
-between present and absent pages.
+\emph{Paged virtual memory} is more flexible. The physical memory is partitioned
+into fixed-size pages (usually 4 kB). A page in the virtual memory space gets
+mapped to the corresponding page in the physical memory. The mapping function is
+defined for each process by a \emph{page-table}. Page-tables store the reference
+to the mapped physical memory (\emph{page frame}). They also keep
+the access permissions for each page (\emph{read}, \emph{write}, \emph{execute},
+ \emph{user}, \emph{superuser}). In case of low memory, rarely accessed pages 
+can be moved to the disk, and replaced by immediately needed pages. This process
+is called \emph{swapping}. Similarly, when processing a file, pages do not need 
+to be loaded immediately, but on the first access (\emph{on-demand paging}). The
+\emph{present} bit is added to differentiate between present and absent pages.
 \\
 \\
-Virtual memory spaces are quite large today ($2^{64}$ bytes on a 64-bit processor). A table containing all one-to-one mappings would be
-impossibly large to store. Page tables are therefore stored as trees with only the allocated memory being present (\autoref{fig:pagetable}).
-However, instead of just reading the corresponding physical address on memory access, the processor now needs to perform a tree traversal.
-Different bits in a virtual address correspond to the path the processor needs to take to
-obtain the page frame number (e.g. the first 8 bits tell CPU which entry on the first level it needs to dereference). Considering that this
-process needs to be fast, it is implemented in hardware by the \emph{memory management unit} (MMU). Reading the page table from memory is
-slow, so a small cache is added to the MMU to store frequently accessed page entries - \emph{translation-lookaside buffer} (TLB). On modern
-processors TLB consists of several levels, and can even be backed by an another MMU cache. 
+Virtual memory spaces are quite large ($2^{64}$ bytes on a 64-bit processor). A 
+table containing all one-to-one mappings would be impossibly large to store. 
+Page tables are therefore stored as trees with only the allocated memory being 
+present (\cref{fig:pagetable}). However, instead of just reading the 
+corresponding physical address on memory access, the processor now needs to 
+perform a tree traversal. Different bits in a virtual address encode the path 
+the processor needs to take to obtain the page frame number (e.g. the first 8 
+bits tell CPU which entry on the first level it needs to dereference). Traversal
+needs to be fast. It is implemented in hardware by the \emph{memory management 
+unit} (MMU). Reading the page table from memory is slow, so a small cache is 
+added to the MMU to store frequently accessed page entries - 
+\emph{translation-lookaside buffer} (TLB). On modern processors, TLB consists of
+several levels, and can even be backed by another MMU cache. 
 
 \subsection{x86-64 Page Tables}
 
@@ -231,7 +437,8 @@ processors TLB consists of several levels, and can even be backed by an another 
   \caption{Page Table Structure on x86. Only relevant data has been included.}
   \label{fig:pagetable}
 \end{figure}
-x86-64 architecture officially supports paged virtual memory model with 5 levels of page tables (\autoref{fig:pagetable}):
+x86-64 architecture officially supports paged virtual memory model with a 5 
+level page table (\cref{fig:pagetable}):
 \begin{description}
     \item[PGD] Page Global Directory
     \item[P4D] Page Fourth-level Directory
@@ -240,37 +447,50 @@ x86-64 architecture officially supports paged virtual memory model with 5 levels
     \item[PTE] Page Table Entry
 \end{description}
 
-Every level corresponds to 8 bits in the virtual address, with the remaining 12 bits identifying the offset of the byte in the actual page frame.
-Page table entry includes the following information:
+Every level corresponds to 8 bits in the virtual address, with the remaining 12
+bits identifying the offset in the actual page frame. A page table entry
+includes the following information:
 \begin{description}
-    \item[Present bit (\textbf{P})] denotes if the page is present in memory
-    \item[Read/Write bit (\textbf{R/W})] denotes if the page is writable, or only readable
-    \item[User/Superuser bit (\textbf{U/S})] denotes if the page can be accessed by the user, or only by the superuser
-    \item[Not Executable bit (\textbf{NX})] denotes if the code stored on the page can be executed
+    \item[Present bit (\textbf{P})] is set if the page is present in memory
+    \item[Read/Write bit (\textbf{R/W})] denotes if the page is writable or just
+         readable
+    \item[User/Superuser bit (\textbf{U/S})] represents if the page can be 
+    accessed by the user, or only by the superuser
+    \item[Not Executable bit (\textbf{NX})] is set if the code stored on the 
+    page cannot be executed
     \item[Page Frame Number] denotes the page frame the entry points to
     \item[\textbf{SW1-SW4}] Four bits free for the OS to use
 \end{description}
 
 \subsection{Page-Faults}
-On an invalid access (e.g. wrong permissions, page not present) the MMU will trigger a page-fault. The fault is a type of a synchronous
-interrupt which executes in the context of the faulting (accessing) thread. The page-fault handler loads an absent page from the disk.
-In case of a write to a temporarily shared page, it creates an independent copy of the page (\emph{copy-on-write}). In case of a
-permission violation the page-fault handler kills the thread. After the fault finishes executing, the faulting instruction is reexecuted. 
+On invalid access (e.g. wrong permissions, page not present) the MMU will 
+trigger a page-fault. The fault is a synchronous interrupt that executes in the 
+context of the faulting (accessing) thread. The page-fault handler loads an 
+absent page from the disk. In the case of a write to a temporarily shared page,
+it creates an independent copy of the page (\emph{copy-on-write}). On permission
+iolation, the page-fault handler kills the thread. After the fault finishes
+executing, the faulting instruction is re-executed. 
 \\
 \\
-With the advent of cloud computing, userland page-fault handling has been added to the Linux kernel. Users can define their own routines
-to page in swapped data. This is particularly useful on computer farms when migrating virtual machines between physical nodes. One only needs
-to migrate the code that is executing. Accesses to the unmigrated memory will be passed to the userland page-fault handler. It will then
-fetch them over the network and continue the execution.
+With the advent of cloud computing, userland page-fault handling has been added 
+to the Linux kernel. Users can define their routines to load swapped-out data.
+This is particularly useful on computer farms when migrating virtual machines
+between physical nodes. One only needs to migrate the code that is executing.
+Accesses to the unmigrated memory will be passed to the userland page-fault
+handler. It will then fetch them over the network and continue the execution.
 
 \subsection{Copy-from-User and Copy-to-User}
-Linux uses swapping only for user memory. When executing in kernel context, kernel memory is mapped and present. A page fault on kernel
-memory access is therefore always fatal. However, the kernel needs to access user memory, which can cause a page-fault. User memory is
-also limited to the lower half of virtual memory space, requiring checks on every access.
+Linux uses swapping only for user memory. When executing in the kernel context,
+kernel memory is mapped and present. A page fault on kernel memory access is
+therefore considered fatal. However, the kernel needs to access potentially
+paged-out user memory. The user memory is also limited to the lower half of the
+virtual memory space. On every access to the user-pointer, the kernel needs to
+verify this constraint.
 \\
 \\
-To force and encapsulate those checks Linux provides functions and macros for user-memory access from the kernel-space. A page-fault
-generated in them is handled like a fault in the user process which called the executing system call.
+Linux provides functions and macros for user-memory access from the kernel to 
+enforce the checks. A page-fault generated by them is treated as a fault in the
+user process which had invoked the executing system call.
 \\
 \\
 The interface for communication with userspace:
@@ -287,15 +507,39 @@ BSD also provides a similar interface using \texttt{copy\_in} and \texttt{copy\_
 
 \subsection{Double Fetch Bugs}
 
-Double-fetch bugs occur when
+\label{subsec:doublefetch}
 
-\label{sec:doublefetch}
+\begin{figure}[]
+  \centering
+  \includegraphics[width=.85\linewidth]{img/doublefetch.pdf}
+  \caption{Diagram of a double fetch bug}
+  \label{fig:doublefetch}
+\end{figure}
+
+\emph{Double fetch} bugs occur when a privileged environment (such as the 
+kernel) reads untrusted memory two or more times (\cref{fig:doublefetch}). 
+In between those two reads, memory could have been changed by an unprivileged
+adversary. Considering that this bug relies on carefully timed accesses
+for two different threads, it is a variant of a race condition. The situation
+where the first fetch validates the value of the fetched variable, 
+but the computation is only performed on the second fetch, is called a 
+\emph{time-of-check to time-of-use} (TOCTTOU) bug. TOCTTOU bugs have been
+widely studied in file systems, where the API makes it possible to swap the file
+after validating the access rights \cite{payer2012protecting,
+pu2006methodical, wei2010modeling, tsafrir2008portably}.
+\\
+\\
+Wang et al. explain in \cite{wang2018survey} that double fetches appear not only
+in kernels, but wherever there is a trust boundary to cross (e.g. kernel -- 
+hypervisor, hardware -- kernel). Double fetches have been responsible for many
+vulnerabilities in the kernel.
+
 
 \section{Design}
 \label{sec:design}
-In this section we describe a high-level overview of TikTok. We start with the security model in \autoref{subsec:secmodel}.
-Afterward we describe how TikTok protects system call arguments from userland (\autoref{subsec:userland}) and kernelland 
-(\autoref{subsec:kernelland}) writes
+In this section we describe a high-level overview of TikTok. We start with the security model in \cref{subsec:secmodel}.
+Afterward we describe how TikTok protects system call arguments from userland (\cref{subsec:userland}) and the kernel 
+(\cref{subsec:kernelland}) writes
 
 \subsection{The Security Model}
 \label{subsec:secmodel}
@@ -312,23 +556,23 @@ and want to obtain root access by triggering a TOCTTOU bug in the kernel.
   \centering
   \includegraphics[width = .45 \textwidth]{img/copy_from_user.pdf}
   \caption{\texttt{copy\_from\_user} marks both the file and the pages before reading in the data}
-  \label{fig:pagetable}
+  \label{fig:copyfromuser}
 \end{figure}
 
 System calls access the user memory via \texttt{copy\_from\_user} and its variants. When that happens, 
 TikTok \emph{marks} the entire page storing the argument as \emph{read-only} in all virtual memory spaces 
-mapping it (\autoref{fig:copyfromuser}). Multiple system calls can mark a page at the same time. Marking a page does not affect reads
+mapping it (\cref{fig:copyfromuser}). Multiple system calls can mark a page at the same time. Marking a page does not affect reads
 from userspace in any way. When all the system calls that use the page finish executing, the page is \emph{unmarked} - its
 previous permissions are restored.
 \\
 \\
-Writes to the marked pages will trigger a page-fault (\autoref{fig:pagefault}). In the page-fault handler we intercept these writes 
+Writes to the marked pages will trigger a page-fault (\cref{fig:pagefault}). In the page-fault handler we intercept these writes 
 and make them wait for the page to get unmarked. The faulting thread attempts to perform the
 write again.
 
 \begin{figure}[]
   \centering
-  \includegraphics{img/pagefault.pdf}
+  \includegraphics[width = .75 \linewidth]{img/pagefault.pdf}
   \caption{TikTok's handling of the writes to a marked page}
   \label{fig:pagefault}
 \end{figure}
@@ -339,11 +583,11 @@ write again.
   \centering
   \includegraphics[width = .30 \textwidth]{img/copy_to_user.pdf}
   \caption{\texttt{copy\_to\_user} defers the writes from kernel until the end of the system call}
-  \label{fig:pagetable}
+  \label{fig:copytouser}
 \end{figure}
 
-Watson mentions in \cite{watson} that the system call wrappers he analyzed don't handle writes from kernelspace
-properly. Unlike those solutions, TikTok doesn't copy arguments to separate pages, leading to complex redirection 
+Watson mentions in \cite{watson2007exploiting} that the system call wrappers he analyzed do not handle writes from kernelspace
+properly. Unlike those solutions, TikTok does not copy arguments to separate pages, leading to complex redirection 
 of userspace pointers. This unables us just to defer the writes until it is safe to perform them.
 \\
 \\
@@ -368,18 +612,18 @@ all the writes until the system call finish. At that point we unmark the pages a
 
 Some system calls (e.g. \texttt{pollfd} and \texttt{futex}) rely on writes from userland for some of their functionality. Marking their arguments
 would lead to deadlocks, so they are ignored. Considering that attacking these system calls would to expected behavior, the authors
-don't consider this a deficiency.
+do not consider this a deficiency.
 \\
 \\
-Other system calls can be ignored as an optimization. Any unformatted data that is passed to the kernel doesn't need
+Other system calls can be ignored as an optimization. Any unformatted data that is passed to the kernel does not need
 to be marked by TikTok. Overwriting this data is equivalent to passing different data to the call. Considering
-that the write call takes unformatted data as one of its arguments, this frequently called interface doesn't need to
+that the write call takes unformatted data as one of its arguments, this frequently called interface does not need to
 be protected.
 
 \subsection{Two Axes of the Linux Memory}
 
 Memory in Linux can be \emph{file-backed} and \emph{anonymous}. File-backed pages have map to a corresponding file. 
-Anonymous pages don't have a backing file (e.g. stack and heap).
+Anonymous pages do not have a backing file (e.g. stack and heap).
 \\
 \\
 Another classification is based on privacy: \emph{private} and \emph{shared}. Private memory is part of only one virtual memory space.
@@ -397,7 +641,7 @@ Shared memory can be accessed by multiple processes.
   \caption{Properties of the different types of memory in Linux}
   \label{tab:memory}
 \end{table}
-Unlike private memory and shared anonymous memory, shared file-backed memory can be mapped and unmapped at will (\autoref{tab:memory}). It 
+Unlike private memory and shared anonymous memory, shared file-backed memory can be mapped and unmapped at will (\cref{tab:memory}). It 
 also preserves its state. This enables an adversary to map a marked page as writable and edit it. 
 TikTok intercepts mapping of memory and checks the page frames being mapped. The pages are then mapped
 with appropriate permissions into the virtual memory space.
@@ -451,13 +695,13 @@ shared memory (for TikTok to stop one of them) and message passing system calls 
 \end{figure}
 
 
-\autoref{fig:deadlock} shows an example of a such communication pattern. Thread 1 enter the system call S and marks the shared page A (\textbf{1}).
+\cref{fig:deadlock} shows an example of a such communication pattern. Thread 1 enter the system call S and marks the shared page A (\textbf{1}).
 The system call S blocks untill a corresponding call \texttt{unblock\_S} is called in Thread 2 (\textbf(3)). While the page \texttt{A} is still marked, Thread 2
 attempts to write to it, causing it to wait for \texttt{S} to finish (\textbf{2}).
 This situation is perculiar:
 \begin{enumerate}
     \item The page \textbf{A} is shared between Thread 1 and Thread 2
-    \item Access to page \textbf{A} isn't protected by a mutex, or a semaphore
+    \item Access to page \textbf{A} is not protected by a mutex, or a semaphore
     \item System call \textbf{S} is a blocking system call that receives a signal from another thread
     \item System call \textbf{S} reads its arguments from the page \textbf{A}
     \item Thread 2 needs to write to the same page where the arguments for \textbf{S} are stored (page \textbf{A})
@@ -471,52 +715,77 @@ However, why would two threads communicate using both message passing and shared
 \\
 \\
 While it is possible to create deadlocking sequences, they require mixing different inter-process communication
-paradigms for the same data. During testing we haven't encountered a single permanent deadlock.
+paradigms for the same data. During testing we have not encountered a single permanent deadlock.
 \\
 \\
-Similar sequences can be constructed using the write system call protection presented in \autoref{sec:filewrites}. The same argument
+Similar sequences can be constructed using the write system call protection presented in \cref{sec:filewrites}. The same argument
 can be applied in that case - the program would need to write to the same data to the file using both memory mapping and a system call. We
-haven't encountered such a problem.
+have not encountered such a problem.
 
 
 \section{Implementation}
+\label{sec:implementation}
+
+\cref{fig:bookkeeping} illustrates some of the most important information stored on x86. \cref{subsec:frameinfo} describes the data pertaining to
+the physical page frame. The data stored in the page table is explained in \cref{subsec:pageinfo}.
 
 \subsection{Storing the Page Frame Information}
-
-Linux divides physical memory into page frames. Each page frame is represented by \texttt{struct page}. Considering that that this structure
-is replicated millions of times, every additional field has a tremendeous impact on memory consumption. What's even worse, the cost would not
-be constant, but linear. Systems with more memory would also waste proportionally more RAM.
+\label{subsec:frameinfo}
+Linux divides physical memory into page frames. Each page frame is represented by a \texttt{struct page}. Considering that that this structure
+is replicated millions of times, every additional field has a tremendeous impact on memory consumption.
 \\
 \\
-To keep the memory consumption low, TikTok uses a single bit in \texttt{struct page} to mark page frames. Considering that the prototype is implemented on x86-64,
-we decided to use one of the flag bits for this purpose. Architectures which have fewer flag bits (such as x86) could decide to recycle some of
-the bits used by other features (e.g. Kernel Shared Memory). The marking information is stored separately - in a hashmap.
-Access to these entries is protected by separate mutexes.
+To keep the memory consumption low, TikTok uses a single bit in \texttt{struct page} to mark page frames. Considering that x86-64 has enough bits in the flag field,
+we have decided to use one of the flag bits for this purpose. Architectures which have fewer flag bits (such as x86) can instead use some of
+the bits used by other features (e.g. Kernel Shared Memory or NUMA domains). On \cref{fig:bookkeeping} this field is denoted by \emph{Page Marked Flag}.
+\texttt{struct page} also stores a pointer to the \emph{reverse mapping} information. Reverse mapping is used to find all PTEs \emph{TikTok} needs to (un)mark.
+\\
+\\
+The marking metadata is stored in a hashmap based on the \emph{page frame number}. The access to these entries is protected by separate mutexes to improve the
+scalability of the system. The metadata comprises: the page frame number, a number of threads marking the page (\emph{owners}), a number of threads waiting for
+the page to get unmarked (\emph{guests}), and a \emph{queue} they are waiting on. 
 
-\subsection{Keeping Track of Marked Pages}
+\subsection{PTE Information}
+\label{subsec:pageinfo}
 
-When TikTok marks a page on x86-64, it uses an extra bit in the PTE to differentiate it from non-marked PTEs. Another bit is used to remember old R/W permission.
-Depending on which exact bits are used, some kernel features may need to be disabled. In the prototype TikTok shares one of the page table bits with page tracking.
+When we mark a page we change some of the flags in the PTEs mapping it (\cref{fig:bookkeeping}):
 
-\subsection{Implementing TikTok on Other Architectures}
+\begin{description}
+  \item[R/W] gets set to \emph{read-only} to prevent writes to the page
+  \item[SW2] gets the old value of \textbf{R/W}
+  \item[SW3] gets set to 1 
+\end{description}
+
+\emph{Copy-on-write} pages are an exception. We mark only the PTE in the process requesting the marking.
+Writes from other processes will trigger a copy-on-write mechanism, preventing them from changing the data.
+\\
+\\
+TikTok does a partial flush of the TLB and updates the MMU cache to make these changes visible immediately.
+
+\begin{figure}[]
+  \centering
+  \includegraphics[width=\linewidth]{img/book-keeping.pdf}
+  \caption{The most important marking information on x86}
+  \label{fig:bookkeeping}
+\end{figure}
 
 
 
 \section{Related Work}
-
-Literature relating to TikTok can be broadly divided in 2 groups. The first group are system call wrappers and filters whose main vulnerability TikTok is mitigating.
+\label{sec:relatedwork}
+Literature related to TikTok can be broadly divided in 2 groups. The first group are system call wrappers and filters whose main vulnerability TikTok is mitigating.
 The second one are the mitigations and solutions for double-fetches, which are a superclass of TOCTTOU bugs. We discuss both groups in this section and describe the
 benefits TikTok brings to the first group, and the advantages over the second group.
 
 \subsection{System Call Wrappers and Filters}
 
-Watson in \cite{watson} scrutinized the security of many system call wrappers. Not only that he found that all of them were insecure, Watson described the different
+Watson in \cite{watson2007exploiting} scrutinized the security of many system call wrappers. Not only that he found that all of them were insecure, Watson described the different
 types of TOCTTOU bugs and discussed potential fixes.
-In a short paragraph he mentiones that Pawel Dawidek, the creator of CerbNG \cite{cerbng}, has experimented with marking arguments read-only. CerbNG was an early 
-attempt at filtering system calls for BSD that used copying to protect the arguments. To our knowledge nothing came out of those experiments. 
+In a short paragraph he mentions that Pawel Dawidek, the creator of CerbNG \cite{zak_frasunek_dawidek}, has experimented with marking arguments read-only. CerbNG was an early 
+system call filtering system for BSD that used copying to protect the arguments. To our knowledge nothing came out of those experiments. 
 \\
 \\
-Watson briefly discusses problems the memory marking systems need to solve: 
+Afterward, Watson briefly discusses problems the such memory marking systems need to solve: 
 \begin{itemize}
     \item unnecessary page-faults
     \item bypassing memory marking using IO system calls
@@ -530,62 +799,65 @@ TikTok also postpones all writes to marked pages coming from kernelspace, while 
 \\
 \\
 Modern system call wrappers can be classified in two groups, based on how they approach the TOCTTOU attack. The first group eliminates all functionality vulnerable to the attack.
-Linux's \emph{SecComp} and \emph{eBPF} belong to this group. The second group moves the filter checks deeper into the system calls, eliminating the need to read the arguments
-twice. \emph{Landlock Linux} and Google's \emph{KPSI} embrace this technique.
+Linux's \emph{SecComp}\cite{seccomp} and \emph{eBPF}\cite{ebpf} belong to this group. The second group moves the filter checks deeper into the system calls, eliminating the need to read the arguments
+twice. \emph{Landlock Linux}\cite{landlock} and Google's \emph{Kernel Runtime Security Instrumentation} (KRSI)\cite{krsi} embrace this technique.
 
 \subsubsection{Partial Solutions}
-SecComp uses \emph{Berekley Packet Filter} (BPF) to provide small, programmable filters that execute before the system call. Based on the values in registers, Linux can decide whether
-to allow, or to prevent a system call. However, BPF cannot dereference pointers because an adversary would by able to bypass those checks due to the TOCTTOU. 
-\emph{Extended Barekley Packet Filter} (eBPF) provides larger filters which can also dereference user pointers. However, eBPF cannot be used for security purposes - it cannot stop
+SecComp\cite{seccomp} uses \emph{Berkeley Packet Filter} (BPF) to provide small, programmable filters that execute before the system call. Based on the values in registers, Linux can decide whether
+to allow, or to prevent a system call. However, BPF cannot dereference pointers because an adversary would by able to bypass those checks using a TOCTTOU attack. 
+\emph{Extended Berkeley Packet Filter} (eBPF)\cite{ebpf} provides larger filters which can also dereference user pointers. However, eBPF cannot be used for security purposes - it cannot stop
 system calls from executing. EBPF is completely read-only and can only be used for tracing.
 \\
 \\
 \subsubsection{LSM-based Solutions}
-Landlock and KPSI use \emph{Linux Security Module}\cite{lsm} (LSM) hooks to call filter checks after the arguments have already been copied into the kernel. LSM hooks have been imagined
-as a set of places where pointers to functions can be called to perform an arbitrary check. Execution proceeds only if the execution has been successful. Different security modules
-can provide different hooks to provide different guarantees (e.g. \emph{SELinux} and \emph{AppArmor}).
+Landlock\cite{landlock} and KRSI\cite{krsi} use \emph{Linux Security Module}\cite{morris2002linux} (LSM) hooks to call filter checks after the arguments have already been copied into the kernel.
+LSM hooks have been imagined as a set of places where arbitrary checks can be performed before accessing a kernel resource. Execution proceeds only if the execution has been successful.
+Different security modules can provide different hooks to provide different guarantees (e.g. \emph{SELinux}\cite{smalley2001implementing} and \emph{AppArmor}\cite{gruenbacher2007apparmor}).
 \\
 \\
 Both Landlock and KPSI attach eBPF filters to hooks, allowing users to provide custom rules for system calls. For this solution to work everywhere for perfect syscall filtering, 
 LSM hooks would need to be manually added to all Linux drivers and ioctls. Unfortunately, this is highly impractical and requires a considerable effort from a large group of developers.
-TikTok is a generic solution that doesn't require modifying the drivers, nor the use of LSM hooks. Once it is deployed, double-fetches are eliminated from all the drivers.
+Considering that LSM focuses on access control to kernel objects, it is questionable if an LSM module can be used to mitigate bugs based on the system call arguments. Some of the
+bugs could manifest themselves before a hook has been executed. TikTok is a generic solution that does not require modifying the drivers, nor the use of LSM hooks.
+Once it is deployed, all double-fetch bugs are eliminated from all the drivers. A system call wrapper that uses TikTok can be completely independent from the implementation
+of the system calls it is filtering.
 
 \subsection{Double-Fetch Solutions}
 
-Wang et al showed in \cite{wang07} showed that double-fetches appear not only in kernels, but wherever there is a trust boundary to cross (e.g. kernel -- hypervisor).
-By analyzing reported CVEs they classified double-fetches in several groups based on the code context and their effects (i.e. severity). Another interesting point they raised
-is that double-fetches can appear in valid code as a result of compiler optimizations.
-\\
-\\
+Solutions for double fetch bugs can be divided into \emph{static} and \emph{dynamic} techniques. Static techniques do not execute the program, but analyze the source code.
+Dynamic techniques analyze the execution of the program to find any violations.
 
 \subsubsection{Static Analysis Work}
-Static analysis techniques analyze the source code to find double-fetch bugs. Wang et al \cite{usenixwang07} used pattern matching to find potential double-fetches. However, 
-this technique results in a large number of false positives that need to be pruned manually. Xu et al's \cite{xu18} proposed Deadline - an improved technique that is
-able to automatically determine if double-fetches result in a potential vulnerability. Instead of relying of pattern matching they compiled the code into the intermediate representation
-and symbolically executed the code.
+\label{subsec:dfstatic}
+Static analysis techniques analyze the source code to find double-fetch bugs. Wang et al. \cite{wang2017double} used pattern matching to find potential double-fetches. They
+implemented a tool that patches certain double fetches automatically. However, their method in the general case produces false positives which need to be inspected manually. 
+Xu et al.\cite{xu2018precise} improved on this work by proposing Deadline. Deadline does not use the pattern analysis on the source files
+to detect double fetches, but a compiler's intermediate representation and constraint solving to eliminate false positives.
 \\
 \\
-While static analysis techniques have the benefits of being able to find the bugs in code that we cannot actually run (e.g. we are missing hardware to test the drivers), it can only 
-detect the bug in the best case. The developers still need to fix it. In case of syscall wrappers, we are aware that the bug is present, but it is there by design. TikTok can prevent
-double-fetches in cases like this, or when we aren't even aware that they are present (e.g. compiler introduced).
+Static analysis techniques such as these have the benefit of being able to find bugs in the code that we cannot actually run (e.g. we are missing hardware to test the drivers).
+However, they are meant for bug detection, not mitigation. Even though the tools can fix some bugs automatically, this is not always possible.
+The TOCTTOU bug is in system call wrappers by design. Another problem are double fetches which are not visible in the source, or in the intermediate representation.
+Compilers can introduce such invisible double fetches when allocating registers to variables. TikTok is a mitigation technique that works even in such cases.
 \\
 \\
 
 \subsubsection{Dynamic Analysis Work}
-Google Project Zero's Bochspwn \cite{bochspwn} was an early work on fuzzing kernel code inside an emulator to detect double-fetches. It found an quite a large number of bugs in the Windows
-kernel. It works on binaries and doesn't require access to the source code. However, it is limited to the detection of double-fetches. All found cases need to be manually triaged and fixed
-by developers. For a double-fetch to be detected it needs to be executed, limiting this techniques to the core kernel and to the drivers with the available hardware.
+Google Project Zero's Bochspwn \cite{jurczyk2013bochspwn} uses an emulator to detect double-fetches. It found an quite a large number of bugs in the Windows
+kernel. Bochpwn works on binaries, does not require access to the source code and it detects bugs introduced by compilers. However, it is also limited to the
+detection of double-fetches. Similarly to work prestented in \cref{subsec:dfstatic}, developers need to manually fix the bugs. However, with dynamic analysis
+a double fetch also needs to be executed, limiting this techniques to the core kernel and to the drivers with the available hardware.
 \\
 \\
-A big leap in dynamic analysis techniques has been presented by Schwartz et al \cite{schwarz18}. While Bochspwn reliesThe first part of the paper introduces DECAF - a framework that uses side-channel attacks to
-create a fuzzing oracle for double-fetch bugs. Much like Bochspwn, this technique can detect double-fetches invisible to static analysis, but is orders of magnitude faster. DECAF also prunes
-false positives by trying to automatically exploit double-fetches it has detected.
+A big leap in dynamic analysis techniques has been presented by Schwartz et al. \cite{schwarz2018automated}. The first part of the paper introduces DECAF - a framework
+that uses side-channel attacks to create a fuzzing oracle for double-fetch bugs. While Bochspwn relies on emulation, slowing it down significantly, DECAF
+runs natively. It also eliminates false positives by automatically exploiting found bugs.
 \\
-\\
-However, they also discuss a real-time mitigation technique for these bugs - DropIt. Unfortunately, DropIt relies 
-on Intel's Transactional Memory Extensition (TSX). TSX introduces limits to the size of the code that can be protected and instructions that can be used inside the protected section. Because
-of its use in side-channel attacks, both Intel and Linux have dropped supprot for TSX. As a consequence, this technique doesn't work anymore. TikTok has none of the limitations of DropIt and
-relies only on page access control for protection - a technique which has been already been present for several decades.
+Schwartz et al. then discuss a real-time mitigation technique for double fetches - DropIt. DropIt uses Intel's \emph{Transactional Synchronization Extensions} (TSX)
+\cite{intel64and} in a creative way to prevent double fetch bugs. By encapsulating the code in a TSX transaction, writes from other threads to the addresses we have
+previously read from or written to will result in the transaction being aborted. However, the code executing inside a TSX transaction is severly limited. All reads
+must fit in the L3 cache, and all writes in L1, with some instructions being forbidden. TikTok has none of those limitations. It works on non-Intel processors
+and relies on page tables for protection - a technique which has been present for several decades.
 
 
 %-------------------------------------------------------------------------------
