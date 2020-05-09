@@ -337,6 +337,8 @@ is discussed in \cref{sec:relatedwork}.
 % 2) VM and Page Tables - Why it exists and how it works
 % 3) x86 Page Tables - Continue the discussion from the previous section
 % 4) Page faults - Explain how and why they happen.
+% 5) Copy to/from user - Explain why the API has been introduced
+% 6) Double fetches - Provide a high-level overview
 \section{Background}
 
 \label{sec:background}
@@ -535,7 +537,11 @@ in kernels, but wherever there is a trust boundary to cross (e.g. kernel --
 hypervisor, hardware -- kernel). Double fetches have been responsible for many
 vulnerabilities in the kernel.
 
-
+% Explain generally how TikTok works. We mention all the problems that
+% TikTok needs to mitigate: writes from userland, writes from the kernel, safely
+% stopping the writes, preventing bypass using file-backed pages, system calls
+% that are ignored. The most important part is showing the conditions for 
+% introducing deadlocks
 \section{Design}
 \label{sec:design}
 In this section we describe a high-level overview of TikTok. We start with the 
@@ -724,74 +730,77 @@ shared memory (for TikTok to stop one of them) and message passing system calls
 
 
 \cref{fig:deadlock} shows an example of a such communication pattern. Thread 1
-enters the system call S and marks a shared page A (\textbf{1}). The system call
-S blocks until the corresponding call \texttt{unblock\_S} is called in Thread 2
-(\textbf(3)). While the page \texttt{A} is still marked, Thread 2 attempts to 
-write to it, causing it to wait for \texttt{S} to finish (\textbf{2}).
-This situation is perculiar:
+enters the system call S and marks a shared page \texttt{A} (\textbf{1}). The
+system call S blocks until the corresponding call \texttt{unblock\_S} is called
+in Thread 2 (\textbf(3)). While the page \texttt{A} is still marked, Thread 2
+attempts to write to it, causing it to wait for \texttt{S} to finish
+(\textbf{2}). This situation is perculiar:
 \begin{enumerate}
-    \item The page \textbf{A} is shared between Thread 1 and Thread 2
-    \item Access to page \textbf{A} is not protected by a mutex, or a semaphore
-    \item System call \textbf{S} is a blocking system call that receives a 
+    \item The page \texttt{A} is shared between Thread 1 and Thread 2
+    \item Access to page \texttt{A} is not protected by a mutex, or a semaphore
+    \item System call \texttt{S} is a blocking system call that receives a 
     signal from another thread
-    \item System call \textbf{S} reads its arguments from the page \textbf{A}
+    \item System call \texttt{S} reads its arguments from the page \texttt{A}
     \item Thread 2 needs to write to the same page where the arguments for 
-    \textbf{S} are stored (page \textbf{A})
+    \texttt{S} are stored (page \texttt{A})
     \item Even though Threads 1 and 2 can communicate using shared memory, 
-    Thread 1 needs to also invoke \textbf{S}
+    Thread 1 needs to also invoke \texttt{S}
 \end{enumerate}
 
-While a a synchronization call (locking or signaling) would be a good candidate
-for S, they are lightweight and their arguments are passed in registers, not in
-memory. A message-passing call fits the description better. Data from page A 
-would need to be marked, as it is read by the call. Message-passing can also be
-synchronous, requiring the other thread to receive the message before
-proceeding. However, why would two threads communicate using both message
-passing and shared memory?
+A synchronization call (locking or signaling) could be a good candidate for
+\texttt{S}. However, they are lightweight and their arguments are passed in
+registers, not in memory. Data from page \texttt{A} needs to be marked.
+Message-passing system call fits this description better because it takes
+arguments from memory. Message-passing can also be synchronous, requiring the
+other thread to receive the message before proceeding. The deadlock then happens
+in the situation where two threads decide to communicate the same data using
+both shared memory and message-passing at the same time.
 \\
 \\
 While it is possible to create deadlocking sequences, they require mixing
 different inter-process communication paradigms for the same data. During
-testing we have not encountered a single deadlock caused by TikTok.
+testing, we have not encountered a single deadlock caused by TikTok.
 \\
 \\
 Similar sequences can be constructed using the write system call protection
-presented in \cref{sec:filewrites}. The same argument can be applied in that
+presented in \cref{subsec:filewrites}. The same argument can be applied in that
 case - the program would need to write to the same data to the file using both
 memory mapping and a system call. We have not encountered such a problem.
 
 
+% Here we mention SOME of the interesting implementation decisions. It is
+% mostly related to x86 and should be short. ARM support should also be
+% be mentioned, but Future work could be a better section for that
 \section{Implementation}
 \label{sec:implementation}
 
-\cref{fig:bookkeeping} illustrates some of the most important information stored
-on x86. \cref{subsec:frameinfo} describes the data pertaining to the physical
-page frame. The data stored in the page table is explained in
-\cref{subsec:pageinfo}.
+\Cref{fig:bookkeeping} illustrates some of the most important information stored
+on x86. \cref{subsec:frameinfo} describes the data about the physical page
+frame. The data stored in the page table is explained in \cref{subsec:pageinfo}.
 
 \subsection{Storing the Page Frame Information}
 \label{subsec:frameinfo}
 Linux divides physical memory into page frames. Each page frame is represented
-by a \texttt{struct page}. Considering that that this structure is replicated
-millions of times, every additional field has a tremendeous impact on memory
+by a \texttt{struct page}. Considering that this structure is replicated
+millions of times, every additional field has a tremendous impact on memory
 consumption.
 \\
 \\
-To keep the memory consumption low, TikTok uses a single bit in
-\texttt{struct page} to mark page frames. Considering that x86-64 has enough
-bits in the flag field, we have decided to use one of the flag bits for this
-purpose. Architectures which have fewer flag bits (such as x86) can instead use
-some of the bits used by other features (e.g. Kernel Shared Memory or NUMA
-domains). On \cref{fig:bookkeeping} this field is denoted by
-\emph{Page Marked Flag}. \texttt{struct page} also stores a pointer to the
-\emph{reverse mapping} information. Reverse mapping is used to find all PTEs
-\emph{TikTok} needs to (un)mark.
+To keep the memory consumption low, TikTok uses a single bit in \texttt{struct
+page} to mark page frames. Considering that x86-64 has enough bits in the flag
+field, we have decided to use one of the flag bits for this purpose.
+Architectures that have fewer flag bits (such as x86) can instead use some of
+the bits used by other features (e.g. Kernel Shared Memory or NUMA domains). On
+\cref{fig:bookkeeping} this field is denoted by \emph{Page Marked Flag}.
+\texttt{struct page} also stores a pointer to the \emph{reverse mapping}
+information. The reverse mapping is used to find all PTEs \emph{TikTok} needs to
+(un)mark.
 \\
 \\
-The marking metadata is stored in a hashmap based on the \emph{page frame 
+The marking metadata is stored in a hashmap based on the \emph{page frame
 number}. The access to these entries is protected by separate mutexes to improve
-the scalability of the system. The metadata comprises: the page frame number, a
-number of threads marking the page (\emph{owners}), a number of threads waiting
+the scalability of the system. The metadata comprise the page frame number, the
+count of threads marking the page (\emph{owners}), the number of threads waiting
 for the page to get unmarked (\emph{guests}), and a \emph{queue} they are
 waiting on. 
 
@@ -823,28 +832,32 @@ changes visible immediately.
 \end{figure}
 
 
-
+% In this section we need to convince the reader in two things:
+% 1) Alternative filtering approaches to system call filters are incomplete and
+% cumbersome
+% 2) The best way to solve the TOCTTOU bug in filters is TikTok. All other
+% methods can only fix other double fetches, or they force you to use TSX
 \section{Related Work}
 \label{sec:relatedwork}
-Literature related to TikTok can be broadly divided in 2 groups. The first group
-are system call wrappers and filters whose main vulnerability TikTok is
-mitigating. The second one are the mitigations and solutions for double-fetches,
-which are a superclass of TOCTTOU bugs. We discuss both groups in this section
-and describe the benefits TikTok brings to the first group, and the advantages
-over the second group.
+Literature related to TikTok can be broadly divided into 2 groups. In the first
+group are system call wrappers and filters whose main vulnerability TikTok is
+mitigating. The second ones are the mitigations and solutions for
+double-fetches, which are a superclass of TOCTTOU bugs. In this section, we
+describe the benefits TikTok brings to the first group and the advantages over
+the second group.
 
 \subsection{System Call Wrappers and Filters}
 
-Watson in \cite{watson2007exploiting} scrutinized the security of many system
+Watson \cite{watson2007exploiting} scrutinized the security of many system
 call wrappers. Not only that he found that all of them were insecure, Watson
 described the different types of TOCTTOU bugs and discussed potential fixes.
-In a short paragraph he mentions that Pawel Dawidek, the creator of CerbNG 
+In a short paragraph, he mentions that Pawel Dawidek, the creator of CerbNG 
 \cite{zak_frasunek_dawidek}, has experimented with marking arguments read-only.
 CerbNG was an early system call filtering system for BSD that used copying to 
-protect the arguments. To our knowledge nothing came out of those experiments. 
+protect the arguments. To our knowledge, nothing came out of those experiments. 
 \\
 \\
-Afterward, Watson briefly discusses problems the such memory marking systems
+Afterward, Watson briefly discusses problems such memory marking systems
 need to solve: 
 \begin{itemize}
     \item unnecessary page-faults
@@ -857,34 +870,32 @@ TikTok addresses all of these issues. Unnecessary page-faults are rare and they
 are used to make the offending threads wait for unmarking. After the page has
 been unmarked, the write proceeds without any consequences. Write system call
 does not proceed until there are no marked pages of the file. If needed, pages
-are marked when they are mapped. TikTok also postpones all writes to marked
-pages coming from kernelspace, while allowing the system calls to execute
-correctly.
+are marked when they are mapped. TikTok postpones all writes to marked pages
+coming from the kernel while allowing the system calls to execute correctly.
 \\
 \\
-Modern system call wrappers can be classified in two groups, based on how they
+Modern system call wrappers can be classified into two groups, based on how they
 approach the TOCTTOU attack. The first group eliminates all functionality
-vulnerable to the attack.
-Linux's \emph{SecComp}\cite{seccomp} and \emph{eBPF}\cite{ebpf} belong to this
-group. The second group moves the filter checks deeper into the system calls,
-eliminating the need to read the arguments twice. \emph{Landlock Linux}
-\cite{landlock} and Google's \emph{Kernel Runtime Security Instrumentation}
-(KRSI)\cite{krsi} embrace this technique.
+vulnerable to the attack. Linux's \emph{SecComp}\cite{seccomp} and
+\emph{eBPF}\cite{ebpf} belong to this group. The second group moves the filter
+checks deeper into the system calls, eliminating the need to read the arguments
+twice. \emph{Landlock Linux} \cite{landlock} and Google's \emph{Kernel Runtime
+Security Instrumentation} (KRSI)\cite{krsi} embrace this technique.
 
 \subsubsection{Partial Solutions}
 SecComp\cite{seccomp} uses \emph{Berkeley Packet Filter} (BPF) to provide small,
 programmable filters that execute before the system call. Based on the values
-in registers, Linux can decide whether to allow, or to prevent a system call.
-However, BPF cannot dereference pointers because an adversary would by able to
+in registers, Linux can decide whether to allow or to prevent a system call.
+However, BPF cannot dereference pointers because an adversary would be able to
 bypass those checks using a TOCTTOU attack. \emph{Extended Berkeley Packet
-Filter} (eBPF)\cite{ebpf} provides larger filters which can also dereference
+Filter} (eBPF)\cite{ebpf} provides larger filters that can also dereference
 user pointers. However, eBPF cannot be used for security purposes - it cannot
 stop system calls from executing. EBPF is completely read-only and can only be
 used for tracing.
 \\
 \\
 \subsubsection{LSM-based Solutions}
-Landlock\cite{landlock} and KRSI\cite{krsi} use \emph{Linux Security Module}
+Landlock\cite{landlock} and KRSI\cite{krsi} use the \emph{Linux Security Module}
 \cite{morris2002linux} (LSM) hooks to call filter checks after the arguments
 have already been copied into the kernel. LSM hooks have been imagined as a set
 of places where arbitrary checks can be performed before accessing a kernel
@@ -897,7 +908,7 @@ guarantees (e.g. \emph{SELinux}\cite{smalley2001implementing} and
 Both Landlock and KPSI attach eBPF filters to hooks, allowing users to provide
 custom rules for system calls. For this solution to work everywhere for perfect
 syscall filtering, LSM hooks would need to be manually added to all Linux
-drivers and ioctls. Unfortunately, this is highly impractical and requires a
+drivers and ioctls. Unfortunately, this is highly impractical and requires
 considerable effort from a large group of developers. Considering that LSM
 focuses on access control to kernel objects, it is questionable if an LSM module
 can be used to mitigate bugs based on the system call arguments. Some of the
@@ -905,12 +916,12 @@ bugs could manifest themselves before a hook has been executed. TikTok is a
 generic solution that does not require modifying the drivers, nor the use of
 LSM hooks. Once it is deployed, all double-fetch bugs are eliminated from all
 the drivers. A system call wrapper that uses TikTok can be completely
-independent from the implementation of the system calls it is filtering.
+independent of the implementation of the system calls it is filtering.
 
 \subsection{Double-Fetch Solutions}
 
 Solutions for double fetch bugs can be divided into \emph{static} and
-\emph{dynamic} techniques. Static techniques do not execute the program, but
+\emph{dynamic} techniques. Static techniques do not execute the program but
 analyze the source code. Dynamic techniques analyze the execution of the
 program to find any violations.
 
@@ -920,41 +931,41 @@ Static analysis techniques analyze the source code to find double-fetch bugs.
 Wang et al. \cite{wang2017double} used pattern matching to find potential
 double-fetches. They implemented a tool that patches certain double fetches
 automatically. However, their method in the general case produces false
-positives which need to be inspected manually. Xu et al.\cite{xu2018precise}
+positives that need to be inspected manually. Xu et al.\cite{xu2018precise}
 improved on this work by proposing Deadline. Deadline does not use the pattern 
 analysis on the source files to detect double fetches, but a compiler's
 intermediate representation and constraint solving to eliminate false positives.
 \\
 \\
 Static analysis techniques such as these have the benefit of being able to find
-bugs in the code that we cannot actually run (e.g. we are missing hardware to
-test the drivers). However, they are meant for bug detection, not mitigation.
-Even though the tools can fix some bugs automatically, this is not always
-possible. The TOCTTOU bug is in system call wrappers by design. Another problem
-are the double fetches which are not visible in the source, nor in the
-intermediate representation. Compilers can introduce such invisible double
-fetches when allocating registers to variables. TikTok is a mitigation technique
-that works even in such cases.
+bugs in the code that we cannot run (e.g. we are missing hardware to test the
+drivers). However, they are meant for bug detection, not mitigation. Even though
+the tools can fix some bugs automatically, this is not always possible. The
+TOCTTOU bug is in system call wrappers by design. Double fetches not visible in
+the source, nor in the intermediate representation are another problem.
+Compilers can introduce such invisible double fetches when allocating registers
+to variables. TikTok is a mitigation technique that works even in such cases.
 \\
 \\
 
 \subsubsection{Dynamic Analysis Work}
 Google Project Zero's Bochspwn \cite{jurczyk2013bochspwn} uses an emulator to
-detect double-fetches. It found an quite a large number of bugs in the Windows
-kernel. Bochpwn works on binaries, does not require access to the source code
+detect double-fetches. It found quite a large number of bugs in the Windows
+kernel. Bochpwn works on binaries. It does not require access to the source code
 and it detects bugs introduced by compilers. However, it is also limited to the
-detection of double-fetches. Similarly to work prestented in 
+detection of double-fetches. Similarly to work presented in 
 \cref{subsec:dfstatic}, developers need to manually fix the bugs. However, with
-dynamic analysis a double fetch also needs to be executed, limiting this
-techniques to the core kernel and to the drivers with the available hardware.
+dynamic analysis a double fetch needs to be executed, limiting this
+technique to the core kernel and to the drivers with the available hardware.
 \\
 \\
 A big leap in dynamic analysis techniques has been presented by Schwartz et al.
 \cite{schwarz2018automated}. The first part of the paper introduces DECAF - a
 framework that uses side-channel attacks to create a fuzzing oracle for
-double-fetch bugs. While Bochspwn relies on emulation, slowing it down
+double-fetch bugs. While Bochspwn relies on emulation, slowing the execution
 significantly, DECAF runs natively. It also eliminates false positives by
 automatically exploiting found bugs.
+\\
 \\
 Schwartz et al. then discuss a real-time mitigation technique for double
 fetches - DropIt. DropIt uses Intel's \emph{Transactional Synchronization 
@@ -962,10 +973,10 @@ Extensions} (TSX)\cite{intel64and} in a creative way to prevent double fetch
 bugs. By encapsulating the code in a TSX transaction, writes from other threads
 to the addresses we have previously read from or written to will result in the
 transaction being aborted. However, the code executing inside a TSX transaction
-is severly limited. All reads must fit in the L3 cache, and all writes in L1,
+is severely limited. All reads must fit in the L3 cache, and all writes in L1,
 with some instructions being forbidden. TikTok has none of those limitations.
 It works on non-Intel processors and relies on page tables for protection - a
-technique which has been present for several decades.
+technique that has been present for several decades.
 
 
 %-------------------------------------------------------------------------------
