@@ -66,6 +66,9 @@
 \usepackage{subcaption}
 \usepackage{cleveref}
 
+% Comment macros
+\newcommand{\pra}[1]{\textcolor{blue}{\textbf{PS:}#1}}
+
 %-------------------------------------------------------------------------------
 \begin{filecontents}{\jobname.bib}
 %-------------------------------------------------------------------------------
@@ -287,6 +290,15 @@ Not more than 200 words, if possible, and preferably closer to 150.
 % Introduce the main problem - TOCTTOU
 % Brag how our system is the best thing since sliced bread
 \section{Introduction}
+
+\pra{Bib: Please put biblio in a separate *.bib file instead of the main tex
+file itself.  You can see how to include in the main *.tex file from any paper
+repo in our group.}
+
+\pra{You jump straight into introducing system call wrappers. Maybe preface
+this with a para detailing how system call execution model can be exploited in
+various scenarios. After that, you can jump into how wrappers try to address the
+problems you introduced first. It'd make for a smoother transition IMO.}
 System call wrappers enable administrators to define system call execution
 policies. Such policies could prevent the execution of a system call based 
 on the ID of the call and its arguments. By setting only necessary access
@@ -299,14 +311,17 @@ kernel. Malicious input filtering could be used as a permanent solution in
 those cases.
 \\
 \\
-Unfortunately, system call wrappers suffer from a design flaw. Filters execute 
-before system calls. After the filter reads arguments and validates them, the
-system call reads them the second time. In-between these two reads, the attacker
-could change values, leading to an execution of a forbidden call. This is called
-a \emph{time-of-check to time-of-use} attack (TOCTTOU). It is a consequence of a
-\emph{double fetch} from the userland and is notoriously hard to detect. Unlike 
-other bugs, double-fetches are benign until the adversary decides to change the 
-arguments.
+Unfortunately, system call wrappers suffer from a design flaw. \pra{You started with
+`wrappers have a design flaw` and then started talking about filters.  
+Disambiguate between wrappers and filters and maintain
+consistent terminology throughout.}Filters execute before system calls. After
+the filter reads arguments and validates them, the system call reads them the
+second time. In-between these two reads, the attacker could change values,
+leading to an execution of a forbidden call. This is called a
+\emph{time-of-check to time-of-use} attack (TOCTTOU). It is a consequence of a
+\emph{double fetch} from the userland and is notoriously hard to detect\pra{Insert cites}. Unlike
+other bugs, double-fetches are benign until the adversary decides to change the
+arguments\pra{When? Clarify change between the double-fetch.}.
 \\
 \\
 \begin{figure}[]
@@ -316,6 +331,10 @@ arguments.
   \label{fig:tocttou}
 \end{figure}
 
+\pra{Before stating the contributions, insert a couple of paras detailing how you
+address the problem and then introducing your framework. Then you should give a peek
+into the results of your framework evaluation.}
+
 The contributions of this paper are:
 \begin{itemize}
 \item TikTok - mitigation for time-of-check to time-of-use attacks on system 
@@ -323,9 +342,11 @@ The contributions of this paper are:
 \item A technique to postpone the writes from userland
 \item A technique to defer the writes from the kernel, while continuing normal
       kernel execution
-\item Performance analysis of our system and its security guarantees
+\item \pra{Evaluation of your framework is not a contribution.}Performance analysis of our system and its security guarantees
 \end{itemize}
 
+\pra{This seems out of place. Each section would have a lead introducing its purpose
+so this is redundant information.}
 The rest of the paper is organized as follows: \Cref{sec:background} explains 
 inter-process communication, paging, double fetch bugs, and the related
 background. \Cref{sec:design} describes how \emph{TikTok} works in theory, while
