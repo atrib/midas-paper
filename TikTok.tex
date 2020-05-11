@@ -64,7 +64,8 @@
 \usepackage{cleveref}
 
 % Comment macros
-\newcommand{\pra}[1]{\textcolor{blue}{\textbf{PS:}#1}}
+\newcommand{\pra}[1]{\textcolor{blue}{\textbf{PS:} #1}}
+\newcommand{\mat}[1]{\textcolor{red}{\textbf{Mat:} #1}}
 %-------------------------------------------------------------------------------
 \begin{document}
 %-------------------------------------------------------------------------------
@@ -102,9 +103,7 @@ Not more than 200 words, if possible, and preferably closer to 150.
 % Brag how our system is the best thing since sliced bread
 \section{Introduction}
 
-\pra{Bib: Please put biblio in a separate *.bib file instead of the main tex
-file itself.  You can see how to include in the main *.tex file from any paper
-repo in our group.}
+\mat{Start with one paragraph motivation/setting the scene.}
 
 \pra{You jump straight into introducing system call wrappers. Maybe preface
 this with a para detailing how system call execution model can be exploited in
@@ -114,14 +113,21 @@ System call wrappers enable administrators to define system call execution
 policies. Such policies could prevent the execution of a system call based 
 on the ID of the call and its arguments. By setting only necessary access
 policies for all processes, administrators would reduce the damage in case 
-of an attack. Filtering could also restrict calls to the exploitable system
+of an attack. 
+\mat{Would is not a good verb. Aim for clear statements.}
+Filtering could also restrict calls to the exploitable system
 calls. By excluding some combinations of arguments, the administrator could 
 mitigate certain vulnerabilities until a patch is available. Many embedded 
 devices have binary-only drivers that prevent them from updating the 
 kernel. Malicious input filtering could be used as a permanent solution in 
 those cases.
+\mat{Same for could. Make absolute statements, not relative ones if possible.}
+
+\mat{Don't use forced newlines. Ever.
 \\
 \\
+}
+
 Unfortunately, system call wrappers suffer from a design flaw. \pra{You started with
 `wrappers have a design flaw` and then started talking about filters.  
 Disambiguate between wrappers and filters and maintain
@@ -133,6 +139,10 @@ leading to an execution of a forbidden call. This is called a
 \emph{double fetch} from the userland and is notoriously hard to detect\pra{Insert cites}. Unlike
 other bugs, double-fetches are benign until the adversary decides to change the
 arguments\pra{When? Clarify change between the double-fetch.}.
+\mat{We call it user-space, not userland.}
+
+\mat{Make problems explicit and enumerate them.}
+
 \\
 \\
 \begin{figure}[]
@@ -158,6 +168,7 @@ The contributions of this paper are:
 
 \pra{This seems out of place. Each section would have a lead introducing its purpose
 so this is redundant information.}
+\mat{Each systems paper has the same outline. This paragraph can be removed without loss of information.}
 The rest of the paper is organized as follows: \Cref{sec:background} explains 
 inter-process communication, paging, double fetch bugs, and the related
 background. \Cref{sec:design} describes how \emph{TikTok} works in theory, while
@@ -172,6 +183,8 @@ is discussed in \cref{sec:relatedwork}.
 % 5) Copy to/from user - Explain why the API has been introduced
 % 6) Double fetches - Provide a high-level overview
 \section{Background}
+
+\mat{What kind of message do you want to send? Why do we need this background information? Guide the reader in understanding what is necessary and where the problems are.}
 
 \pra{Insert lead para giving overview of info presented here as you did in the intro.}
 \pra{In its current state this section looks like an information dump. For each subsection
@@ -345,7 +358,6 @@ BSD also provides a similar interface using \texttt{copy\_in} and
 \texttt{copy\_out} functions.
 
 \subsection{Double Fetch Bugs}
-
 \label{subsec:doublefetch}
 
 \begin{figure}[]
@@ -383,6 +395,7 @@ vulnerabilities in the kernel.
 \pra{This section does not really look like a "high-level overview" but more like
 the detailed design itself. :) I would suggest having a separate overview subsection that summarizes
 the main design points.}
+\mat{Style: don't write 'in this section'. It's obvious that it's in this section, so you're just wasting space.}
 In this section we describe a high-level overview of TikTok. We start with the 
 security model in \cref{subsec:secmodel}. Afterward we describe how TikTok 
 protects system call arguments from userland (\cref{subsec:userland}) and the 
@@ -396,6 +409,7 @@ for an adversary trying to mount a toctou attack and then present your design po
 how they address those attack vectors. IMO the deadlock issue (3.4 and 3.7) is something that 
 needs to be discussed separately since it is not a part of your actual design but moreso
 a consequence of your design.}
+\mat{Agreed with Prashast}
 
 \subsection{The Security Model}
 \label{subsec:secmodel}
@@ -551,8 +565,8 @@ corresponding file as long as it has any marked mapped pages.
 
 \subsection{TikTok Deadlocks}
 \label{subsec:deadlocks}
-TikTok adds additional synchronization points to multithreaded programs. It is 
-possible for these points to introduce previously non-existant deadlocks to 
+TikTok adds additional synchronization points to multi-threaded programs. It is 
+possible for these points to introduce previously non-existent deadlocks to 
 programs. However, deadlocking threads would need to communicate using both 
 shared memory (for TikTok to stop one of them) and message passing system calls 
 (for TikTok to mark memory).
@@ -588,7 +602,7 @@ enters the system call S and marks a shared page \texttt{A} (\textbf{1}). The
 system call S blocks until the corresponding call \texttt{unblock\_S} is called
 in Thread 2 (\textbf(3)). While the page \texttt{A} is still marked, Thread 2
 attempts to write to it, causing it to wait for \texttt{S} to finish
-(\textbf{2}). This situation is perculiar:
+(\textbf{2}). This situation is peculiar:
 \begin{enumerate}
     \item The page \texttt{A} is shared between Thread 1 and Thread 2
     \item Access to page \texttt{A} is not protected by a mutex, or a semaphore
@@ -627,6 +641,8 @@ memory mapping and a system call. We have not encountered such a problem.
 % be mentioned, but Future work could be a better section for that
 \section{Implementation}
 \label{sec:implementation}
+
+\mat{What's the message here? Say what you implement based on which design decisions.}
 
 \Cref{fig:bookkeeping} illustrates some of the most important information stored
 on x86. \cref{subsec:frameinfo} describes the data about the physical page
@@ -693,6 +709,8 @@ changes visible immediately.
 % methods can only fix other double fetches, or they force you to use TSX
 \section{Related Work}
 \label{sec:relatedwork}
+
+\mat{Numbers smaller than 10 should be written out: two!}
 Literature related to TikTok can be broadly divided into 2 groups. In the first
 group are system call wrappers and filters whose main vulnerability TikTok is
 mitigating. The second ones are the mitigations and solutions for
@@ -834,10 +852,8 @@ technique that has been present for several decades.
 
 
 %-------------------------------------------------------------------------------
-\section*{Acknowledgments}
+%\section*{Acknowledgments}
 %-------------------------------------------------------------------------------
-
-Thanks, mom!
 
 %-------------------------------------------------------------------------------
 \section*{Availability}
