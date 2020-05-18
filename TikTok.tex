@@ -103,30 +103,37 @@ Not more than 200 words, if possible, and preferably closer to 150.
 % Brag how our system is the best thing since sliced bread
 \section{Introduction}
 
-\mat{Start with one paragraph motivation/setting the scene.}
+%\mat{Start with one paragraph motivation/setting the scene.}
 
-\pra{You jump straight into introducing system call wrappers. Maybe preface
-this with a para detailing how system call execution model can be exploited in
-various scenarios. After that, you can jump into how wrappers try to address the
-problems you introduced first. It'd make for a smoother transition IMO.}
-System call wrappers enable administrators to define system call execution
-policies. Such policies could prevent the execution of a system call based 
+%\pra{You jump straight into introducing system call wrappers. Maybe preface
+%this with a para detailing how system call execution model can be exploited in
+%various scenarios. After that, you can jump into how wrappers try to address the
+%problems you introduced first. It'd make for a smoother transition IMO.}
+
+Userspace programs communicate with the operating system using system calls.
+System calls may contain vulenerable code that a malicious user (adversary,
+attacker) can exploit to gain privileged access. When such a vulnerability
+is found, it is patched, and the kernel (module) is updated. Unfortunately,
+many legacy and embedded devices rely on drivers distributed as binary blobs,
+compiled against a specific kernel version.
+
+\emph{System call wrappers} enable administrators to define system call execution
+policies. Such policies prevent the execution of a system call based 
 on the ID of the call and its arguments. By setting only necessary access
-policies for all processes, administrators would reduce the damage in case 
+policies for all processes, administrators reduce the damage in case 
 of an attack. 
-\mat{Would is not a good verb. Aim for clear statements.}
-Filtering could also restrict calls to the exploitable system
-calls. By excluding some combinations of arguments, the administrator could 
-mitigate certain vulnerabilities until a patch is available. Many embedded 
-devices have binary-only drivers that prevent them from updating the 
-kernel. Malicious input filtering could be used as a permanent solution in 
-those cases.
-\mat{Same for could. Make absolute statements, not relative ones if possible.}
 
-\mat{Don't use forced newlines. Ever.
-\\
-\\
-}
+%\mat{Would is not a good verb. Aim for clear statements.}
+Filtering also restricts access to the exploitable system
+calls. By excluding some combinations of arguments, the administrator can 
+mitigate certain vulnerabilities until a patch is available. On legacy systems,
+this approach can be used as a mitigation for vulnerabilities.
+%\mat{Same for could. Make absolute statements, not relative ones if possible.}
+
+%\mat{Don't use forced newlines. Ever.
+%\\
+%\\
+%}
 
 Unfortunately, system call wrappers suffer from a design flaw. \pra{You started with
 `wrappers have a design flaw` and then started talking about filters.  
@@ -136,7 +143,7 @@ the filter reads arguments and validates them, the system call reads them the
 second time. In-between these two reads, the attacker could change values,
 leading to an execution of a forbidden call. This is called a
 \emph{time-of-check to time-of-use} attack (TOCTTOU). It is a consequence of a
-\emph{double fetch} from the userland and is notoriously hard to detect\pra{Insert cites}. Unlike
+\emph{double fetch} from the user-space and is notoriously hard to detect\pra{Insert cites}. Unlike
 other bugs, double-fetches are benign until the adversary decides to change the
 arguments\pra{When? Clarify change between the double-fetch.}.
 \mat{We call it user-space, not userland.}
@@ -160,7 +167,7 @@ The contributions of this paper are:
 \begin{itemize}
 \item TikTok - mitigation for time-of-check to time-of-use attacks on system 
       call arguments in the Linux kernel
-\item A technique to postpone the writes from userland
+\item A technique to postpone the writes from user-space
 \item A technique to defer the writes from the kernel, while continuing normal
       kernel execution
 \item \pra{Evaluation of your framework is not a contribution.}Performance analysis of our system and its security guarantees
@@ -169,11 +176,11 @@ The contributions of this paper are:
 \pra{This seems out of place. Each section would have a lead introducing its purpose
 so this is redundant information.}
 \mat{Each systems paper has the same outline. This paragraph can be removed without loss of information.}
-The rest of the paper is organized as follows: \Cref{sec:background} explains 
-inter-process communication, paging, double fetch bugs, and the related
-background. \Cref{sec:design} describes how \emph{TikTok} works in theory, while
-\cref{sec:implementation} elaborates on the x86-64 implementation. Related work
-is discussed in \cref{sec:relatedwork}.
+%The rest of the paper is organized as follows: \Cref{sec:background} explains 
+%inter-process communication, paging, double fetch bugs, and the related
+%background. \Cref{sec:design} describes how \emph{TikTok} works in theory, while
+%\cref{sec:implementation} elaborates on the x86-64 implementation. Related work
+%is discussed in \cref{sec:relatedwork}.
 
 % Cover the theory needed to understand how and why TikTok works
 % 1) IPC - We need this to argue why the deadlocks are almost impossible
@@ -322,11 +329,11 @@ iolation, the page-fault handler kills the thread. After the fault finishes
 executing, the faulting instruction is re-executed. 
 \\
 \\
-With the advent of cloud computing, userland page-fault handling has been added 
+With the advent of cloud computing, user-space page-fault handling has been added 
 to the Linux kernel. Users can define their routines to load swapped-out data.
 This is particularly useful on computer farms when migrating virtual machines
 between physical nodes. One only needs to migrate the code that is executing.
-Accesses to the unmigrated memory will be passed to the userland page-fault
+Accesses to the unmigrated memory will be passed to the user-space page-fault
 handler. It will then fetch them over the network and continue the execution.
 
 \subsection{Copy-from-User and Copy-to-User}
@@ -386,7 +393,7 @@ hypervisor, hardware -- kernel). Double fetches have been responsible for many
 vulnerabilities in the kernel.
 
 % Explain generally how TikTok works. We mention all the problems that
-% TikTok needs to mitigate: writes from userland, writes from the kernel, safely
+% TikTok needs to mitigate: writes from user-space, writes from the kernel, safely
 % stopping the writes, preventing bypass using file-backed pages, system calls
 % that are ignored. The most important part is showing the conditions for 
 % introducing deadlocks
@@ -398,7 +405,7 @@ the main design points.}
 \mat{Style: don't write 'in this section'. It's obvious that it's in this section, so you're just wasting space.}
 In this section we describe a high-level overview of TikTok. We start with the 
 security model in \cref{subsec:secmodel}. Afterward we describe how TikTok 
-protects system call arguments from userland (\cref{subsec:userland}) and the 
+protects system call arguments from user-space (\cref{subsec:user-space}) and the 
 kernel (\cref{subsec:kernelland}) writes.
 \pra{A general comment on the design. Currently, it reads more like a tutorial about
 a cool framework rather than an actual design. All the necessary information required to
@@ -416,7 +423,7 @@ a consequence of your design.}
 The administrator has set up \pra{First mention of this acronym. Define before using.}
 DAC preventing the adversary from accessing files 
 mapping to physical devices. They also control which file-systems are mounted on
-the machine and have disabled userland page-fault handling.
+the machine and have disabled user-space page-fault handling.
 \\
 \\
 The adversary has access to a user account on a target machine. They can execute
@@ -424,7 +431,7 @@ arbitrary code (including system call) and want to obtain root access by
 triggering a TOCTTOU bug in the kernel.
 
 \subsection{Protecting System Call Arguments from Writes by the User}
-\label{subsec:userland}
+\label{subsec:user-space}
 \begin{figure}[]
   \centering
   \includegraphics[width = .45 \textwidth]{img/copy_from_user.pdf}
@@ -547,7 +554,7 @@ are then mapped with appropriate permissions into the virtual memory space.
 Devices are treated as files in Linux and can be memory mapped. However, 
 hardware may change its registers at will. There are no conceivable ways from 
 protecting from TOCTTOU attacks if the adversary stores his arguments in device
-mapped memory. Considering that mapping device memory to userland is considered
+mapped memory. Considering that mapping device memory to user-space is considered
 bad practice, we rely on \emph{Descretionary Access Control} (\textbf{DAC}) to 
 prevent users from mapping devices in the first place.
 
