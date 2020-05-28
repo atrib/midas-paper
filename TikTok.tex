@@ -110,23 +110,43 @@ Not more than 200 words, if possible, and preferably closer to 150.
 %various scenarios. After that, you can jump into how wrappers try to address the
 %problems you introduced first. It'd make for a smoother transition IMO.}
 
+\pra{I think the main message of the first paragraph should just be `syscalls are 
+vulnerable, adversaries can use them to to escalate privileges and hence
+is an attack surface that needs to be protected`. The last two points you make re:updates
+and drivers being distributed as binary blobs seem out of place. Give appropriate reasoning 
+as to why its relevant to your problem statement.}
+\pra{Additionally, a neat trick I learned from Mathias is to append a one-line
+description of the main message for each para as a comment (like presented below). 
+This not only helps you see the logical flow for each section but also helps a proofreader
+identify the main point you're trying to present in a para.}
+
+% Syscalls are a lucrative attack surface for adversaries which needs to be protected
+You introduce syscalls, say
+they are vulnerable. Then you switch to talking about update
 Userspace programs communicate with the operating system using system calls.
-System calls may contain vulenerable code that a malicious user (adversary,
+System calls may contain vulenerable code that a \pra{Synonyms seem redundant and
+unnecessary. Just use
+one and stick with it throughout.} malicious user (adversary,
 attacker) can exploit to gain privileged access. When such a vulnerability
-is found, it is patched, and the kernel (module) is updated. Unfortunately,
+is found, it is patched, and the kernel \pra{Here this parenthesis makes me think you're
+implying kernel updates correspond to only kernel module updates which is not correct right?
+Updates can be pushed to core kernel components as well.}(module) is updated. Unfortunately,
 many legacy and embedded devices rely on drivers distributed as binary blobs,
 compiled against a specific kernel version.
 
-\emph{System call wrappers} enable administrators to define system call
+\pra{Smoothen the transition to this para. Introduce syscall wrappers as a means to protect
+syscalls from exploitation.}\emph{System call wrappers} enable administrators to define system call
 execution policies. Such policies (\emph{filters}) prevent an execution of a
-system call based on the ID of the call and its arguments. By setting only
+system call based on the ID {What do you mean by `ID of the call`? Function name? Clarify.} 
+of the call and its arguments. By setting only
 necessary access policies for all processes, administrators reduce the damage in
 case of an attack. 
 
 %\mat{Would is not a good verb. Aim for clear statements.}
 Filtering also restricts access to the exploitable system
 calls. By excluding some combinations of arguments, the administrator can 
-mitigate certain vulnerabilities until a patch is available. On legacy systems,
+mitigate certain vulnerabilities until a patch is available. \pra{Why specifically legacy 
+systems?}On legacy systems,
 this approach can be used as a mitigation for vulnerabilities.
 %\mat{Same for could. Make absolute statements, not relative ones if possible.}
 
@@ -143,10 +163,15 @@ this approach can be used as a mitigation for vulnerabilities.
 Unfortunately, system call wrappers suffer from a design flaw. They execute before system calls. After
 the filter reads arguments and validates them, the system call reads them the
 second time. In-between these two reads, the attacker can change values,
-leading to an execution of a forbidden call. This is called a
+leading to an execution of a forbidden call\pra{Here, I get the impression that when
+you say a `forbidden call` you're trying to say `instead of `foo(a)` which is allowed
+`foo(b)` may be executed which is not allowed. However, is it possible for an attacker
+to call `bar(a)` instead of `foo(a) too?}This is called a
 \emph{time-of-check to time-of-use} attack (TOCTTOU). It is a consequence of a
 \emph{double-fetch} from the user-space.
 
+\pra{It might make sense to cite any studies if possible about prevalence of these bugs
+in the kernel or how hard it is to eliminate them to motivate your problem statement further.}
 Double-fetches occur when a higher-privileged code (e.g. the kernel) reads
 the same data twice from the lower-priviliged space (e.g. userspace). In-between
 the two reads, the data can be changed concurrently. Double-fetches are then
@@ -161,8 +186,8 @@ consumed by the code.
 The system that mitigates double-fetches needs to:
 \begin{enumerate}
   \item Prevent the change of the user memory accessed by the system call
-  \item Enable normal system call execution
-  \item Enable normal execution of threads trying to change the arguments
+  \item Enable \pra{What does `normal` mean here? Benign?}normal system call execution
+  \item Enable \pra{Same q as above}normal execution of threads trying to change the arguments
 \end{enumerate}
 
 
@@ -173,6 +198,7 @@ The system that mitigates double-fetches needs to:
   \label{fig:tocttou}
 \end{figure}
 
+\pra{Connect this para to the first point you make before for a smoother transition.}
 The double-fetch in a system-call can only be exploited by overwriting the
 arguments during the call's execution. Considering that the Linux kernel uses a
 well defined interface for reading from the userspace
@@ -184,7 +210,10 @@ Writes to the marked pages are handled depending on where they come from. Writes
 from the kernel go through the well defined interface (\texttt{copy\_to\_user}).
 They are saved and executed at the end of the call. Writes from the userspace
 will trigger a \emph{page-fault handler} where they will wait for the unmarking.
+\pra{You never talk again about the last two design requirements for a double-fetch
+prevention system. Mention that this mitigation methodology still allows for normal executions.}
 
+\pra{This discussion about deadlocks seems rather abrupt and out-of-place.}
 For such a memory-marking system to introduce deadlocks into software,
 extraordinary conditions need to be met. The software needs to
 share the \emph{same data} between threads using the \emph{shared memory} and 
@@ -199,10 +228,13 @@ have been read the first time. This mitigates not only the double-fetch bugs
 which can be fixed, but also the ones which are there by design (e.g. system-call
 wrappers). TikTok works on modern Linux distributions (Ubuntu Server 18.04 LTS)
 and doesn't require any modifications to user programs. TikTok isn't suitable
-for servers and highly multithreaded workloads, but can be used on embedded
+for servers and highly multithreaded workloads\pra{Why?}, but can be used on embedded
 devices.
+\pra{Create another para where you give an overview of the results of your evaluation.
+Overhead etc. The actual numbers can be filled in later.}
 
-The main contributions of this paper are:
+The main contributions of this paper are\pra{Instead of ordering as framework, technique, technique
+order it as technique, technique, framework as a PoC of the above techniques}:
 \begin{itemize}
 \item TikTok - mitigation for the time-of-check to time-of-use attacks on system 
       call arguments in the Linux kernel
