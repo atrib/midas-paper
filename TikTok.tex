@@ -65,6 +65,7 @@
 
 % Comment macros
 \newcommand{\pra}[1]{\textcolor{blue}{\textbf{PS:} #1}}
+\newcommand{\nb}[1]{\textcolor{purple}{\textbf{NB}: #1}}
 \newcommand{\mat}[1]{\textcolor{red}{\textbf{Mat:} #1}}
 %-------------------------------------------------------------------------------
 \begin{document}
@@ -121,8 +122,8 @@ This not only helps you see the logical flow for each section but also helps a p
 identify the main point you're trying to present in a para.}
 
 % Syscalls are a lucrative attack surface for adversaries which needs to be protected
-You introduce syscalls, say
-they are vulnerable. Then you switch to talking about update
+\pra{You introduce syscalls, say
+they are vulnerable. Then you switch to talking about update}
 Userspace programs communicate with the operating system using system calls.
 System calls may contain vulenerable code that a \pra{Synonyms seem redundant and
 unnecessary. Just use
@@ -137,7 +138,7 @@ compiled against a specific kernel version.
 \pra{Smoothen the transition to this para. Introduce syscall wrappers as a means to protect
 syscalls from exploitation.}\emph{System call wrappers} enable administrators to define system call
 execution policies. Such policies (\emph{filters}) prevent an execution of a
-system call based on the ID {What do you mean by `ID of the call`? Function name? Clarify.} 
+system call based on the ID \pra{What do you mean by `ID of the call`? Function name? Clarify.} 
 of the call and its arguments. By setting only
 necessary access policies for all processes, administrators reduce the damage in
 case of an attack. 
