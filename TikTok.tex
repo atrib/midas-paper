@@ -734,9 +734,10 @@ for the same data. During testing, we have not encountered a single deadlock
 caused by TikTok.
 
 Similar sequences can be constructed using the write system call protection
-presented in \cref{subsec:}. The same argument can be applied in that case - the
-program needs to write to the same data to the file using both memory mapping
-and a system call at the same time. We have not encountered such a problem.
+presented in \cref{subsec:filewrites}. The same argument can be applied in that
+case - the program needs to write to the same data to the file using both memory
+mapping and a system call at the same time. We have not encountered such a
+problem.
 
 
 % Here we mention SOME of the interesting implementation decisions. It is
