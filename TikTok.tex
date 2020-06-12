@@ -67,6 +67,10 @@
 \newcommand{\pra}[1]{\textcolor{blue}{\textbf{PS:} #1}}
 \newcommand{\nb}[1]{\textcolor{green}{\textbf{NB}: #1}}
 \newcommand{\mat}[1]{\textcolor{red}{\textbf{Mat:} #1}}
+
+\newcommand{\sysname}{TikTok}
+
+
 %-------------------------------------------------------------------------------
 \begin{document}
 %-------------------------------------------------------------------------------
@@ -79,11 +83,12 @@
 
 %for single author (just remove % characters)
 \author{
-{\rm Eric Tusso}\\
-EPFL
-\and
-{\rm Yamaha Priest}\\
-EPFL
+Anonymous submission \#TODO to Usenix SEC21
+%{\rm Eric Tusso}\\
+%EPFL
+%\and
+%{\rm Yamaha Priest}\\
+%EPFL
 % copy the following lines to add more authors
 % \and
 % {\rm Name}\\
@@ -95,22 +100,35 @@ EPFL
 %-------------------------------------------------------------------------------
 \begin{abstract}
 %-------------------------------------------------------------------------------
-We present TikTok - the first system that prevents double-fetch and
+\mat{Turn TikTok into a \sysname macro.}
+\mat{Claiming to be the first is risky. Be quantitative and start off with the
+problem, then say what we do, then bring up some qualitative argument.}
+\mat{Start by saying what the problem is (double fetch) and that it can be
+exploited.}
+We present TikTok, the first system that prevents double-fetch and
 time-of-check-to-time-of-use (TOCTTOU) attack from user-space in system-calls. While dynamic and
 static analysis techniques have focused on detecting and fixing double-fetch
-bugs, TikTok focuses on mitigating them. This enables the use of the system-call
+bugs, TikTok focuses on mitigating them. 
+
+\mat{You're not showing the following. In the abstract focus on what you do. You
+mitigate double fetch.}
+\mat{All this second part is not useful for your cause as you're highlighting
+future work.}
+This enables the use of the system-call
 wrappers that can filter system-calls even on in-memory arguments. This wasn't
 previously possible due to the unfixable TOCTTOU bug. System-call wrappers can
 also benefit from TikTok's memory checkpointing system, which enables them to handle
 system-calls that both read and write to user-memory.
 
-% U.T. What else should be in the abstract? I know it has to be a sales pitch...
+\mat{Say something about the evaluation.}
 
 \end{abstract}
 % Talk about the system call filters and how they can be used for good
 % Introduce the main problem - TOCTTOU
 % Brag how our system is the best thing since sliced bread
 \section{Introduction}
+
+\mat{When you have addressed the comments, remove them!}
 % \nb{General notes: e.g. -> e.g., (as I've seen in all the hexhive papers\\
 % privilige -> privilege\\
 % userspace -> user space / user-space\\
@@ -156,6 +174,11 @@ System calls may contain vulnerable code that a malicious user can exploit to
 gain privileged access. Linux kernel contains hundreds of system calls and
 can be extended by additional \texttt{ioctl} system calls that are part of
 drivers. This amounts to a significant attack surface.
+\mat{Start by introducing double fetch vulnerabilities and how they threaten
+systems.}
+\mat{Stress how big of an issue such double fetch bugs are, cite some recent
+CVEs that were fixed. Argue that we need a system that protects against double
+fetch bugs.}
 
 %\pra{Smoothen the transition to this para. Introduce syscall wrappers as a means to protect
 %syscalls from exploitation.}
@@ -168,6 +191,9 @@ execution policies. Such policies (\emph{filters}) prevent an execution of a
 system call based on the system call name and its arguments. By setting only
 necessary access policies for all processes, administrators reduce the attack
 surface.
+\mat{Similar as abstract: you're not implementing a filter, you're implementing
+a mitigation. This is future work and, if at all, should only be mentioned in
+passing in the intro. It should be discussed in the discussion section though!}
 
 %\mat{Would is not a good verb. Aim for clear statements.}
 %\pra{Why specifically legacy  systems?}
@@ -225,6 +251,7 @@ used for processing.
 %\mat{We call it user-space, not userland.}
 
 %\mat{Make problems explicit and enumerate them.}
+\mat{This needs to be earlier.}
 
 % Define our goal
 A system that mitigates double-fetches needs to:
@@ -252,6 +279,9 @@ to mark the memory page with the data being read. If those pages are marked as
 read-only for the duration of the call, double-fetches are \emph{completely
 eliminated}. Even double-fetches exits, both fetches will always read the same
 value.
+\mat{You convolute problem and solution. Talk about the problem first, then
+suggest a solution. copy from user smells a lot like implementation so you may
+hint at it but don't get too deep}
 
 % \nb{Make clearer that you are talking about the new defense mechanism and not
 % the actual state of things.}
@@ -280,12 +310,17 @@ correctly -- they are just delayed.
 %into the results of your framework evaluation.}
 
 % Introduce TikTok
+\mat{The - is odd. Use the triple---to introduce an emdash breaking two
+clauses.}
+\mat{You may want to bring up transactions?}
 We present \emph{TikTok} - a memory marking extension to the Linux kernel. TikTok
 provides system-calls with a checkpointed view of the memory at the time they
 have been read the first time. This mitigates not only the double-fetch bugs
 which can be fixed, but also the bugs which are there by design (e.g., system-call
 wrappers). TikTok works on modern Linux distributions (Ubuntu Server 18.04 LTS)
 and doesn't require any modifications to user programs.
+\mat{You need to include more information about the two different types of bugs.
+Each needs a paragraph and how TikTok prevents them.}
 
 % Sneak-peek into the results
 Benchmarking TikTok showed that multithreaded programs with lots of marking
@@ -293,6 +328,8 @@ system-calls, such as Apache, show a 10-15\% drop in performance with TikTok
 protecting almost all system-calls. Applications that few protected system calls
 show a more modest performance drop (4.5\%), with TikTok having almost no effect
 on CPU-intensive programs.
+\mat{Create marcos for overhead.}
+
 % \pra{Create another para where you give an overview of the results of your evaluation.
 % Overhead etc. The actual numbers can be filled in later.}
 
@@ -300,6 +337,8 @@ on CPU-intensive programs.
 The main contributions of this paper are
 % \pra{Instead of ordering as framework, technique, technique
 % order it as technique, technique, framework as a PoC of the above techniques}:
+\mat{Think about high level goals and how you achieve them. This list is too
+detail-oriented. Bring up the high level contributions!}
 \begin{itemize}
 \item A technique to postpone the writes to marked pages from user-space
 \item A technique to defer the writes from the kernel to the marked pages,
