@@ -380,8 +380,13 @@ detail-oriented. Bring up the high level contributions!}
 % message passing uses shared memory and is therefore affected. What is special
 % about message passing versus other shared memory usage?}.
 
+\mat{This section misses an introduction paragraph. What kind of background do
+you want to tell us. Why is it important? Why should we care?}
+
 % I want to cover why this background is needed. IPC is the most problematic
 % because it is used to justify the abscence of deadlocks
+\mat{In my group we're using \autoref{subsec:ipc}. Also, watch out for the - to
+--- again.}
 \Cref{subsec:ipc} introduces two different ways of communication between
 processes - \emph{shared memory} and \emph{message-passing}. TikTok affects both
 of these methods because the arguments of the message-passing system calls are
@@ -406,6 +411,12 @@ double-fetch bugs TikTok is mitigating.
 
 The two main types of communication between processes are \emph{shared memory} 
 and \emph{message passing}\cite{silberschatz2018operating}.
+\mat{When you cite, make sure to have a space between last word and citation:
+foo~\cite{bla}.}
+
+\mat{These paragraphs are a little too basic and can be summarized in a sentence
+or two. Either you explain why they are important in your context or you drop
+them.}
 
 % Intro to shared-memory
 Shared memory relies on two processes having a section of memory that both can 
@@ -428,6 +439,9 @@ messages and writing to the shared memory at the same time between two processes
 is exceptionally rare.
 
 \subsection{Virtual Memory and Page Tables} \label{subsec:vm}
+
+\mat{likely way too high level. this is all common knowledge, focus more on the
+kernel aspects that you may need.}
 
 % Introduce the basic terms we use to discuss memory in computers
 The operating system (OS) provides an illusion that every process is executing
@@ -535,6 +549,9 @@ includes the following information:
 
 \subsection{Page-Faults}
 \label{subsec:pagefaults}
+
+\mat{fold into previous, again too high level}
+
 % Explain what a page fault is, as well as COW (mentioned later as an optimizaiton)
 On an invalid access (e.g., wrong permissions, page not present) the MMU will
 trigger a page-fault. The fault is a synchronous interrupt that executes in the
@@ -556,6 +573,9 @@ execution.
 
 \subsection{Anonymous and File-Backed Pages}
 \label{subsec:anofilepages}
+
+\mat{or?}
+\mat{too high level. summarize the last 3 subsections into one.}
 
 Memory in Linux can be either \emph{file-backed} or? \emph{anonymous}.
 File-backed pages have a map to the corresponding file. Anonymous pages do not
@@ -588,6 +608,12 @@ preserved between (un)mappings.
 
 \subsection{Copy-from-User and Copy-to-User}
 \label{subsec:copy}
+
+\mat{This section starts very differently from what I expected. Talk about the
+copy from/to part first, not swapping! Why would you talk about swapping?}
+\mat{First paragraph should ease into the section and connect to the details
+that you want to get across.}
+
 % Explain the invariants for the addresses in Linux
 Linux uses swapping only for user memory. When executing in the kernel context,
 kernel memory is mapped and present. A page fault on kernel memory access is
@@ -614,6 +640,8 @@ BSD also provides a similar interface using \texttt{copy\_in} and
 \subsection{Double Fetch Bugs}
 \label{subsec:doublefetch}
 
+\mat{This is actually essential and one of the main parts of the BG!}
+
 \begin{figure}[]
   \centering
   \includegraphics[width=.85\linewidth]{img/doublefetch.pdf}
@@ -622,6 +650,7 @@ BSD also provides a similar interface using \texttt{copy\_in} and
 \end{figure}
 
 % The idea behind double-fetch bugs
+\mat{Code example?}
 \emph{Double-fetch} bugs occur when a privileged environment (such as the
 kernel) reads untrusted memory two or more times and the read values aren't
 identical. (\cref{fig:doublefetch}) In between those two reads, memory could
@@ -641,6 +670,7 @@ in kernels, but wherever there is a trust boundary to cross (e.g., kernel ---
 hypervisor\cite{wilhelm2016xenpwn} and hardware --- kernel
 boundaries\cite{lu2018untrusted}). Double-fetches have been responsible for many
 vulnerabilities in different kernels\cite{jurczyk2013bochspwn, wang2018survey}.
+\mat{Again, cites need a non-breaking space before them:~\cite{foo}}
 
 % Explain generally how TikTok works. We mention all the problems that
 % TikTok needs to mitigate: writes from user-space, writes from the kernel, safely
@@ -653,12 +683,17 @@ vulnerabilities in different kernels\cite{jurczyk2013bochspwn, wang2018survey}.
 \subsection{The Security Model}
 \label{subsec:secmodel}
 %\nb{Wouldn't it make sense to introduce the security model before the attacks?}
+\mat{Threat model? and add it as a section before.}
+
+\mat{Again, I expect something very different from a threat model. Focus on what
+is needed and what the attacker can do.}
 
 % Define the power of the adiministrator
 The administrator has set up \emph{Discretionary Access Control} (\emph{DAC})
 that can prevent the adversary from accessing certain files. They also control
 which file-systems are mounted on the machine and have disabled user-space
 page-fault handling. 
+\mat{Why files?}
 
 % Explain why they need every piece of the jigsaw
 TikTok relies on the page-fault handler to protect the system. User-space
@@ -690,6 +725,7 @@ by triggering a TOCTTOU bug in the kernel.
 %needs to be discussed separately since it is not a part of your actual design but moreso
 %a consequence of your design.}
 %\mat{Agreed with Prashast}
+
 \subsection{Overview}
 \label{subsec:designoverview}
 % \nb{The paragraphs in this section don't flow really well.}
@@ -698,6 +734,7 @@ by triggering a TOCTTOU bug in the kernel.
 TikTok protects the pages storing the system-call arguments by marking them
 read-only. The capabilities of the attacker trying to bypass these measures
 are described in \cref{subsec:secmodel}.
+\mat{Don't use passive.}
 
 % \nb{I would introduce a bit more which attack is about, how they can take place,
 % and clearly define what is correct behaviour.}
@@ -712,6 +749,7 @@ TikTok needs to protect the arguments from different types of attacks:
   \item \label{fourth} Bypassing TikTok by using a write call
   \item \label{fifth} Bypassing TikTok by mapping device-backed files
 \end{enumerate}
+\mat{make these high level design requirements}
 
 \emph{Writes from user-space} consist of a malicious user trying to directly
 write to the argument stored in memory, while the system-call is being executed
@@ -726,6 +764,9 @@ to this location by the \texttt{read} system-call with the kernel privileges.
 by mapping marked pages in another process. The user stores the arguments on a
 file-backed page and maps the file as writable while the system call is executing.
 They are then free to write to the marked arguments.
+\mat{This is a threat, thwarted by your design. There's a fine difference
+between telling a reader that you're aware of the risk and mitigate it and by
+coming across as having a vulnerability in your design. Be careful.}
 
 \emph{Bypassing TikTok by using a write call} is accomplished by calling a
 \texttt{write} system-call on a file with arguments. Even though the arguments
@@ -737,6 +778,9 @@ changing the values of their registers independently of writes. Arguments stored
 in such a memory region change their values based on the state of the underlying
 hardware. File-systems which report the state of the OS (\texttt{\textbackslash
 proc}) also belong in this category.
+\mat{This would be better with a strawman design where you can introduce the
+concepts about reads/writes and then say that the strawman does not work and you
+need something more sophisticated. Call it simplistic design or something.}
 
 % Give credit where due, but also highlight how difficult this problem is
 All of these potential vulnerabilities have been noticed by
@@ -782,6 +826,9 @@ The protection against the attacks \ref{first} and \ref{second} are described in
 %be manipulated from both user and kernel space by adversary. Then, you should
 %detail how TikTok handles them as explained below.}
 % \nb{I don't remember you introducing memory spaces} 
+\mat{Why distinguish between primary and secondary goals? All attacks are equal.
+Don't distinguish.}
+\mat{Start the discussion of the design from a higher level, lead by examples.}
 Defending against the writes from user-space (\cref{first}) is the primary
 feature of TikTok. System calls read user memory using \texttt{copy\_from\_user}
 and its variants. Calls to \texttt{copy\_from\_user} mark the pages as
@@ -803,6 +850,9 @@ deadlocks due to the new synchronization points. The reasoning behind their
 scarcity is discussed in \cref{sec:deadlocks}.
 % \nb{This seems quite pessimistic. You might want to put a bit more optimism
 % here.}
+\mat{No abbreviations such as haven't or aren't. We use full form.}
+\mat{This concern brings up deadlocks and other issues and should be discussed
+at greater length.}
 
 \begin{figure}[]
   \centering
@@ -824,6 +874,12 @@ scarcity is discussed in \cref{sec:deadlocks}.
 % \nb{not absolutely clear why it's
 % self-deadlock. You assume read -> block page -> write can't execute?}
 
+\mat{Coming back from the whole deadlock discussion: you need some more
+structure. Introduce the problem of deadlocks (hopefully by referencing back to
+the simple design on why you actually introduce the risk of deadlocks) then
+argue how you avoid them through a clever locking and marking strategy. Then, if
+anything remains, discuss any potential risks.}
+
 The process that stops the user-space writes cannot be applied to the writes
 from the kernel (attack \ref{second}). As mentioned in
 \cref{subsec:designoverview}, such a system would self-deadlock after a system
@@ -832,6 +888,7 @@ call performs a read, mark an argument and a write to the same argument or page
 the kernel results in the adversary bypassing the marking using a system call
 (e.g., \texttt{sys\_read}).
 
+\mat{Convoluted paragraph. Try to make the argument simpler.}
 Unlike user-space writes to user memory, which can happen from any place in the
 code, kernel writes can only take place from \texttt{copy\_to\_user} and its
 variants. TikTok uses this to its advantage. When the kernel uses
@@ -843,6 +900,7 @@ unmarking}), the writes are performed from the data structure in the order in
 which they arrived. If the pages are still marked, the writes will wait just
 like the writes from the user-space.
 
+\mat{You need a better argument for deadlock freedom.}
 These two techniques create a snapshot of the memory at the moment it
 was accessed for the first time. This means that all reads will always return
 the original values, even if a call had written to them in-between. In case a
@@ -909,6 +967,9 @@ protected from double-fetches.
 
 A malicious user can bypass memory-marking protections by executing the following
 sequence (Attack \ref{third}):
+\mat{They way you write it sounds as if \sysname is insecure.}
+\mat{Structure: introduce all different TOCTTOU attacks in a section; introduce
+the naive design; introduce the sophisticated design}
 
 \begin{enumerate}
   \item Map a file \texttt{F} in the process \texttt{A} to a page \texttt{P}
@@ -978,6 +1039,7 @@ can happen only under specific, rare circumstances which violate the principles
 of Interprocess Communication (\cref{subsec:ipc}). Ubuntu Server 18.04 LTS
 running TikTok is able to successfully boot and execute programs without
 encountering deadlocks.
+\mat{This is a weak argument.}
 
 % \nb{Please be specific on what
 % rare means or mention you will lay them out right afterward. The first sentence
@@ -1120,6 +1182,7 @@ Linux divides physical memory into page frames. Each page frame is represented
 by a \texttt{struct page}. Considering that this structure is replicated
 millions of times, every additional field has a tremendous impact on memory
 consumption.
+\mat{What did I say about forced newlines?}
 \\
 \\
 To keep the memory consumption low, TikTok uses a single bit in \texttt{struct
@@ -1183,6 +1246,10 @@ in \cref{sec:evaluation}.
   \label{fig:tiktokeval}
 \end{figure*}
 
+\mat{Describe what you evaluate and why you evaluate it. Break up into
+microbenchmarks to show overhead and different usage scenarios. For each section
+talk about trade-offs and results.}
+
 TikTok has been evaluated on various kernel benchmarks in Phoronix
 Test Suite\cite{phoronix}. The test machine was running Ubuntu Server 18.04 LTS
 with the Linux kernel 5.4.0-rc3+ on Intel i7-9700 with 16GB of RAM.
@@ -1200,6 +1267,7 @@ However, the two web servers (Apache and NGINX) show a significant drop in
 performance (13.6\% and 11.0\%). They are multithreaded applications with a
 significant number of system calls being executed. The IPC TCP benchmark has
 only two communicating processes and exhibits a smaller overhead (4.3\%).
+\mat{This needs a much longer explanation.}
 
 Analyzing Apache and IPC benchmark executions with \texttt{perf} it was possible
 to determine which functions were executing slower with TikTok.
