@@ -1,0 +1,70 @@
+--------------------------------------------------------------------------
+[[63658,1],1]: A high-performance Open MPI point-to-point messaging module
+was unable to find any relevant network interfaces:
+
+Module: OpenFabrics (openib)
+  Host: testmachine
+
+Another transport will be used instead, although this may result in
+lower performance.
+
+NOTE: You can disable this warning by setting the MCA parameter
+btl_base_warn_component_unused to 0.
+--------------------------------------------------------------------------
+
+
+ NAS Parallel Benchmarks 3.3 -- IS Benchmark
+
+ Size:  8388608  (class A)
+ Iterations:   10
+ Number of processes:     16
+
+   iteration
+        1
+        2
+        3
+        4
+        5
+        6
+        7
+        8
+        9
+        10
+
+
+ IS Benchmark Completed
+ Class           =                        A
+ Size            =                  8388608
+ Iterations      =                       10
+ Time in seconds =                     0.25
+ Total processes =                       16
+ Compiled procs  =                       16
+ Mop/s total     =                   337.90
+ Mop/s/process   =                    21.12
+ Operation type  =              keys ranked
+ Verification    =               SUCCESSFUL
+ Version         =                      3.3
+ Compile date    =              30 Jul 2020
+
+ Compile options:
+    MPICC        = mpicc
+    CLINK        = $(MPICC)
+    CMPI_LIB     = -L/usr/local/lib -lmpi
+    CMPI_INC     = -I/usr/local/include
+    CFLAGS       = (none)
+    CLINKFLAGS   = (none)
+
+
+ Please send the results of this run to:
+
+ NPB Development Team
+ Internet: npb@nas.nasa.gov
+ 
+ If email is not available, send this to:
+
+ MS T27A-1
+ NASA Ames Research Center
+ Moffett Field, CA  94035-1000
+
+ Fax: 650-604-3957
+

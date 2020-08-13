@@ -1,0 +1,34 @@
+
+
+ NAS Parallel Benchmarks 3.0 structured OpenMP C version - MG Benchmark
+
+ No input file. Using compiled defaults
+ Size: 256x256x256 (class A)
+ Iterations:   4
+ Initialization time:           1.057 seconds
+ Benchmark completed
+ VERIFICATION SUCCESSFUL
+ L2 Norm is   2.433365309069e-06
+ Error is     6.947025420201e-17
+
+
+ MG Benchmark Completed
+ Class           =                        A
+ Size            =              256x256x256
+ Iterations      =                        4
+ Threads         =                        8
+ Time in seconds =                     0.75
+ Mop/s total     =                  5187.86
+ Operation type  =           floating point
+ Verification    =               SUCCESSFUL
+ Version         =           3.0 structured
+ Compile date    =              31 Jul 2020
+
+ Compile options:
+    CC           = gcc
+    CLINK        = gcc
+    C_LIB        = -fopenmp -lm
+    C_INC        = -I../common -fopenmp
+    CFLAGS       = -O3 
+    CLINKFLAGS   = (none)
+    RAND         = randdp
