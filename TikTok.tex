@@ -100,27 +100,25 @@ Anonymous submission \#TODO to Usenix SEC21
 %-------------------------------------------------------------------------------
 \begin{abstract}
 %-------------------------------------------------------------------------------
-\mat{Turn TikTok into a \sysname macro.}
-\mat{Claiming to be the first is risky. Be quantitative and start off with the
-problem, then say what we do, then bring up some qualitative argument.}
-\mat{Start by saying what the problem is (double fetch) and that it can be
-exploited.}
-We present TikTok, the first system that prevents double-fetch and
-time-of-check-to-time-of-use (TOCTTOU) attack from user-space in system-calls. While dynamic and
-static analysis techniques have focused on detecting and fixing double-fetch
-bugs, TikTok focuses on mitigating them. 
 
-\mat{You're not showing the following. In the abstract focus on what you do. You
-mitigate double fetch.}
-\mat{All this second part is not useful for your cause as you're highlighting
-future work.}
-This enables the use of the system-call
-wrappers that can filter system-calls even on in-memory arguments. This wasn't
-previously possible due to the unfixable TOCTTOU bug. System-call wrappers can
-also benefit from TikTok's memory checkpointing system, which enables them to handle
-system-calls that both read and write to user-memory.
+Double-fetch bugs have been discovered in all the major operating systems.
+They occur when the data has been fetched across the trust-boundary the second
+time without verifying that it is unchanged. This leaves the kernel in an
+inconsistent state, making it possible to access illegal memory.
 
-\mat{Say something about the evaluation.}
+Today, the solution for double-fetches is to detect and fix them. However, they
+exhibit illegal behavior only under specific conditions, making the detection
+hard. Even then, the actual fixes may not address the problem. Finally, the bug
+could be in the code that cannot be changed (e.g. binary blob), rendering this
+approach useless. We propose \sysname - the mitigation for double-fetches.
+\sysname relies on page-tables to prevent changes to the system call arguments,
+while the call is executing.
+
+\sysname shows no noticable drop of performance when evaluated on CPU-bound
+workloads. On workloads with a large number of system calls, \sysname shows less
+than 5\% when protecting rare system calls, and 20\% when all of the system
+calls are secured.
+
 
 \end{abstract}
 % Talk about the system call filters and how they can be used for good
@@ -128,130 +126,27 @@ system-calls that both read and write to user-memory.
 % Brag how our system is the best thing since sliced bread
 \section{Introduction}
 
-\mat{When you have addressed the comments, remove them!}
-% \nb{General notes: e.g. -> e.g., (as I've seen in all the hexhive papers\\
-% privilige -> privilege\\
-% userspace -> user space / user-space\\
-% in .bib, title= should have double \{\{ brackets to keep capitalization tocttou
-%   vs TOCTTOU\\
-% in .bib, title= should have double \{\{ brackets to keep capitalization tocttou
-%   vs TOCTTOU\\
-% cref vs Cref\\
-% -- vs --- (look at writing tips)}
-
-%\mat{Start with one paragraph motivation/setting the scene.}
-
-%\pra{You jump straight into introducing system call wrappers. Maybe preface
-%this with a para detailing how system call execution model can be exploited in
-%various scenarios. After that, you can jump into how wrappers try to address the
-%problems you introduced first. It'd make for a smoother transition IMO.}
-
-
-% \pra{I think the main message of the first paragraph should just be `syscalls are 
-% vulnerable, adversaries can use them to to escalate privileges and hence
-% is an attack surface that needs to be protected`. The last two points you make re:updates
-% and drivers being distributed as binary blobs seem out of place. Give appropriate reasoning 
-% as to why its relevant to your problem statement.}
-% \pra{Additionally, a neat trick I learned from Mathias is to append a one-line
-% description of the main message for each para as a comment (like presented below). 
-% This not only helps you see the logical flow for each section but also helps a proofreader
-% identify the main point you're trying to present in a para.}
-
-
-
-%\pra{You introduce syscalls, say
-%they are vulnerable. Then you switch to talking about update}
-%\pra{Synonyms seem redundant and
-%unnecessary. Just use one and stick with it throughout.} 
-
-%\pra{Here this parenthesis makes me think you're
-%implying kernel updates correspond to only kernel module updates which is not correct right?
-%Updates can be pushed to core kernel components as well.}
 
 % Syscalls are a lucrative attack surface for adversaries which needs to be protected
-User space programs communicate with the operating system using system calls.
-System calls may contain vulnerable code that a malicious user can exploit to
-gain privileged access. Linux kernel contains hundreds of system calls and
-can be extended by additional \texttt{ioctl} system calls that are part of
-drivers. This amounts to a significant attack surface.
-\mat{Start by introducing double fetch vulnerabilities and how they threaten
-systems.}
-\mat{Stress how big of an issue such double fetch bugs are, cite some recent
-CVEs that were fixed. Argue that we need a system that protects against double
-fetch bugs.}
-
-%\pra{Smoothen the transition to this para. Introduce syscall wrappers as a means to protect
-%syscalls from exploitation.}
-
-% Introduce wrappers and filters. Mention that they can be used to mitigate vulnerabilities
-While many vulnerabilities are patched, sometimes there is a significant delay
-between the discovery of the vulnerability and the patch being available.
-\emph{System call wrappers} enable administrators to define system call
-execution policies. Such policies (\emph{filters}) prevent an execution of a
-system call based on the system call name and its arguments. By setting only
-necessary access policies for all processes, administrators reduce the attack
-surface.
-\mat{Similar as abstract: you're not implementing a filter, you're implementing
-a mitigation. This is future work and, if at all, should only be mentioned in
-passing in the intro. It should be discussed in the discussion section though!}
-
-%\mat{Would is not a good verb. Aim for clear statements.}
-%\pra{Why specifically legacy  systems?}
-% \nb{Are system
-% call wrappers only for legacy system? Does it make sense to use them on a normal
-% system as a defense in depth mechanism? Is it why you try to push the
-% not-up-to-date narrative?}
-%\mat{Same for could. Make absolute statements, not relative ones if possible.}
-
-% Elaborate on the mitigation mechanism
-By reducing the system calls available to the minimum, malicious user's
-capabilities are reduced. Filters can also be used for point-fixes for known
-vulnerabilities, until the patched version becomes available. These fixes
-prevent the execution of exploitable system calls with a malicious combination
-of arguments. This is especially important for legacy systems and other systems
-that cannot be updated due to changes in the new version.
-
-
-%\mat{Don't use forced newlines. Ever.
-%\\
-%\\
-%}
-
-%\pra{You started with
-%`wrappers have a design flaw` and then started talking about filters.  
-%Disambiguate between wrappers and filters and maintain
-%consistent terminology throughout.}
-% \pra{Here, I get the impression that when
-% you say a `forbidden call` you're trying to say `instead of `foo(a)` which is allowed
-% `foo(b)` may be executed which is not allowed. However, is it possible for an attacker
-% to call `bar(a)` instead of `foo(a) too?}
-
-% Introduce the flaw that destroys our hope that syscall wrappers will ever be
-% useful
-Unfortunately, system call wrappers suffer from a design flaw. They execute
-before system calls. After the filter reads the arguments and validates them,
-the system call reads them a second time. If an argument is passed in-memory, a
-malicious user can concurrently in-between these two reads. Such an attack can
-lead to an execution of the system call with the forbidden arguments. This is
-called a \emph{time-of-check to time-of-use} attack (TOCTTOU). It is a
-consequence of a \emph{double-fetch} from the user-space.
-
-% \pra{It might make sense to cite any studies if possible about prevalence of these bugs
-% in the kernel or how hard it is to eliminate them to motivate your problem statement further.}
-
-% A short introduction to the double-fetch bugs
+To improve security systems are partitioned into an \emph{untrusted} and a
+\emph{trusted} zones by a \emph{trust boundary}. All data that crosses the trust
+boundary from the untrusted zone must be verified.
 Double-fetches\cite{serna08doublefetch, twizsgrakky07ring0, wilhelm2016xenpwn,
 wang2018survey} occur when a higher-privileged code (e.g., the kernel) reads the
 same data twice from the lower-privileged space (e.g., user-space). In-between
 the two reads, the data can be changed concurrently. This makes double-fetches a
 type of a \emph{race condition} between the two threads of different privileges.
-TOCTTOU occurs when the first read is used in a check, while the second one is
-used for processing.
-%\pra{When? Clarify change between the double-fetch.}.
-%\mat{We call it user-space, not userland.}
+\emph{Time-of-check to time-of-use (TOCTTOU)} occurs when the first read is used
+in a check, while the second one is used for processing. Many double-fetch bugs
+have been found in different kernels and hypervisors\cite{cve201812633,
+cve202012652, cve20131332, cve201920610, cve20158550, cve201610439,
+cve201610435, cve201610433, cve20195519, cve20168438}. Considering that
+double-fetches frequently appear in drivers, legacy systems with binary drivers
+currently have no solution for them. Furthermore, Watson\cite{watson2007} blames
+an unfixable TOCTTOU bug as a reason why \emph{system call wrappers} aren't
+secure. A system that mitigates double-fetches in system calls is needed to
+protect the kernel even when the bugs cannot be fixed.
 
-%\mat{Make problems explicit and enumerate them.}
-\mat{This needs to be earlier.}
 
 % Define our goal
 A system that mitigates double-fetches needs to:
@@ -269,94 +164,92 @@ A system that mitigates double-fetches needs to:
   \label{fig:tocttou}
 \end{figure}
 
-% \pra{Connect this para to the first point you make before for a smoother transition.}
-
 % Cover the first point
-To prevent the change of the accessed memory it is enough to prevent writes to
-those location. Considering that the Linux kernel uses a well defined interface
-for reading from the user-space (\texttt{copy\_from\_user}), it can be extended
-to mark the memory page with the data being read. If those pages are marked as
-read-only for the duration of the call, double-fetches are \emph{completely
-eliminated}. Even double-fetches exits, both fetches will always read the same
-value.
-\mat{You convolute problem and solution. Talk about the problem first, then
-suggest a solution. copy from user smells a lot like implementation so you may
-hint at it but don't get too deep}
+Double-fetch bugs occur when an adversary invokes a system call with arguments
+stored in memory. The kernel will read the arguments the first time and perform
+corresponding checks. If the timing is perfect, the adversary can use the
+additional thread under their control to change the arguments, right after the
+necessary checks have been finished. In case of the double-fetch bug, the kernel
+will read in the values again and presume that they haven't changed.
 
-% \nb{Make clearer that you are talking about the new defense mechanism and not
-% the actual state of things.}
+The main issue is that the adversary was able to change values in the memory
+while the system call was still executing. \sysname fixes double-fetch bugs by
+preventing the adversary from writing to the arguments, until the end of the
+system call. This is accomplished by extending the API for reading from user
+space to mark the pages containing arguments in the \emph{system page table} as
+\emph{read-only}. All of the writes to those pages will trigger a \emph{page-fault}
+and execute a \emph{page-fault handler}. In the handler, they will wait for all
+the system calls to finish, and continue execution. \sysname thus prevents the
+changes to the system call arguments.
 
 % Cover the second point. Mention the calls for which it makes no sense to protect
-Writes to the marked pages are handled depending on where they come from. Writes
-from the kernel go through the well defined interface (\texttt{copy\_to\_user}).
-They are saved and executed at the end of the call. This guarantees that all of
-the writes from the system call are performed and that the system call executes
-correctly. However, a small subset of system-calls (e.g. \texttt{pollfd},
-\texttt{futex}) depend on the writes from user-space or double-fetches for the
-correct behavior. TikTok must be disabled for such calls.
+Enabling writes to the marked pages from the kernel would enable the adversary
+to abuse system calls to write and change the arguments. Prevention of writes
+from the kernel is also necessary to stop the arguments from being changed.
+
+Unfortunately, some system calls both read from and write into the same memory.
+Such calls would first mark a page as read-only, and them fault and wait for
+themselves (\emph{deadlock}) when they try to write. To accomodate such calls,
+we extend the API for writing to user space to save and defer the writes into
+the marked pages until the end of the call. At that time, they can be either
+successfully performed, or safely wait for other system calls to also end and
+unmark the pages.
+
+By introducing these changes to the API for reading from and writing into userspace,
+system calls turn into transactions. They have a view of the memory frozen in time
+when each memory location has been read for the first time, while all the writes
+are executed together (commited) at the end of the call.
+
+A small subset of system-calls (e.g. \texttt{pollfd}, \texttt{futex}) depend on
+the writes from user-space or double-fetches for the correct behavior. Also,
+system calls that read memory and potentially take a long time to execute will
+keep those pages marked during their execution. \sysname must be disabled for
+such calls and they need to be manually inspected for double-fetches.
+
+By turning system calls into transactions and ignoring certain calls, \sysname
+guarantees the correct execution of the system with the protections enabled.
 
 % Cover the third point
 Writes from the user-space will trigger a \emph{page-fault handler} where they
-will wait for the unmarking. After the page has been unmarked, the write
-instruction will be retried. Threads trying to change arguments still execute
-correctly -- they are just delayed.
-% \pra{You never talk again about the last two design requirements for a
-% double-fetch prevention system. Mention that this mitigation methodology still
-% allows for normal executions.}
-
-
-%\pra{Before stating the contributions, insert a couple of paras detailing how you
-%address the problem and then introducing your framework. Then you should give a peek
-%into the results of your framework evaluation.}
+will wait for the unmarking. All the offending threads will therefore be stopped.
+After all the system calls exit, the threads waiting for them to free arguments
+will continue the execution by repeating the write. All of them will execute
+correctly -- after a short delay.
 
 % Introduce TikTok
-\mat{The - is odd. Use the triple---to introduce an emdash breaking two
-clauses.}
-\mat{You may want to bring up transactions?}
-We present \emph{TikTok} - a memory marking extension to the Linux kernel. TikTok
+We present \sysname --- a memory marking extension to the Linux kernel. \sysname
 provides system-calls with a checkpointed view of the memory at the time they
-have been read the first time. This mitigates not only the double-fetch bugs
-which can be fixed, but also the bugs which are there by design (e.g., system-call
-wrappers). TikTok works on modern Linux distributions (Ubuntu Server 18.04 LTS)
-and doesn't require any modifications to user programs.
-\mat{You need to include more information about the two different types of bugs.
-Each needs a paragraph and how TikTok prevents them.}
+have been read the first time. \sysname also groups all the writes in a system
+call into a transaction which is executed at its end. By mitigating
+double-fetches, \sysname provides protection even against the double-fetch bugs
+even in legacy drivers, which are not maintained any more. Furthermore, \sysname
+will render previously unavoidable double-fetches (such as a TOCTTOU in
+system-call wrappers) completely benign and safe to use. \sysname works on modern
+Linux distributions (Ubuntu Server 18.04 LTS) and doesn't require any
+modifications to user programs. It can be implemented in other kernels
+and architectures which use page-tables and a well defined API to communicate
+with the user space.
 
 % Sneak-peek into the results
-Benchmarking TikTok showed that multithreaded programs with lots of marking
-system-calls, such as Apache, show a 10-15\% drop in performance with TikTok
-protecting almost all system-calls. Applications that few protected system calls
-show a more modest performance drop (4.5\%), with TikTok having almost no effect
-on CPU-intensive programs.
+Benchmarking \sysname showed that multithreaded programs with lots of marking
+system-calls, such as Apache and NginX, show an 18\% drop in performance with
+TikTok protecting almost all the system-calls. By reducing the number of
+protected calls, the overhead drops to 2-4\%. CPU-bound programs showed almost
+no performance drop when using \sysname, even when they comprised multiple
+threads and message passing (OMP, MPI).
 \mat{Create marcos for overhead.}
 
-% \pra{Create another para where you give an overview of the results of your evaluation.
-% Overhead etc. The actual numbers can be filled in later.}
 
 % Three new things in this paper
-The main contributions of this paper are
-% \pra{Instead of ordering as framework, technique, technique
-% order it as technique, technique, framework as a PoC of the above techniques}:
-\mat{Think about high level goals and how you achieve them. This list is too
-detail-oriented. Bring up the high level contributions!}
+The main contributions of this paper are:
+
+
 \begin{itemize}
-\item A technique to postpone the writes to marked pages from user-space
-\item A technique to defer the writes from the kernel to the marked pages,
-      while continuing the execution of the system call
-\item TikTok - mitigation for the time-of-check to time-of-use attacks on system 
+\item A technique how to temporarily prevent the change of memory by safely
+      postponing both userspace and kernel threads
+\item \sysname --- mitigation for the double-fetch and TOCTTOU attacks on system
       call arguments in the Linux kernel
 \end{itemize}
-
-
-
-%\pra{This seems out of place. Each section would have a lead introducing its purpose
-%so this is redundant information.}
-%\mat{Each systems paper has the same outline. This paragraph can be removed without loss of information.}
-%The rest of the paper is organized as follows: \Cref{sec:background} explains 
-%inter-process communication, paging, double-fetch bugs, and the related
-%background. \Cref{sec:design} describes how \emph{TikTok} works in theory, while
-%\cref{sec:implementation} elaborates on the x86-64 implementation. Related work
-%is discussed in \cref{sec:relatedwork}.
 
 % Cover the theory needed to understand how and why TikTok works
 % 1) IPC - We need this to argue why the deadlocks are almost impossible
