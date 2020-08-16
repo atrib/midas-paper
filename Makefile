@@ -1,7 +1,7 @@
 all: tiktok
 
 clean:
-	rm -f *.aux *.bbl *.bib *.blg *.fdb_latexmk *.fls *.log *.out *.pdf *.synctex.gz *.dvi
+	rm -f *.aux *.bbl *.blg *.fdb_latexmk *.fls *.log *.out *.pdf *.synctex.gz *.dvi
 
 .PHONY: all clean
 

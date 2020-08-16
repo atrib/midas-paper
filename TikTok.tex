@@ -62,12 +62,14 @@
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{cleveref}
+\usepackage{hyperref}
 
 % Comment macros
 \newcommand{\pra}[1]{\textcolor{blue}{\textbf{PS:} #1}}
 \newcommand{\nb}[1]{\textcolor{green}{\textbf{NB}: #1}}
 \newcommand{\mat}[1]{\textcolor{red}{\textbf{Mat:} #1}}
-
+\newcommand{\evalfull}[1]{20}
+\newcommand{\evalnocalls}[1]{3}
 \newcommand{\sysname}{TikTok}
 
 
@@ -138,14 +140,14 @@ the two reads, the data can be changed concurrently. This makes double-fetches a
 type of a \emph{race condition} between the two threads of different privileges.
 \emph{Time-of-check to time-of-use (TOCTTOU)} occurs when the first read is used
 in a check, while the second one is used for processing. Many double-fetch bugs
-have been found in different kernels and hypervisors\cite{cve201812633,
+have been found in different kernels and hypervisors~\cite{cve201812633,
 cve202012652, cve20131332, cve201920610, cve20158550, cve201610439,
 cve201610435, cve201610433, cve20195519, cve20168438}. Considering that
 double-fetches frequently appear in drivers, legacy systems with binary drivers
-currently have no solution for them. Furthermore, Watson\cite{watson2007} blames
+currently have no solution for them. Furthermore, Watson~\cite{watson2007} blames
 an unfixable TOCTTOU bug as a reason why \emph{system call wrappers} aren't
 secure. A system that mitigates double-fetches in system calls is needed to
-protect the kernel even when the bugs cannot be fixed.
+protect the kernel in case the bugs cannot be fixed.
 
 
 % Define our goal
@@ -260,56 +262,40 @@ The main contributions of this paper are:
 % 6) Double-fetches - Provide a high-level overview
 \section{Background}
 \label{sec:background}
-%\mat{What kind of message do you want to send? Why do we need this background information? Guide the reader in understanding what is necessary and where the problems are.}
 
-% \nb{Section feedback: You introduce a lot of interesting notion. It is however
-% not always clear why you need it. It might be interesting to add a bit more
-% motivation for each section so that it feels less like a OS book.}
-%\pra{Insert lead para giving overview of info presented here as you did in the intro.}
-%\pra{In its current state this section looks like an information dump. For each subsection
-%in bg give context to the user as to why its relevant for TikTok.}
-
-% \nb{So TikTok affects shared memory,
-% message passing uses shared memory and is therefore affected. What is special
-% about message passing versus other shared memory usage?}.
-
-\mat{This section misses an introduction paragraph. What kind of background do
-you want to tell us. Why is it important? Why should we care?}
+\sysname relies on multiple Linux subsystems to provide its protection. It uses
+\emph{page-tables} to mark \emph{shared memory} storing the system call
+arguments as \emph{read-only}. Different system calls have different
+relationships with shared memory, and interact with \sysname differently in
+practice. This section provides the background information necessary to reason
+why \sysname protects the arguments from change, while enabling the threads to
+execute correctly.
 
 % I want to cover why this background is needed. IPC is the most problematic
 % because it is used to justify the abscence of deadlocks
-\mat{In my group we're using \autoref{subsec:ipc}. Also, watch out for the - to
---- again.}
-\Cref{subsec:ipc} introduces two different ways of communication between
-processes - \emph{shared memory} and \emph{message-passing}. TikTok affects both
+\autoref{subsec:ipc} introduces two different ways of communication between
+processes - \emph{shared memory} and \emph{message-passing}. \sysname affects both
 of these methods because the arguments of the message-passing system calls are
-stored in (potentially shared) memory. If TikTok marks message-passing
+stored in (potentially shared) memory. If \sysname marks message-passing
 system-call arguments, this introduces additional synchronization points (waits)
 when writing to them. These new waits can interact with already present
-synchronization primitives to cause deadlocks. In \cref{sec:deadlocks} it is
-explained why this is exceedingly rare.
+synchronization primitives to cause deadlocks. In \autoref{sec:deadlocks} it is
+explained why they do not appear in practice.
 
-\Cref{subsec:vm} covers how memory is organized on modern computers and how
-permissions are implemented. The virtual memory on x86 processors is described
-in \cref{subsec:x86pgtables}, followed by the handling of page faults in
-\cref{subsec:pagefaults}. These sections discuss the memory protection
-mechanisms used by TikTok.
+\autoref{subsec:vm} covers the organization of \emph{virtual memory},
+\emph{page-tables} and the interface the Linux kernel uses to access the user
+space memory. This section is essential to understanding the implementation of
+\sysname.
 
-The API that Linux uses to access the user-space memory and which TikTok extends is
-described in \cref{subsec:copy}. \Cref{subsec:doublefetch} details the
-double-fetch bugs TikTok is mitigating.
+\autoref{subsec:doublefetch} details the \emph{double-fetch} bug that \sysname
+is mitigating. It explains the source and different types of double-fetch bugs.
+
 
 \subsection{Interprocess Communication}
 \label{subsec:ipc}
 
 The two main types of communication between processes are \emph{shared memory} 
-and \emph{message passing}\cite{silberschatz2018operating}.
-\mat{When you cite, make sure to have a space between last word and citation:
-foo~\cite{bla}.}
-
-\mat{These paragraphs are a little too basic and can be summarized in a sentence
-or two. Either you explain why they are important in your context or you drop
-them.}
+and \emph{message passing}~\cite{silberschatz2018operating}.
 
 % Intro to shared-memory
 Shared memory relies on two processes having a section of memory that both can 
@@ -325,88 +311,20 @@ unnecessary copying of messages can occur instead of passing the same buffer to
 the receiver.
 
 % The state of the modern OSs and concurrent programs
-Modern operating systems support both of these approaches. The downsides are
-usually offset by adding the  bare minimum of the other approach (e.g., shared
-memory with semaphores, or message passing with shared buffers). Sending
-messages and writing to the shared memory at the same time between two processes
-is exceptionally rare.
+Modern operating systems support both of these approaches. \sysname interferes
+with message passing system calls by linking them to shared memory. Synchronous
+message passing calls will keep their arguments marked, until they end. This
+behavior introduces additional synchronization points and can be problematic if
+the threads also share memory.
 
-\subsection{Virtual Memory and Page Tables} \label{subsec:vm}
+\subsection{Linux Memory Subsystem} \label{subsec:vm}
 
-\mat{likely way too high level. this is all common knowledge, focus more on the
-kernel aspects that you may need.}
-
-% Introduce the basic terms we use to discuss memory in computers
-The operating system (OS) provides an illusion that every process is executing
-alone on the processor. To accomplish this, the OS needs to restore the program
-state on the context switch between two processes (e.g., CPU registers) and to
-prevent processes from accessing each other's memory. Memory is protected by
-\emph{virtualization}. Processes use \emph{virtual addresses} that get mapped to
-the \emph{physical addresses}. When the OS moves data to a different physical
-address, the virtual address referring to the data remains the same. Trying to
-read outside the designated virtual memory ranges is forbidden, isolating every
-process to its own \emph{virtual memory space}.
-
-% Cover the segmented memory model to show the reader later why today the paged
-% memory is being used
-Virtual memory can be implemented by storing different processes' data at 
-different offsets in physical memory and limiting the access to corresponding 
-memory chunks. Each process's memory chunk is called a segment and the 
-implementation is called \emph{segmented virtual memory}. The translation is 
-accomplished by adding an offset to the virtual address. Considering that 
-segments need to be continuous, the free physical memory can be fragmented
-such that the OS cannot find a part large enough to store a new process.
-
-\begin{figure}
-
-  \begin{subfigure}[]{.45\linewidth}
-    \centering
-    \includegraphics[width=.5\linewidth]{img/segmented.pdf}
-    \caption{Segmented}
-  \end{subfigure}
-  \hfill
-  \begin{subfigure}[]{.45\linewidth}
-    \centering
-    \includegraphics[width=.5\linewidth]{img/paged.pdf}
-    \caption{Paged}
-  \end{subfigure}
-
-  \caption{Two virtual memory spaces mapped to physical memory using segmented
-  and paged approaches}
-\end{figure}
 
 % Paged VM and the introduction to permissions we will later use in TikTok
-\emph{Paged virtual memory} is more flexible. The physical memory is partitioned
-into fixed-size pages (usually 4 kB). A page in the virtual memory space gets
-mapped to the corresponding page in the physical memory. The mapping function is
-defined for each process by a \emph{page-table}. Page-tables store the reference
-to the mapped physical memory (\emph{page frame}). They also keep the access
-permissions for each page (\emph{read}, \emph{write}, \emph{execute},
-\emph{user}, \emph{superuser}). In case of low memory, rarely accessed pages can
-be moved to the disk, and replaced by immediately needed pages. This process is
-called \emph{swapping}. Similarly, when processing a file, pages do not need to
-be loaded immediately, but only on the first access (\emph{on-demand paging}).
-The \emph{present} bit is added to differentiate between present and absent
-pages.
+Linux uses \emph{Paged virtual memory}. Programs use \emph{virtual addresses}
+which map to \emph{physical addresses} in RAM. The mapping function is defined
+for each process by a multi-level \emph{page-table}.
 
-% INtroduce page-tables and the TLB
-Virtual memory spaces are quite large ($2^{64}$ bytes on a 64-bit processor). A
-table containing all one-to-one mappings would be impossibly large to store.
-Page tables are therefore stored as trees with only the allocated memory being
-present (\cref{fig:pagetable}). However, instead of just reading the
-corresponding physical address on memory access, the processor now needs to
-perform a tree traversal. Different bits in a virtual address encode the path
-the processor needs to take to obtain the page frame number (e.g., the first
-eight bits tell CPU which entry on the first level it needs to dereference).
-Traversal needs to be fast. It is implemented in hardware by the \emph{memory
-management unit} (MMU). Reading the page table from memory is slow, so a small
-cache --- \emph{translation-lookaside buffer} (TLB) --- is added to the MMU to
-store frequently accessed page entries. On modern processors, a TLB consists of
-several levels, and can even be backed by another MMU cache. 
-% \nb{Good paragraph!}
-
-\subsection{x86-64 Page Tables}
-\label{subsec:x86pgtables}
 \begin{figure}[]
   \centering
   \includegraphics[width = .35 \textwidth]{img/pagetable.pdf}
@@ -414,8 +332,7 @@ several levels, and can even be backed by another MMU cache.
   \label{fig:pagetable}
 \end{figure}
 x86-64 architecture officially supports paged virtual memory model with a 5 
-level page table (\cref{fig:pagetable}):
-%\nb{indentation looks a bit weird}
+level page table (\autoref{fig:pagetable}):
 \begin{description}
     \item[PGD] Page Global Directory
     \item[P4D] Page Fourth-level Directory
@@ -440,37 +357,23 @@ includes the following information:
     \item[\textbf{SW1-SW4}] Four bits free for the OS to use
 \end{description}
 
-\subsection{Page-Faults}
-\label{subsec:pagefaults}
-
-\mat{fold into previous, again too high level}
+Considering that the page-table traversal is frequent, it is implemented in
+hardware by the \emph{memory management unit} (MMU). Reading the page-table from
+memory is slow, so a small cache --- \emph{translation-lookaside buffer} (TLB)
+--- is added to the MMU to store frequently accessed page entries. On modern
+processors, a TLB consists of several levels, and can even be backed by another
+MMU cache. Kernel developers can \emph{flush} (clear) certain TLB ranges in
+software.
 
 % Explain what a page fault is, as well as COW (mentioned later as an optimizaiton)
 On an invalid access (e.g., wrong permissions, page not present) the MMU will
-trigger a page-fault. The fault is a synchronous interrupt that executes in the
-context of the faulting (accessing) thread. The page-fault handler loads an
-absent page from the disk. In the case of a write to a temporarily shared page,
-it creates an independent, separate copy of the page (\emph{copy-on-write}). On
-permission violation, the page-fault handler kills the thread. After the fault
-finishes executing, the faulting instruction is re-executed. 
+trigger a page-fault. The page-fault handler executes in the kernel context of
+the faulting thread and performs the appropriate action (e.g. load a page, kill
+a thread). With the advent of cloud computing, \emph{user-space page-fault
+handling} has been added to the Linux kernel. \sysname relies on the page-fault
+handler for protection, so this feature must be disabled.
 
-% Later in the paper we require the administrator to disable user-space
-% page-fault handling
-With the advent of cloud computing, \emph{user-space page-fault handling} has
-been added to the Linux kernel. Users can define their routines to load
-swapped-out data. This is particularly useful on computer farms when migrating
-virtual machines between physical nodes. One only needs to migrate the code that
-is executing. Accesses to the unmigrated memory will be passed to the user-space
-page-fault handler. It will then fetch them over the network and continue the
-execution.
-
-\subsection{Anonymous and File-Backed Pages}
-\label{subsec:anofilepages}
-
-\mat{or?}
-\mat{too high level. summarize the last 3 subsections into one.}
-
-Memory in Linux can be either \emph{file-backed} or? \emph{anonymous}.
+Memory in Linux can be either \emph{file-backed} or \emph{anonymous}.
 File-backed pages have a map to the corresponding file. Anonymous pages do not
 have a backing file (e.g., stack and heap).
 
@@ -482,53 +385,25 @@ have access. Shared memory can be accessed by multiple processes.
 % This is the most important paragraph and a basis for one of the attacks. The
 % previous two paragraphs are just the introduction
 Unlike private memory and shared anonymous memory, shared file-backed memory can
-be mapped and unmapped at will. Its content is backed by a file, so the data is 
-preserved between (un)mappings.
-
-% \begin{table}[]
-%   \begin{tabular}{|l|l|l|}
-%   \hline
-%           & Anonymous         & File-backed                           \\ \hline
-%     Private & /                  & Copy-on-write                         \\ \hline
-%     Shared  & Inherited by fork & Can be (un)mapped at any time         \\ \hline
-%   \end{tabular}
-% \nb{better sign than better sign than /}
-%   \caption{Properties of the different types of memory in Linux}
-%   \label{tab:memory}
-% \end{table}
-
-
+be \emph{mapped and unmapped at will}. Its content is backed by a file, so the
+data is \emph{preserved} between (un)mappings.
 
 \subsection{Copy-from-User and Copy-to-User}
 \label{subsec:copy}
 
-\mat{This section starts very differently from what I expected. Talk about the
-copy from/to part first, not swapping! Why would you talk about swapping?}
-\mat{First paragraph should ease into the section and connect to the details
-that you want to get across.}
+Linux user a well-defined interface to communicate with the user-space:
+\texttt{(\_\_)copy\_(from/to)\_user}, \texttt{(\_\_)(get/put)\_user},
+\texttt{user\_str(cpy/len)}. BSD also provides a similar interface using
+\texttt{copy\_in} and \texttt{copy\_out} functions.
 
-% Explain the invariants for the addresses in Linux
-Linux uses swapping only for user memory. When executing in the kernel context,
-kernel memory is mapped and present. A page fault on kernel memory access is
-therefore considered fatal. However, the kernel needs to access potentially
-paged-out user memory. The user memory is also limited to the lower half of the
-virtual memory space. On every access to the user-pointer, the kernel needs to
-verify this constraint.
-% \nb{just to make sure: constraint = lower half of memoryspace?} Yes
+The abstraction is needed due to different handling of page-faults in user-space
+and in the kernel. User-space memory can be \emph{paged-out} to the disk, and
+trigger a page-fault on access. However, kernel memory is never paged-out and
+should not cause a page-fault. All the user-space pointers in the kernel are
+processed by this limited set of functions that know how to handle a fault.
 
-% Move the checks for variants into a separate API
-Linux provides functions and macros for user-memory access from the kernel to 
-enforce the checks. A page-fault generated by them is treated as a fault in the
-user process which had invoked the executing system call.
-
-%\pra{This looks very space inefficient formatting.
-%Tabular environment or just in plaintex would conserve more space.}:
-
-% List the API functions
-The interface for communication with user-space: \texttt{(\_\_)copy\_(from/to)\_user},
-\texttt{(\_\_)(get/put)\_user}, \texttt{user\_str(cpy/len)}.
-BSD also provides a similar interface using \texttt{copy\_in} and 
-\texttt{copy\_out} functions.
+\sysname extends this interface to perform additional checks and bookkeeping of
+marked pages.
 
 \subsection{Double Fetch Bugs}
 \label{subsec:doublefetch}
@@ -542,82 +417,108 @@ BSD also provides a similar interface using \texttt{copy\_in} and
   \label{fig:doublefetch}
 \end{figure}
 
+\begin{lstlisting}[language=C, caption=Abridged CVE-2018-12633 Double Fetch in Linux,
+                  label=code:cvedoublefetch,  breaklines=true
+                  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+                  numbers=left,basicstyle=\scriptsize]
+static long vbg_misc_device_ioctl(
+        struct file *filp,
+        unsigned int req,
+        unsigned long arg)
+{
+  size_t size;
+  struct vbg_ioctl_hdr hdr;
+  void *buf;
+
+  if (copy_from_user(&hdr, (void *)arg, sizeof(hdr))) 
+    return -EFAULT;
+  
+  if (hdr.version != VBG_IOCTL_HDR_VERSION) 
+    return -EINVAL;
+   
+  if (hdr.size_in < sizeof(hdr) || (hdr.size_out && hdr.size_out < sizeof(hdr)))
+    return -EINVAL;
+  
+  ...
+  
+  if (copy_from_user(buf, (void *)arg, hdr.size_in)) {
+		ret = -EFAULT;
+		goto out;
+  }
+
+  ...
+
+  ret = vbg_core_ioctl(session, req, buf);
+
+  ...
+}
+\end{lstlisting}
 % The idea behind double-fetch bugs
-\mat{Code example?}
 \emph{Double-fetch} bugs occur when a privileged environment (such as the
 kernel) reads untrusted memory two or more times and the read values aren't
-identical. (\cref{fig:doublefetch}) In between those two reads, memory could
+identical. (\autoref{fig:doublefetch}) In between those two reads, memory could
 have been changed by an unprivileged adversary. Considering that this bug relies
 on carefully timed accesses for two different threads, it is a variant of a race
 condition. The situation where the first fetch validates the value of the
 fetched variable, but the computation is only performed on the second fetch, is
 called a \emph{time-of-check to time-of-use} (TOCTTOU) bug. TOCTTOU bugs have
 been widely studied in file systems, where the API makes it possible to swap the
-file after validating the access rights \cite{payer2012protecting,
+file after validating the access rights~\cite{payer2012protecting,
 pu2006methodical, wei2010modeling, tsafrir2008portably}.
+
+\autoref{code:cvedoublefetch} displays the double-fetch bug in the Virtual Box
+drivers for the Linux kernel~\cite{cve201812633}. The first fetch occurs on line
+10. The program performs gets a header and checks the arguments (lines 13 -- 17)
+and fetches the whole argument into the variable \texttt{buf} (line 21). The new
+value is then processed (line 27).
+
+Note that the header is fetched twice --- on lines 10 and 21. This gives the
+opportunity for the attacker to change the values in the header. Considering
+that the header isn't verified the second time it is read, the attacker can
+leave the kernel in an inconsistent state. The fix for this bug
+(\autoref{cvedoublefetchfix}) doesn't fetch the header the second time. It
+copies the header into \texttt{buf}, while the second fetch copies everything
+except the header.
+
+\begin{lstlisting}[language=C, caption=CVE-2018-12633 Double Fetch Fix,
+  label=code:cvedoublefetchfix,  breaklines=true
+  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+  numbers=left,basicstyle=\scriptsize, firstnumber=18]
+...
+
+  *((struct vbg_ioctl_hdr *)buf) = hdr;
+  if (copy_from_user(buf + sizeof(hdr), (void *)arg + sizeof(hdr), hdr.size_in - sizeof(hdr))) {
+    ret = -EFAULT;
+    goto out;
+  }
+
+...
+
+\end{lstlisting}
 
 % Double-fetches are actually so big that people have actualy spent time
 % to study them
 Wang et al. explain in \cite{wang2018survey} that double-fetches appear not only
 in kernels, but wherever there is a trust boundary to cross (e.g., kernel ---
-hypervisor\cite{wilhelm2016xenpwn} and hardware --- kernel
-boundaries\cite{lu2018untrusted}). Double-fetches have been responsible for many
-vulnerabilities in different kernels\cite{jurczyk2013bochspwn, wang2018survey}.
-\mat{Again, cites need a non-breaking space before them:~\cite{foo}}
+hypervisor~\cite{wilhelm2016xenpwn} and hardware --- kernel
+boundaries~\cite{lu2018untrusted}). Double-fetches have been responsible for many
+vulnerabilities in different kernels~\cite{jurczyk2013bochspwn, wang2018survey}.
 
+
+\section{Threat Model}
+\label{sec:threatmodel}
 % Explain generally how TikTok works. We mention all the problems that
 % TikTok needs to mitigate: writes from user-space, writes from the kernel, safely
 % stopping the writes, preventing bypass using file-backed pages, system calls
 % that are ignored. The most important part is showing the conditions for 
 % introducing deadlocks
+The adversary has access to a user account on a target machine. They can compile
+and execute arbitrary code, including the system calls. Some of the system calls
+have double-fetch vulnerabilities, and the adversary wants to exploit them to
+obtain root access.
+
 \section{Design}
 \label{sec:design}
-
-\subsection{The Security Model}
-\label{subsec:secmodel}
-%\nb{Wouldn't it make sense to introduce the security model before the attacks?}
-\mat{Threat model? and add it as a section before.}
-
-\mat{Again, I expect something very different from a threat model. Focus on what
-is needed and what the attacker can do.}
-
-% Define the power of the adiministrator
-The administrator has set up \emph{Discretionary Access Control} (\emph{DAC})
-that can prevent the adversary from accessing certain files. They also control
-which file-systems are mounted on the machine and have disabled user-space
-page-fault handling. 
-\mat{Why files?}
-
-% Explain why they need every piece of the jigsaw
-TikTok relies on the page-fault handler to protect the system. User-space
-page-fault handling would enable the malicious user to bypass it completely.
-Some files, or even entire file-systems, may change in real-time (e.g. devices
-or \texttt{/proc}) bypassing TikTok. DAC or dismounting can be used to prevent
-the malicious user from accessing them.
-% \nb{It is not really clear to me what these restrictions mean. A few sentences
-% explaining what are the consequences of disabling user-space page-fault handling
-% might help for example.}
-
-% How does the adversary win the game?
-The malicious user has access to a user account on a target machine. They can
-execute arbitrary code (including system-calls) and want to obtain root access
-by triggering a TOCTTOU bug in the kernel.
-
-%\pra{This section does not really look like a "high-level overview" but more like
-%the detailed design itself. :) I would suggest having a separate overview subsection that summarizes
-%the main design points.}
-%\mat{Style: don't write 'in this section'. It's obvious that it's in this section, so you're just wasting space.}
-
-%\pra{A general comment on the design. Currently, it reads more like a tutorial about
-%a cool framework rather than an actual design. All the necessary information required to
-%create a design section is here, it just needs to presented better and in a more structured
-%way.:) 
-%As a suggestion, I think in this section you should first enumerate all possible attack vectors
-%for an adversary trying to mount a toctou attack and then present your design policies(3.2, 3.3, 3.5 and 3.6) and
-%how they address those attack vectors. IMO the deadlock issue (3.4 and 3.7) is something that 
-%needs to be discussed separately since it is not a part of your actual design but moreso
-%a consequence of your design.}
-%\mat{Agreed with Prashast}
 
 \subsection{Overview}
 \label{subsec:designoverview}
@@ -625,24 +526,91 @@ by triggering a TOCTTOU bug in the kernel.
 
 % Give the bare-bones intro to the attacks
 TikTok protects the pages storing the system-call arguments by marking them
-read-only. The capabilities of the attacker trying to bypass these measures
-are described in \cref{subsec:secmodel}.
-\mat{Don't use passive.}
+read-only. \autoref{sec:threatmodel} describes the capabilities of the attacker.
 
 % \nb{I would introduce a bit more which attack is about, how they can take place,
 % and clearly define what is correct behaviour.}
 
 % List the attacks and explain every one in detail
-TikTok needs to protect the arguments from different types of attacks:
+\sysname needs to protect the arguments from different types of attacks and ways of
+bypassing the protections. It must satisfy the following requirements:
 
 \begin{enumerate}
-  \item \label{first} Writes from user-space
-  \item \label{second} Writes from the kernel
-  \item \label{third} Bypassing TikTok by mapping file-backed pages as writable
-  \item \label{fourth} Bypassing TikTok by using a write call
-  \item \label{fifth} Bypassing TikTok by mapping device-backed files
+  \item \label{first} Stop writes from user-space
+  \item \label{second} Stop writes from the kernel
+  \item \label{third} Prevent bypassing \sysname by mapping file-backed pages as writable
+  \item \label{fourth} Prevent bypassing \sysname by using a write call
+  \item \label{fifth} Prevent bypassing \sysname by mapping device-backed files
+  \item \label{sixth} Let system calls execute correctly
 \end{enumerate}
-\mat{make these high level design requirements}
+
+\subsection{Simplistic Design 1}
+\label{simplistic1}
+The simplest way to implement memory marking protection against writes from the
+user-space is to mark pages as accessible only from the kernel. All modern 
+architectures have support for the \emph{superuser} flag in the page-table
+entries.
+
+User-space writes to marked pages trigger a page-fault, where they wait for the
+system call to end. Afterward, they continue to execute normally.
+
+Some system calls (e.g., \texttt{rt\_sigaction}) need to write back to user
+space memory to update the arguments. System calls execute with superuser
+privileges, so this method lets them write successfully.
+
+
+Unfortunately, even though this system seems to satisfy requirements \autoref{first} and 
+\autoref{sixth}, it fails at the requirement \autoref{second}. The adversary can
+easily bypass the protection by executing a \texttt{read} system call while the
+pages are marked by another call. \texttt{read} takes a pointer to the destination
+buffer as an argument, and executes with the superuser privileges. If the attacker
+passes a marked page as an argument to \texttt{read} they will bypass the protection
+against writes.
+
+\subsection{Simplistic Design 2}
+\label{simplistic2}
+An alternative to using the superuser flag in the page-table entries to implement
+protection is to use the read/write flag. By marking a page read-only we prevent
+the bypass from \autoref{simplistic1}.
+
+Unfortunately, marked pages are also unwritable for the system call marking them.
+This makes \emph{self-writing} system calls \emph{deadlock} on themselves. The call
+will mark a page when reading an argument from it, and then trigger a page-fault
+when trying to write to it. In the page-fault handler it will wait for the page to 
+get unlocked, which will never happen.
+
+\subsection{Complex Design 1}
+\label{complex1}
+To enable self-writing, without compromising the protection against kernel
+writes, \sysname needs to instrument both read and writes. Every \emph{virtual
+memory space} structure is extended with the information on the currently marked
+pages. When a system call marks a page, it is added to the interval-tree
+containing marked intervals. At the end of the call, the pages are unmarked and
+removed from the tree.
+
+Before a write is performed, the system call checks if it is already marked.
+Writes to marked pages are saved, and executed chronologically at the end of
+the call, after unmarking the pages. If another thread marks the pages again,
+the writes will wait in the page-fault handler to proceed.
+
+Unfortunately, this design suffers from a serious flaw --- it deadlocks. The
+access to the page-table and the interval-tree is protected by two separate
+locks. When marking a page, the page-table lock must be taken first to locate
+the page-table entries that need to be updated. Then, for every page-table
+entry, the corresponding interval-tree lock is taken to add the marked address
+ranges. When writing to user space, the interval-tree lock is taken first. If we
+encounter a swapped-out page, the write will trigger a page-fault. In the
+page-fault handler it will take a page-table lock. If two threads take multiple
+locks in the different order, they can deadlock.
+
+\subsection{Complex Design 2}
+\label{complex2}
+To prevent a deadlock one of the threads needs to back-off and try to repeat the
+operation later. In \sysname the first thread to notice a deadlock backs off, and
+releases its locks. After successfully reaquiring them, if the interval-tree has 
+changed, the interrupted operation is restarted under both locks.
+
+This system satisfies points 
 
 \emph{Writes from user-space} consist of a malicious user trying to directly
 write to the argument stored in memory, while the system-call is being executed
@@ -713,12 +681,7 @@ The protection against the attacks \ref{first} and \ref{second} are described in
   \label{fig:copyfromuser}
 \end{figure}
 
-%\pra{I think 3.2 and 3.3 can be merged together into something named along the
-%lines of "System Call Argument protection" subsection. The lead for this merged
-%section should use threat model as motivation to show that syscall arugments can
-%be manipulated from both user and kernel space by adversary. Then, you should
-%detail how TikTok handles them as explained below.}
-% \nb{I don't remember you introducing memory spaces} 
+
 \mat{Why distinguish between primary and secondary goals? All attacks are equal.
 Don't distinguish.}
 \mat{Start the discussion of the design from a higher level, lead by examples.}
