@@ -517,261 +517,203 @@ and execute arbitrary code, including the system calls. Some of the system calls
 have double-fetch vulnerabilities, and the adversary wants to exploit them to
 obtain root access.
 
-\section{Design}
-\label{sec:design}
+\section{TOCTTOU Attacks}
 
-\subsection{Overview}
-\label{subsec:designoverview}
-% \nb{The paragraphs in this section don't flow really well.}
-
-% Give the bare-bones intro to the attacks
-TikTok protects the pages storing the system-call arguments by marking them
-read-only. \autoref{sec:threatmodel} describes the capabilities of the attacker.
-
-% \nb{I would introduce a bit more which attack is about, how they can take place,
-% and clearly define what is correct behaviour.}
-
-% List the attacks and explain every one in detail
 \sysname needs to protect the arguments from different types of attacks and ways of
-bypassing the protections. It must satisfy the following requirements:
+bypassing the protections. The following attacks are possible:
 
 \begin{enumerate}
-  \item \label{first} Stop writes from user-space
-  \item \label{second} Stop writes from the kernel
-  \item \label{third} Prevent bypassing \sysname by mapping file-backed pages as writable
-  \item \label{fourth} Prevent bypassing \sysname by using a write call
-  \item \label{fifth} Prevent bypassing \sysname by mapping device-backed files
-  \item \label{sixth} Let system calls execute correctly
+  \item \label{first} Writes from user-space
+  \item \label{second} Writes from the kernel
+  \item \label{third} Remapping file-backed pages as writable
+  \item \label{fourth} Writing to file-backed pages using system calls
+  \item \label{fifth} The changing values of device-backed pages
 \end{enumerate}
 
-\subsection{Simplistic Design 1}
-\label{simplistic1}
-The simplest way to implement memory marking protection against writes from the
-user-space is to mark pages as accessible only from the kernel. All modern 
-architectures have support for the \emph{superuser} flag in the page-table
-entries.
+Watson~\cite{watson2007exploiting} in his analysis of CerbNG mentioned attacks
+\autoref{first}, \autoref{third} and \autoref{fourth}.
 
-User-space writes to marked pages trigger a page-fault, where they wait for the
-system call to end. Afterward, they continue to execute normally.
-
-Some system calls (e.g., \texttt{rt\_sigaction}) need to write back to user
-space memory to update the arguments. System calls execute with superuser
-privileges, so this method lets them write successfully.
-
-
-Unfortunately, even though this system seems to satisfy requirements \autoref{first} and 
-\autoref{sixth}, it fails at the requirement \autoref{second}. The adversary can
-easily bypass the protection by executing a \texttt{read} system call while the
-pages are marked by another call. \texttt{read} takes a pointer to the destination
-buffer as an argument, and executes with the superuser privileges. If the attacker
-passes a marked page as an argument to \texttt{read} they will bypass the protection
-against writes.
-
-\subsection{Simplistic Design 2}
-\label{simplistic2}
-An alternative to using the superuser flag in the page-table entries to implement
-protection is to use the read/write flag. By marking a page read-only we prevent
-the bypass from \autoref{simplistic1}.
-
-Unfortunately, marked pages are also unwritable for the system call marking them.
-This makes \emph{self-writing} system calls \emph{deadlock} on themselves. The call
-will mark a page when reading an argument from it, and then trigger a page-fault
-when trying to write to it. In the page-fault handler it will wait for the page to 
-get unlocked, which will never happen.
-
-\subsection{Complex Design 1}
-\label{complex1}
-To enable self-writing, without compromising the protection against kernel
-writes, \sysname needs to instrument both read and writes. Every \emph{virtual
-memory space} structure is extended with the information on the currently marked
-pages. When a system call marks a page, it is added to the interval-tree
-containing marked intervals. At the end of the call, the pages are unmarked and
-removed from the tree.
-
-Before a write is performed, the system call checks if it is already marked.
-Writes to marked pages are saved, and executed chronologically at the end of
-the call, after unmarking the pages. If another thread marks the pages again,
-the writes will wait in the page-fault handler to proceed.
-
-Unfortunately, this design suffers from a serious flaw --- it deadlocks. The
-access to the page-table and the interval-tree is protected by two separate
-locks. When marking a page, the page-table lock must be taken first to locate
-the page-table entries that need to be updated. Then, for every page-table
-entry, the corresponding interval-tree lock is taken to add the marked address
-ranges. When writing to user space, the interval-tree lock is taken first. If we
-encounter a swapped-out page, the write will trigger a page-fault. In the
-page-fault handler it will take a page-table lock. If two threads take multiple
-locks in the different order, they can deadlock.
-
-\subsection{Complex Design 2}
-\label{complex2}
-To prevent a deadlock one of the threads needs to back-off and try to repeat the
-operation later. In \sysname the first thread to notice a deadlock backs off, and
-releases its locks. After successfully reaquiring them, if the interval-tree has 
-changed, the interrupted operation is restarted under both locks.
-
-This system satisfies points 
+\subsection{User-Space Writes}
 
 \emph{Writes from user-space} consist of a malicious user trying to directly
 write to the argument stored in memory, while the system-call is being executed
-in another thread. The system-call should be unaffected, but the write should
-still be performed.
+in another thread. The protection should stop the write from being visible in
+the call, but the write should still execute eventually.
 
-\emph{Writes from the kernel} are indirectly triggered. The user performs a \texttt{read}
-system-call with the target address as the destination. The data is then written
-to this location by the \texttt{read} system-call with the kernel privileges.
+\subsection{Kernel Writes}
 
-\emph{Bypassing TikTok by mapping file-backed pages as writable} is accomplished
-by mapping marked pages in another process. The user stores the arguments on a
-file-backed page and maps the file as writable while the system call is executing.
-They are then free to write to the marked arguments.
-\mat{This is a threat, thwarted by your design. There's a fine difference
-between telling a reader that you're aware of the risk and mitigate it and by
-coming across as having a vulnerability in your design. Be careful.}
+\emph{Writes from the kernel} are indirectly triggered. The user performs a
+\texttt{read} system-call with the target address as the destination. The data
+is then written to this location by the \texttt{read} system-call with the
+kernel privileges. The protection should prevent the write from being visible in
+the marking system call, but \texttt{read} should still execute eventually.
 
-\emph{Bypassing TikTok by using a write call} is accomplished by calling a
-\texttt{write} system-call on a file with arguments. Even though the arguments
-cannot be changed by directly writing to them, it may be possible to bypass it
-by executing a \texttt{write} call.
+\subsection{Remapping File-Backed Pages}
 
-\emph{Bypassing TikTok by mapping device-backed files} depends on devices
-changing the values of their registers independently of writes. Arguments stored
-in such a memory region change their values based on the state of the underlying
-hardware. File-systems which report the state of the OS (\texttt{\textbackslash
-proc}) also belong in this category.
-\mat{This would be better with a strawman design where you can introduce the
-concepts about reads/writes and then say that the strawman does not work and you
-need something more sophisticated. Call it simplistic design or something.}
+\emph{Remapping file-backed pages} is accomplished by mapping marked pages in
+another process. The user stores the arguments on a file-backed page and maps
+the file as writable while the system call is executing. They are then free to
+write to the marked arguments, even though \emph{other mappings} are read-only.
 
-% Give credit where due, but also highlight how difficult this problem is
-All of these potential vulnerabilities have been noticed by
-Watson\footnote{User-space and kernel writes were not differentiated between}
-when he analyzed CerbNG\cite{watson2007exploiting} and other system call
-wrappers. TikTok must ensure that the protections don't interfere with the
-correct execution of the kernel and user programs. In other words - both writes
-and the execution flow can only be temporarily affected.
+\begin{enumerate}
+  \item Map a file \texttt{F} in the process \texttt{A} to a page \texttt{P}
+  \item Execute a system-call with the arguments placed on \texttt{P}
+  \item The first fetch in the system-call occurs
+  \item Map the file \texttt{F} as writable in the process \texttt{B}
+  \item Change the values of the arguments on \texttt{P}
+  \item The second fetch in the system-call occurs
+\end{enumerate}
 
-% Simple solutions don't work
-The paradox of memory marking schemes can be seen in the case of system calls
-that both read and write to the user memory (e.g., \texttt{rt\_sigaction}).
-Simply marking the pages as read-only prevents attacks from the user-space, but
-also stops the system call from performing the required write. However, if one
-enables the writes for the kernel, the adversary can bypass the protection
-using a simple \texttt{sys\_read} call to the marked page.
+The protection should make sure that all mappings of a marked page are \emph{always}
+marked as read-only.
 
-The protection against the attacks \ref{first} and \ref{second} are described in
-\cref{subsec:memorywrites}. The defenses against \ref{third}, \ref{fourth}, and
-\ref{fifth} are discussed in \cref{subsec:filewrites}.
-%\nb{Kernel writes have their own section now.}
-% N.B.Kernel and User-space writes have their own separates section.
-% U.T. They are in a single section.
+\subsection{Writing to File-Backed Pages Using System Calls}
+
+Files in Linux can be accessed in two ways:
+\begin{itemize}
+    \item by mapping the file to memory
+    \item by using system calls to modify the file (e.g., \texttt{write})
+\end{itemize}
+
+If the file-system allows the destination pages of the \texttt{write} call to be
+mapped to user-space, it is possible to write to them using the \texttt{write}
+call. This will completely bypass the user-space permissions and change the data
+in the pages.
+
+\subsection{Device-Backed Pages}
+
+The data in the pages that represent devices can change independently of writes.
+Storing arguments on such pages can result in reading different values from them,
+even if no writes occur in-between the reads.
+
+\section{Design}
+\label{sec:design}
+
+\subsection{The Main Protection Mechanism}
+\label{subsec:mainmechanism}
+
+The main idea behind \sysname is to leverage the virtual memory protections to
+prevent changes to user-space arguments during the execution of system calls.
+The three most important parts of the system are therefore:
+
+\begin{itemize}
+\item The page-table
+\item The page-fault handler
+\item The kernel interface for reading from user-space (\texttt{read\_in})
+\end{itemize}
+
+The \texttt{read\_in} function reads an argument from the user-space memory and
+\emph{marks} those pages as unavailable during the execution of the call.
+\texttt{copy\_in} must mark the pages in all memory spaces mapping the page.
+Otherwise, an adversary could change it from a different process. At the end of
+the call, the marked pages are \emph{unmarked} if there are no other calls
+marking them.
+
+If the adversary tries to write to the marked page, they will trigger a page-fault
+exception. The page-fault handler will detect the page is marked by \sysname and
+force the thread to \emph{wait} until the page is unmarked. Afterward, the 
+offending write is repeated. 
 
 
-\subsection{System Call Argument Protection}
+\subsection{Simplistic Designs}
+\label{simplistic}
+The easiest way to implement the protection from \autoref{subsec:mainmechanism}
+is to mark user-space pages as accessible only from the kernel. On modern
+architectures this is accomplished by setting the \emph{superuser} flag in the
+page-table. User-space writes to marked pages trigger a page-fault, where they
+wait for the system call to end. Afterward, they continue to execute normally.
 
-% \nb{What's the point of the colored arrows in the Figures?}
-% U.T. I WILL NEED TO ADD A LEGEND. GREEN - BRANCH YES; RED - BRANCH NO
+Even though this system provides the protection from user-space
+writes to anonymous pages, it can easily be bypassed by calling a \texttt{read}
+system call. \texttt{read} executes in the kernel context and has access to 
+the pages marked with the \emph{superuser} flag. The attacker can provide the
+address of the marked argument as a destination of a \texttt{read} call and 
+change the data.
 
-\label{subsec:memorywrites}
-\begin{figure}[]
-  \centering
-  \includegraphics[width = .45 \textwidth]{img/copy_from_user.pdf}
-  \caption{\texttt{copy\_from\_user} marks both the file and the pages before
-  reading in the data}
-  \label{fig:copyfromuser}
-\end{figure}
+This problem can be solved by marking pages as \emph{read-only} instead of
+\emph{superuser}. In that case no system call will be able to change marked
+memory. Unfortunately, some system calls (e.g. \texttt{rt\_sigaction}) write to
+the previously read arguments. Such \emph{self-writing} calls will deadlock.
+After trying to write to a marked page, they will wait for themselves forever to
+unmark the page. A more complex solution is required to implement a
+memory-marking system.
 
 
-\mat{Why distinguish between primary and secondary goals? All attacks are equal.
-Don't distinguish.}
-\mat{Start the discussion of the design from a higher level, lead by examples.}
-Defending against the writes from user-space (\cref{first}) is the primary
-feature of TikTok. System calls read user memory using \texttt{copy\_from\_user}
-and its variants. Calls to \texttt{copy\_from\_user} mark the pages as
-\emph{read-only} in all virtual memory spaces mapping it (\cref{fig:copyfromuser}). Multiple system
-calls can mark a page at the same time. The benefit of marking the page this way
-is that it can still be read by other user threads, reducing the performance
-penalty of TikTok. When all the system calls that use the page finish executing,
-the page is \emph{unmarked} --- the previous permissions are restored.
+\subsection{Protecting Anonymous Pages}
+\label{complex}
 
-However, marking the pages is the first part. TikTok needs to guarantee that the
-programs still execute correctly. User-space writes to the marked pages trigger
-a page-fault (\cref{fig:pagefault}). In the page-fault handler TikTok intercepts
-these writes and stops them until the page has been unmarked. After the
-unmarking, the thread will exit the handler and redo the write. This technique
-introduces additional synchronization points for concurrent programs. Combined
-with the coarse granularity of pages (4KBs) deadlocks come up as a potential
-problem. During the evaluation of our system we haven't encountered any
-deadlocks due to the new synchronization points. The reasoning behind their
-scarcity is discussed in \cref{sec:deadlocks}.
-% \nb{This seems quite pessimistic. You might want to put a bit more optimism
-% here.}
-\mat{No abbreviations such as haven't or aren't. We use full form.}
-\mat{This concern brings up deadlocks and other issues and should be discussed
-at greater length.}
+Deadlocks in self-writing calls in \autoref{simplistic} are a consequence of
+writing into a marked page. To solve this problem, \sysname needs to also extend
+the kernel interface for writing to the user-space (\texttt{write\_out}) and to
+keep track which memory ranges are marked for \emph{each virtual memory (VM) space}.
 
-\begin{figure}[]
-  \centering
-  \includegraphics[width = .75 \linewidth]{img/pagefault.pdf}
-  \caption{TikTok's handling of the writes to a marked page}
-  \label{fig:pagefault}
-\end{figure}
+When marking a page, in addition to marking it as read-only in all VM spaces
+mapping it, \sysname also adds it to marked memory ranges in each VM space.
+Additionally, when \texttt{write\_out} is called it checks whether it is writing
+to a marked page. Writes to non-marked pages execute normally. Writes to marked
+pages are postponed and the call continues. The writes are saved and executed
+chronologically at the end of the system call, after unmarking the pages. If the
+pages are still marked by another call, the thread can safely wait for their
+unmarking in the page-fault handler.
 
-\subsection{Protecting System Call Arguments from Writes by the Kernel}
-\label{subsec:kernelland}
-\begin{figure}[]
-  \centering
-  \includegraphics[width = .30 \textwidth]{img/copy_to_user.pdf}
-  \caption{\texttt{copy\_to\_user} defers the writes from kernel until the end
-  of the system call}
-  \label{fig:copytouser}
-\end{figure}
+This design requires locks to synchronize accesses to shared data structures for each VM space:
+\begin{itemize}
+  \item Page-table
+  \item Marked memory ranges
+\end{itemize}
 
-% \nb{not absolutely clear why it's
-% self-deadlock. You assume read -> block page -> write can't execute?}
+When marking a page, \sysname iterates over all the page-table entries in different
+VM spaces mapping the page. A page-table lock is taken to access the page-table.
+Afterward, after marking a page-table entry, a lock is taken to add it
+to marked memory ranges for that VM space.
 
-\mat{Coming back from the whole deadlock discussion: you need some more
-structure. Introduce the problem of deadlocks (hopefully by referencing back to
-the simple design on why you actually introduce the risk of deadlocks) then
-argue how you avoid them through a clever locking and marking strategy. Then, if
-anything remains, discuss any potential risks.}
+However, when writing to user-space memory in \texttt{write\_out}, a different 
+order must be observed. The lock for marked memory ranges needs to be taken to
+make sure the pages we are writing to are not marked. When writing to a non-marked
+page, it could be swapped-out. This triggers a page-fault and takes a page-table lock
+in the page-fault handler.
 
-The process that stops the user-space writes cannot be applied to the writes
-from the kernel (attack \ref{second}). As mentioned in
-\cref{subsec:designoverview}, such a system would self-deadlock after a system
-call performs a read, mark an argument and a write to the same argument or page
-(\texttt{rt\_sigaction}). Any solution involving giving the write permissions to
-the kernel results in the adversary bypassing the marking using a system call
-(e.g., \texttt{sys\_read}).
+Taking two locks in opposite orders leads to deadlocks. To prevent deadlocks
+in the \sysname implementation, we use deadlock resolution. When a thread notices
+it will cause a deadlock, it releases its locks, and tries to reaquire them.
+After reaquiring them, the operations are either repeated or continued (if the
+needed data structure hasn't changed).
 
-\mat{Convoluted paragraph. Try to make the argument simpler.}
-Unlike user-space writes to user memory, which can happen from any place in the
-code, kernel writes can only take place from \texttt{copy\_to\_user} and its
-variants. TikTok uses this to its advantage. When the kernel uses
-\texttt{copy\_to\_user} to write to a marked page the write is \emph{deferred}
-until the end of the call. The function \texttt{copy\_to\_user} exits normally
-with the data saved into a data structure. This prevents self-deadlocks because
-the program continues the normal execution. At the end of the call (\emph{after
-unmarking}), the writes are performed from the data structure in the order in
-which they arrived. If the pages are still marked, the writes will wait just
-like the writes from the user-space.
+\subsection{Protecting File-Backed Pages}
 
-\mat{You need a better argument for deadlock freedom.}
-These two techniques create a snapshot of the memory at the moment it
-was accessed for the first time. This means that all reads will always return
-the original values, even if a call had written to them in-between. In case a
-system call performs a re-read of the location it has written to and expects a
-new value, TikTok would return the old one. However, the authors haven't
-encountered such a case, and TikTok can be easily extended to support it. 
-%\nb{By handling this edge case particularly or is there a more general approach?}
-% To support this edge case. It is a matter of philosophy. Currently we have a
-% have a memory snapshot. One can argue that the edge-case is a double-fetch bug.
-% Writing to user-space and reading the same information back is quite strange.
-% The fix would just involve checking if the location we want to read from has 
-% already been written to. The written data would then be returned instead of 
-% the data currently in RAM.
+The previous design protects against changes to marked anaonymous pages. It is
+still possible to bypass these protections if file-backed pages are used.
+Watson~\cite{watson2007exploiting} described two ways to bypass such a system.
+They correspond to attacks \autoref{third} and \autoref{fourth}. The system from
+\autoref{complex} can easily be extended to defend against such attacks.
 
-%\nb{The two following paragraph are a bit messy.}
+The attack \autoref{third} is possible because file-backed pages can be mapped
+at will in different VM spaces. This enables the adversary to map them as
+writable, even though they are marked as read-only in another process. The 
+solution is to check if they are marked during mapping and adjust the permissions
+in the page-table entry. However, \emph{on-demand paging} loads the page to memory
+only when it is accessed the first time. This moves the check from the mapping to
+the page-fault handler and a file-system code in charge of loading a page. Marked
+memory ranges are also updated when the page is loaded.
+
+Another attack described by Watson~\cite{watson2007exploiting} to change a
+file-backed page is to use a \texttt{write} system call. This is possible if
+pages mapped in user-space are the same as the buffers used as the destination
+for the \texttt{write}. \sysname prevents these attacks by forcing
+\texttt{write} to wait for all mapped pages in the destination file to be
+unmarked.
+
+The final attack (\autoref{fifth}) requires the protection against changes in
+device-backed pages. These changes are not caused by writes and cannot be
+mitigated by \sysname. However, the administrator controls which files and
+devices the adversary can map. It is enough to use \emph{Discretionary Access
+Control (DAC)} to prevent the adversary from mapping the devices and
+pseudo-file-systems to memory. This isn't a major limitation because users
+usually aren't allowed to access devices directly.
+
+\subsection{Ignored System Calls}
+\label{subsec:ignoredcalls}
+
 Some system-calls rely on writes from user-space to user-space memory for their
 correct behavior. During the execution of these calls the memory is changed and
 re-read by the kernel. Hence, memory snapshotting is detrimental to these calls.
@@ -790,100 +732,119 @@ will be incapable of unlocking the futex by writing to that address. Adding
 these calls and their variants to the exception list lead to a successful boot
 and functioning of the kernel in the prototype.
 
-% \nb{So your tool cannot
-% protect every system call? This information was not laid out beforehand which is
-% a bit surprising.}
-% I've split the previous paragraph in two and added a reference to these calls
-% to the introduction
+The previous calls cause infinite loops or deadlocks when protected. Even though
+\texttt{sys\_nanosleep} does execute correctly under \sysname, it marks the page
+with its argument for the whole duration of the sleep. In practice this can be
+quite long, and \texttt{sys\_nanosleep} should be ignored as well.
 
-%\nb{Hmm, you are ignoring
-%even more calls without precising which one. I'm slowly starting to think that
-%your system is only working for a few ones that you manually picked...}
-%
-% IT IS TRUE! I AM A FRAUD :'( Write still works if being protected. It is just
-% slower.
-
-The administrator can also choose to ignore certain calls to achieve better
-performance. However, this can be applied only to some calls. The arguments
-stored in memory need to be \emph{unformatted} --- their content isn't important
-for filtering. For such a system-call the TOCTTOU attack would be equivalent to executing
-a system-call with the new arguments. An example of such a call is
-\texttt{write}. However, in the rare case that a filter in system-call wrapper
-needs to prevent a certain string from being written into a file, such
-optimizations would need to be disabled. This optimization doesn't enable the
-call to bypass TikTok. Even though its arguments aren't marked, it isn't allowed
-to write to the marked arguments of other calls.In the future integrating TikTok
-with eBPF would enable fine tuning of which system-calls and wrappers are
-protected from double-fetches.
+Finally --- if a system call can be verified not to have double-fetches, it can
+be ignored to improve performance. Note that ignoring just means that the
+arguments of those calls are not protected. Ignored calls still stop before
+writing to marked pages.
 
 
-\subsection{Protecting Against File-Based Attacks}
-\label{subsec:filewrites}
-% \nb{This sound really similar in style to the background info from earlier}
+\begin{figure}[]
+  \centering
+  \includegraphics[width = .75 \linewidth]{img/pagefault.pdf}
+  \caption{TikTok's handling of the writes to a marked page}
+  \label{fig:pagefault}
+\end{figure}
 
-A malicious user can bypass memory-marking protections by executing the following
-sequence (Attack \ref{third}):
-\mat{They way you write it sounds as if \sysname is insecure.}
-\mat{Structure: introduce all different TOCTTOU attacks in a section; introduce
-the naive design; introduce the sophisticated design}
-
-\begin{enumerate}
-  \item Map a file \texttt{F} in the process \texttt{A} to a page \texttt{P}
-  \item Execute a system-call with the arguments placed on \texttt{P}
-  \item The first fetch in the system-call occurs
-  \item Map the file \texttt{F} as writable in the process \texttt{B}
-  \item Change the values of the arguments on \texttt{P}
-  \item The second fetch in the system-call occurs
-\end{enumerate}
-
-% \nb{I'll need a bit more info to understand this
-% attack. You have a shared+filebacked memory that is used in a double fetch, then
-% what happens?}
-% \nb{The following sentence is not clear. What does "check"
-% means? Mark them as read only?}
-% \nb{You can reiterate what is the effect and why
-% it is useful.}
+\subsection{Protecting System Call Arguments from Writes by the Kernel}
+\label{subsec:kernelland}
+\begin{figure}[]
+  \centering
+  \includegraphics[width = .30 \textwidth]{img/copy_to_user.pdf}
+  \caption{\texttt{copy\_to\_user} defers the writes from kernel until the end
+  of the system call}
+  \label{fig:copytouser}
+\end{figure}
 
 
-To prevent the attack TikTok checks when mapping a new file-backed page if
-it is already marked. Such pages are then mapped as marked in the second process
-as well.
+% Here we mention SOME of the interesting implementation decisions. It is
+% mostly related to x86 and should be short. ARM support should also be
+% be mentioned, but Future work could be a better section for that
+\section{Implementation}
+\label{sec:implementation}
 
-% \nb{What does it has to do with the previous paragraph? You just gave us a
-% solution to our problem and reintroduce new concepts.}
-However, another attack may be possible on systems with shared memory and file buffers.
-Files in Linux can be accessed in two ways:
-\begin{itemize}
-    \item by mapping the file to memory
-    \item by using system calls to modify the file (e.g., \texttt{write})
-\end{itemize}
+TikTok prototype has been implemented on Linux x86-64. However, TikTok can be
+ported to any operating systems that use a defined interface for reads and
+writes to the user-space, and any architecture that has page tables
+encoding access control information. Depending on the available resources
+(e.g. the number of free bits in the PTE)
+information can be stored in different places (e.g., PTE or global structures).
 
-% \nb{Ok, so that was to introduce the next attack. Either do it in word, "Attack
-% 3 is concerned with files access which can be done in two ways in Linux" or
-% start a new section.}
-Watson\cite{watson2007exploiting} has noticed that protected file-backed pages
-could still be edited by a \texttt{write} call if the system uses the same pages
-for memory-mapping and buffering when communicating with the block-devices
-(Attack \ref{fourth}). The mapped memory would then reflect the state of the
-file changed by the \texttt{write} system-call. TikTok prevents this attacks by
-pausing the write to the corresponding file as long as it has any marked mapped
-pages. As in the \Cref{subsec:memorywrites} no deadlocks were encountered during
-testing and the reasoning is discussed in \Cref{sec:deadlocks}. 
-% \nb{Third time speaking about deadlock. You might want to
-% mention early on that it's not too big of a problem. I'm getting worried the
-% whole paper I'm reading will come up with a 200\% overhead in the end...}
+\Cref{fig:bookkeeping} illustrates some of the most important data structures
+used in the prototype --- the PTE with the permissions, the marked page metadata
+(number of threads marking the page frame, number of threads waiting for the
+unmarking, the reverse mapping information).
 
-% \nb{Again, transition to the next attack is abrupt. Either new section or at
-% least mention where are moving to a new scope.}
-Finally, TikTok provides no protection against the Attack \ref{fifth}. TikTok
-cannot do anything if the values in the mapped pages can change value
-independently of writes (such as devices and other pseduo-files). Considering
-that mapping device memory to user-space is considered bad practice, we rely on
-\emph{Discretionary Access Control} (\textbf{DAC}) to prevent users from mapping
-devices in the first place.
-% \nb{So, attack 5 still exists. You might want to mention it in the Design
-% overview that you do not protect against all of them.}
+\Cref{subsec:frameinfo} describes the data about the
+physical page frame with some of the limitations due to the need to keep
+\texttt{struct page} as small as possible. Considering that one \texttt{struct
+page} exists for every page frame on the system, increasing its size would
+drastically increase the memory overhead.  The data stored in the page table
+(permissions, free bits and page frame number) is explained in more detail in
+\cref{subsec:pageinfo}.
 
+
+\subsection{Storing the Page Frame Information}
+\label{subsec:frameinfo}
+Linux divides physical memory into page frames. Each page frame is represented
+by a \texttt{struct page}. Considering that this structure is replicated
+millions of times, every additional field has a tremendous impact on memory
+consumption.
+\mat{What did I say about forced newlines?}
+
+To keep the memory consumption low, TikTok uses a single bit in \texttt{struct
+page} to mark page frames. Considering that x86-64 has enough bits in the flag
+field, we have decided to use one of the flag bits for this purpose.
+Architectures that have fewer flag bits (such as x86) can instead use some of
+the bits used by other features (e.g., Kernel Shared Memory or NUMA domains). On
+\cref{fig:bookkeeping} this field is denoted by \emph{Page Marked Flag}.
+\texttt{struct page} also stores a pointer to the \emph{reverse mapping}
+information. The reverse mapping is used to find all PTEs \emph{TikTok} needs to
+(un)mark.
+
+The marking metadata is stored in a hashmap based on the \emph{page frame
+number}. The access to these entries is protected by separate mutexes to improve
+the scalability of the system. The metadata comprise the page frame number, the
+count of threads marking the page (\emph{owners}), the number of threads waiting
+for the page to get unmarked (\emph{guests}), and a \emph{queue} they are
+waiting on. 
+
+\subsection{PTE Information}
+\label{subsec:pageinfo}
+
+When we mark a page we change some of the flags in the PTEs mapping it
+(\cref{fig:bookkeeping}):
+
+\begin{description}
+  \item[R/W] gets set to \emph{read-only} to prevent writes to the page
+  \item[SW2] gets the old value of \textbf{R/W}
+  \item[SW3] gets set to 1 
+\end{description}
+
+\textbf{SW2} is used by the Software Dirty Pages
+feature of Linux. This feature cannot run alongside TikTok in our prototype.
+Other architectures may have less, or more bits available for the OS to use. In
+the case of lack of space in the page table, \texttt{SW2} and \texttt{SW3} could
+be stored in a separate data structure.
+
+\emph{Copy-on-write} pages have a peculiar optimization. They are marked only in
+the process requesting the marking. Writes from other processes will trigger a
+copy-on-write mechanism, preventing them from changing the data.
+
+TikTok does a partial flush of the TLB and updates the MMU cache to make these
+changes visible immediately. The performance impact of this is analyzed further
+in \cref{sec:evaluation}.
+
+\begin{figure}[]
+  \centering
+  \includegraphics[width=\linewidth]{img/book-keeping.pdf}
+  \caption{The most important marking information on x86}
+  \label{fig:bookkeeping}
+\end{figure}
 
 \section{TikTok Deadlocks}
 \label{sec:deadlocks}
@@ -997,100 +958,6 @@ mapping and a system call at the same time. We have not encountered such a
 problem. I WILL PROBABLY NEED TO RUN UBUNTU FOR 24HRS TO CONFIRM THIS. I DON'T HAVE
 ANY STRONGER ARGUMENTS OTHER THAN "IT WORKS FOR NOW". ANOTHER PROBLEM IS IF THERE IS
 A LIVELOCK. HOW WILL I KNOW? WHAT PROGRAMS SHOULD I RUN?
-% \nb{It seems to me you are dismissing things too quickly. You need to
-% make me come to the same conclusion. Additionally, you just added a new possible
-% sequence, sure there is no other?}
-
-
-% Here we mention SOME of the interesting implementation decisions. It is
-% mostly related to x86 and should be short. ARM support should also be
-% be mentioned, but Future work could be a better section for that
-\section{Implementation}
-\label{sec:implementation}
-
-%\mat{What's the message here? Say what you implement based on which design decisions.}
-TikTok prototype has been implemented on Linux x86-64. However, TikTok can be
-ported to any operating systems that use a defined interface for reads and
-writes to the user-space, and any architecture that has page tables
-encoding access control information. Depending on the available resources
-(e.g. the number of free bits in the PTE)
-information can be stored in different places (e.g., PTE or global structures).
-
-\Cref{fig:bookkeeping} illustrates some of the most important data structures
-used in the prototype --- the PTE with the permissions, the marked page metadata
-(number of threads marking the page frame, number of threads waiting for the
-unmarking, the reverse mapping information).
-% \nb{Might be interesting to reiterate which info we need
-% to store}
-\Cref{subsec:frameinfo} describes the data about the
-physical page frame with some of the limitations due to the need to keep
-\texttt{struct page} as small as possible. Considering that one \texttt{struct
-page} exists for every page frame on the system, increasing its size would
-drastically increase the memory overhead.  The data stored in the page table
-(permissions, free bits and page frame number) is explained in more detail in
-\cref{subsec:pageinfo}.
-%\nb{same as above}
-%\nb{Why keep it small?}
-
-\subsection{Storing the Page Frame Information}
-\label{subsec:frameinfo}
-Linux divides physical memory into page frames. Each page frame is represented
-by a \texttt{struct page}. Considering that this structure is replicated
-millions of times, every additional field has a tremendous impact on memory
-consumption.
-\mat{What did I say about forced newlines?}
-\\
-\\
-To keep the memory consumption low, TikTok uses a single bit in \texttt{struct
-page} to mark page frames. Considering that x86-64 has enough bits in the flag
-field, we have decided to use one of the flag bits for this purpose.
-Architectures that have fewer flag bits (such as x86) can instead use some of
-the bits used by other features (e.g., Kernel Shared Memory or NUMA domains). On
-\cref{fig:bookkeeping} this field is denoted by \emph{Page Marked Flag}.
-\texttt{struct page} also stores a pointer to the \emph{reverse mapping}
-information. The reverse mapping is used to find all PTEs \emph{TikTok} needs to
-(un)mark.
-\\
-\\
-The marking metadata is stored in a hashmap based on the \emph{page frame
-number}. The access to these entries is protected by separate mutexes to improve
-the scalability of the system. The metadata comprise the page frame number, the
-count of threads marking the page (\emph{owners}), the number of threads waiting
-for the page to get unmarked (\emph{guests}), and a \emph{queue} they are
-waiting on. 
-
-\subsection{PTE Information}
-\label{subsec:pageinfo}
-
-When we mark a page we change some of the flags in the PTEs mapping it
-(\cref{fig:bookkeeping}):
-
-\begin{description}
-  \item[R/W] gets set to \emph{read-only} to prevent writes to the page
-  \item[SW2] gets the old value of \textbf{R/W}
-  \item[SW3] gets set to 1 
-\end{description}
-
-\textbf{SW2} is used by the Software Dirty Pages
-feature of Linux. This feature cannot run alongside TikTok in our prototype.
-Other architectures may have less, or more bits available for the OS to use. In
-the case of lack of space in the page table, \texttt{SW2} and \texttt{SW3} could
-be stored in a separate data structure.
-
-\emph{Copy-on-write} pages have a peculiar optimization. They are marked only in
-the process requesting the marking. Writes from other processes will trigger a
-copy-on-write mechanism, preventing them from changing the data.
-
-TikTok does a partial flush of the TLB and updates the MMU cache to make these
-changes visible immediately. The performance impact of this is analyzed further
-in \cref{sec:evaluation}.
-
-\begin{figure}[]
-  \centering
-  \includegraphics[width=\linewidth]{img/book-keeping.pdf}
-  \caption{The most important marking information on x86}
-  \label{fig:bookkeeping}
-\end{figure}
 
 \section{Evaluation}
 \label{sec:evaluation}
