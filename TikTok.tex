@@ -761,32 +761,30 @@ writing to marked pages.
 \end{figure}
 
 
-% Here we mention SOME of the interesting implementation decisions. It is
-% mostly related to x86 and should be short. ARM support should also be
-% be mentioned, but Future work could be a better section for that
+
 \section{Implementation}
 \label{sec:implementation}
 
-TikTok prototype has been implemented on Linux x86-64. However, TikTok can be
-ported to any operating systems that use a defined interface for reads and
-writes to the user-space, and any architecture that has page tables
-encoding access control information. Depending on the available resources
-(e.g. the number of free bits in the PTE)
-information can be stored in different places (e.g., PTE or global structures).
+\sysname prototype has been implemented on Linux x86-64. However, TikTok can be
+ported to any operating system which use a defined interface for reads and
+writes to the user-space (\texttt{read\_in} and \texttt{write\_out}), and any
+architecture that has page tables encoding access control information. Depending
+on the available resources (e.g. the number of free bits in the PTE) information
+can be stored in different places (e.g., PTE or global structures).
 
-\Cref{fig:bookkeeping} illustrates some of the most important data structures
+\subsection{Basic Book-keeping}
+\autoref{fig:bookkeeping} illustrates some of the most important data structures
 used in the prototype --- the PTE with the permissions, the marked page metadata
 (number of threads marking the page frame, number of threads waiting for the
-unmarking, the reverse mapping information).
+unmarking, the reverse mapping information). 
 
-\Cref{subsec:frameinfo} describes the data about the
+\autoref{subsec:frameinfo} describes the data about the
 physical page frame with some of the limitations due to the need to keep
 \texttt{struct page} as small as possible. Considering that one \texttt{struct
 page} exists for every page frame on the system, increasing its size would
 drastically increase the memory overhead.  The data stored in the page table
 (permissions, free bits and page frame number) is explained in more detail in
-\cref{subsec:pageinfo}.
-
+\autoref{subsec:pageinfo}.
 
 \subsection{Storing the Page Frame Information}
 \label{subsec:frameinfo}
@@ -794,30 +792,30 @@ Linux divides physical memory into page frames. Each page frame is represented
 by a \texttt{struct page}. Considering that this structure is replicated
 millions of times, every additional field has a tremendous impact on memory
 consumption.
-\mat{What did I say about forced newlines?}
 
-To keep the memory consumption low, TikTok uses a single bit in \texttt{struct
+To keep the memory consumption low, \sysname uses a single bit in \texttt{struct
 page} to mark page frames. Considering that x86-64 has enough bits in the flag
 field, we have decided to use one of the flag bits for this purpose.
 Architectures that have fewer flag bits (such as x86) can instead use some of
 the bits used by other features (e.g., Kernel Shared Memory or NUMA domains). On
-\cref{fig:bookkeeping} this field is denoted by \emph{Page Marked Flag}.
+\autoref{fig:bookkeeping} this field is denoted by \emph{Page Marked Flag}.
 \texttt{struct page} also stores a pointer to the \emph{reverse mapping}
-information. The reverse mapping is used to find all PTEs \emph{TikTok} needs to
+information. The reverse mapping is used to find all PTEs \sysname needs to
 (un)mark.
 
 The marking metadata is stored in a hashmap based on the \emph{page frame
-number}. The access to these entries is protected by separate mutexes to improve
-the scalability of the system. The metadata comprise the page frame number, the
-count of threads marking the page (\emph{owners}), the number of threads waiting
-for the page to get unmarked (\emph{guests}), and a \emph{queue} they are
-waiting on. 
+number}. This enables us to store only the information on the pages which are
+currently marked and keep the memory consumption low.The access to these entries
+is protected by separate mutexes to improve the scalability of the system. The
+metadata comprise the page frame number, the count of threads marking the page
+(\emph{owners}), the number of threads waiting for the page to get unmarked
+(\emph{guests}), and a \emph{queue} they are waiting on. 
 
 \subsection{PTE Information}
 \label{subsec:pageinfo}
 
 When we mark a page we change some of the flags in the PTEs mapping it
-(\cref{fig:bookkeeping}):
+(\autoref{fig:bookkeeping}):
 
 \begin{description}
   \item[R/W] gets set to \emph{read-only} to prevent writes to the page
@@ -826,7 +824,7 @@ When we mark a page we change some of the flags in the PTEs mapping it
 \end{description}
 
 \textbf{SW2} is used by the Software Dirty Pages
-feature of Linux. This feature cannot run alongside TikTok in our prototype.
+feature of Linux. This feature cannot run alongside \sysname in our prototype.
 Other architectures may have less, or more bits available for the OS to use. In
 the case of lack of space in the page table, \texttt{SW2} and \texttt{SW3} could
 be stored in a separate data structure.
@@ -835,9 +833,9 @@ be stored in a separate data structure.
 the process requesting the marking. Writes from other processes will trigger a
 copy-on-write mechanism, preventing them from changing the data.
 
-TikTok does a partial flush of the TLB and updates the MMU cache to make these
+\sysname does a partial flush of the TLB and updates the MMU cache to make these
 changes visible immediately. The performance impact of this is analyzed further
-in \cref{sec:evaluation}.
+in \autoref{sec:evaluation}.
 
 \begin{figure}[]
   \centering
@@ -846,27 +844,101 @@ in \cref{sec:evaluation}.
   \label{fig:bookkeeping}
 \end{figure}
 
+\subsection{Marking and Unmarking}
+
+\sysname extends Linux's interface for reading and writing to user-space. The
+abstractions \texttt{read\_in} and \texttt{write\_out} introduced in
+\autoref{sec:design} are implemented in Linux as \texttt{copy\_from\_user} and
+\texttt{copy\_to\_user}. \sysname extends \texttt{copy\_to\_user} to mark the pages
+before reading the data.
+
+Marking the page involves taking the appropriate locks, denoting the physical
+page frame as marked, and incrementing the number of page owners. \sysname then
+uses the reverse mapping information to mark the page in all the VM spaces
+mapping it.
+
+
+Unmarking follows a similar procedure. The appropriate locks are taken, and the
+number of owners is decremented. Only if there are no owners marking the page
+anymore, it is unmarked in all VM spaces. If there are threads waiting on the
+page, they are signalled. The last guest to wake-up will deallocate the marking
+data for the page.
+
+\subsection{Loading File-Backed Pages}
+
+As described in \autoref{sec:design}, file-backed pages need to be marked as
+they are loaded to memory. The on-demand paging takes place in the page-fault
+handler, but invokes the functions of the file-system storing the file. \sysname
+extends the functionality of the \texttt{set\_alloc\_pte} to mark a page. The
+needed memory is prealocated, and passed into the \emph{atomic context} where 
+\texttt{set\_alloc\_pte} is called.
+
+When a marked page is loaded, its data is also added to the interval-tree.
+\sysname takes the lock before entering the atomic context, even though the
+loaded page may not be marked. The version of the interval-tree is incremented
+after adding the page.
+
+\subsection{Tracking Marked Ranges}
+
+\sysname stores the marked memory ranges for every VM space (\texttt{mm\_struct})
+in an interval tree. Before writing to the user-space, \texttt{copy\_to\_user}
+takes the lock for the marked memory ranges tree and checks for every page in the
+destination if it has been marked. Writes to marked pages are stored to freshly
+allocated memory, along with the destination address, and written at the end of 
+the call.
+
+Writes to unmarked pages proceed as normal, unless they encounter a page-fault
+exception (page not present). The page-fault handler will take the page-table
+lock, load the page and restart the write. If the page-fault handler detects a
+potential deadlock (another thread is marking the page), it will release all the
+locks and exit the handler. \texttt{copy\_to\_user} will then attempt to write 
+to the page. In case it is indeed marked, it will wait for its unmarking. This
+is the only case where \sysname forces threads to wait in the middle of a
+system call. After the write, the thread reaquires the lock, check if the interval
+tree has changed and restart the write if so.
+
 \section{TikTok Deadlocks}
 \label{sec:deadlocks}
 
-\Cref{sec:design} mentions that TikTok may introduce deadlocks to valid
-programs. For an OS extension, even a small chance of a random deadlock violates
-the presumption of correctness and is unacceptable. Luckily, TikTok deadlocks
-can happen only under specific, rare circumstances which violate the principles
-of Interprocess Communication (\cref{subsec:ipc}). Ubuntu Server 18.04 LTS
-running TikTok is able to successfully boot and execute programs without
-encountering deadlocks.
-\mat{This is a weak argument.}
+\sysname relies on locks for the correct implementation, and on waits for the
+prevention of the double-fetch attacks. It introduces the additional synchronization
+points to the execution of programs. This section discusses the posibility of deadlocks.
 
-% \nb{Please be specific on what
-% rare means or mention you will lay them out right afterward. The first sentence
-% of the next paragraph doesn't reassure me you will not try to bury the deadlock.}
+The possibility of deadlocks caused by locks that moderate the access to the
+common \sysname data structures are discussed in the
+\autoref{subsec:impldeadlocks}. Afterward, the base assumption about the programs
+protected by \sysname is discussed in \autoref{subsec:ipcisolation}. Finally,
+the possibility of deadlocks caused by waiting in the page-fault handler is analyzed
+in \autoref{subsec:tiktokdeadlocks}.
 
-TikTok adds additional synchronization points to multi-threaded programs by
-stalling the writes. It is possible for these points to introduce previously
-non-existent deadlocks to programs. Such deadlocking threads would need to
-communicate using both shared memory (for TikTok to stop one of them) and
-synchronous system calls (for TikTok to mark memory).
+\subsection{Implementation Deadlocks}
+\label{subsec:impldeadlocks}
+
+Almost all of the locks in the implementation of \sysname follow a strict locking
+order based on the memory-management submodule. No deadlock can occur if the locks
+are always taken in the same order, in all threads.
+
+The only two locks taken in the opposite order are the \emph{page-table lock}
+and the \emph{interval-tree lock}. In \texttt{copy\_to\_user} the interval-tree
+lock must be taken first to check which memory ranges are marked. When marking a
+page the page-table lock needs to be aquired to locate the page-table entry
+mapping the page.
+
+\sysname implements the deadlock resolution mechanism where the thread that
+notices a potential deadlock releases its locks and retries the operation. This
+makes deadlocks impossible, at the price of slightly reduced performance. As an
+optimization, some operations need to be done only if the state of the used
+data-structures has changed.
+
+\subsection{Design Deadlocks}
+\label{subsec:tiktokdeadlocks}
+Unlike deadlocks that are a consequence of a poor implementation
+\autoref{subsec:impldeadlocks}, design deadlocks involve at least one process
+waiting in the page-fault handler. These deadlocks would be a consequence of the
+specification, and not of the programmer error. Such deadlocks can be easily
+resolved by ignoring the system calls involved. In this section we discuss the 
+conditions necessary for those calls to occur and why they are practically
+non-existant.
 
 \begin{figure}
   \centering
@@ -888,76 +960,72 @@ synchronous system calls (for TikTok to mark memory).
   \end{minipage}
   \caption{Thread 2}
   \end{subfigure}
-  \caption{Executing instructions in the specified order causes a deadlock with TikTok}
+  \caption{Executing instructions in the specified order causes a deadlock with \sysname}
   \label{fig:deadlock}
 \end{figure}
 
 
-\Cref{fig:deadlock} shows an example of a such communication pattern. Thread 1
-enters the system call \texttt{S} and marks a shared page \texttt{A} (\textbf{1}). The
-system call \texttt{S} blocks until the corresponding call \texttt{unblock\_S} is called
-in Thread 2 (\textbf{3}). While the page \texttt{A} is still marked, Thread 2
-attempts to write to it, causing it to wait for \texttt{S} to finish
-(\textbf{2}). All of the deadlocking patterns need to exibit a similar combination
-of paired blocking calls (\texttt{S}, \texttt{unblock\_S}) with arguments in the shared
-memory (page \texttt{A}). Concretely, in \Cref{fig:deadlock}:
+\autoref{fig:deadlock} shows an example of a deadlocking communication pattern. Thread
+1 enters the system call \texttt{S} and marks a shared page \texttt{A}
+(\textbf{1}). The system call \texttt{S} blocks until the corresponding call
+\texttt{unblock\_S} is called in Thread 2 (\textbf{3}). While the page
+\texttt{A} is still marked, Thread 2 attempts to write to it, causing it to wait
+for \texttt{S} to finish (\textbf{2}). All of the deadlocking patterns need to
+exibit a similar combination of paired blocking calls (\texttt{S},
+\texttt{unblock\_S}) with arguments in the shared memory (page \texttt{A}).
 
-\begin{enumerate}
-    \item The page \texttt{A} is shared between Thread 1 and Thread 2
-    \item Access to page \texttt{A} is not protected by a mutex, or a semaphore
-    \item System call \texttt{S} is a blocking system call that receives a 
-    signal from another thread
-    \item System call \texttt{S} reads its arguments from the page \texttt{A}
-    \item Thread 2 needs to write to the same page where the arguments for 
-    \texttt{S} are stored (page \texttt{A})
-    \item Even though Threads 1 and 2 can communicate using shared memory, 
-    Thread 1 needs to also invoke \texttt{S}
-\end{enumerate}
+Similar deadlocking patterns are possible with more threads. The necessary
+condition for all of them is a circular, waits-for dependancy when \sysname
+waits are combined with an already existing dependency. An already
+existing lock call is necessary for it to happen.
 
-Paired, blocking system-calls \texttt{S} and \texttt{unblock\_S} are quite rare
-and can be found only in the IPC message-passing and synchronization calls. In
-either case, the arguments for those calls need to be stored in shared memory,
-instead on the thread's stack. The only synchronization call the authors are
-aware of that requires this is \texttt{futex}, which is already ignored.
+\sysname cannot cause a circular dependency only as a consequence of its system
+call reads, writes and markings. Every dependency involves one marked page and a
+write to it. A self-deadlocking execution trace would have to involve a write
+from a system call to a page marked by another system call. The other system
+call would also need to write to the page marked by the first call to complete
+the cycle. This situation is impossible in \sysname. System calls postpone
+writes to marked pages until the end of the call. The only exception is the
+back-off due to the deadlock prevention system. There one thread is executing
+\texttt{copy\_from\_user} and the other \texttt{copy\_to\_user}. Fortunately,
+the \texttt{copy\_to\_user} thread will wait, preventing it from executing
+\texttt{copy\_from\_user} and the second write-wait pair from happening.
 
-However, message-passing calls (e.g. \texttt{sendmsg}) can store the data being
-sent in shared memory. In that case, the processes are sending using
-message-passing the data which is \emph{already available in the shared memory}.
+Even though the deadlocking patterns can easily be resolved by updating the
+ignore list, the conditions for the deadlock to appear are almost impossible to
+encounter in practice. During our evaluation we haven't encountered such a
+deadlock. The deadlocking pattern \autoref{fig:deadlock} requires three
+ingredients:
 
-% Having identified the system call \texttt{S}\nb{So only one system call fits the
-% bill?}, the conditions for the deadlock
-% can be simplified to:
+\begin{itemize}
+  \item A synchronized marking call \texttt{S}
+  \item Storing the arguments of \texttt{S} in shared memory \texttt{A}
+  \item A thread to write to \texttt{A} while \texttt{S} is executing
+  \item An already existing waits-for dependancy between the thread executing \texttt{S} and a write
+\end{itemize}
 
-% \begin{itemize}
-%   \item Threads 1 and 2 share memory (page \texttt{A})
-%   \item Threads 1 and 2 decide to share the data in the shared memory (page
-%         \texttt{A}) using message-passing
-%       \item Threads 1 and 2 nb{Both? or is one sufficient?}write to the shared memory (page \texttt{A}) during the
-%         message-passing call                       
-% \end{itemize}
+The only candidates for \texttt{S} that the authors have encountered are
+blocking message-passing calls. They are synchronous and thus provide the
+necessary waits-for dependency, and read buffers from user-space memory, marking
+a page. However, that implies that data on the page \texttt{A} is shared both by
+message-passing and shared-memory. We haven't encountered such a pattern while
+testing \sysname and there are a few reasons why it doesn't occur in practice:
 
-% \nb{Might want to precise what the testing
-% was, how long, etc...}
-% U.T. Booting with systemd and running Phoronix benchmark (e.g. Apache)
+\begin{itemize}
+  \item Most programs use only one IPC method (either message-passing or shared-memory)
+  \item System call arguments are usually stored on the stack, and accessed only by the executing thread
+  \item The programs would need to use both IPC methods at the same time, on the same data
+  \item Both system calls and shared-memory are rare in programs, and used in the well-defined patterns
+\end{itemize}
 
-% \nb{Something
-% stronger than just a judgement on programming techniques would be great. Was does
-% it not make sense?->one type of communication should be sufficient}
-
-Programs usually rely on a single IPC apstraction (shared memory or
-message-passing). Even software that uses both of them would do so for separate
-functionalities. The program that replicates the communication using both
-primitives would be an example of terrible programming practice. During the
-testing of TikTok (\cref{sec:evaluation}) on Ubuntu Server 18.04 LTS the system
-booted and executed benchmarks without encountering deadlocks.
-
-Similar sequences can be constructed using the write system call protection
-presented in \cref{subsec:filewrites}. The same argument can be applied in that
-case - the program needs to write to the same data to the file using both memory
-mapping and a system call at the same time. We have not encountered such a
-problem. I WILL PROBABLY NEED TO RUN UBUNTU FOR 24HRS TO CONFIRM THIS. I DON'T HAVE
-ANY STRONGER ARGUMENTS OTHER THAN "IT WORKS FOR NOW". ANOTHER PROBLEM IS IF THERE IS
-A LIVELOCK. HOW WILL I KNOW? WHAT PROGRAMS SHOULD I RUN?
+\sysname adds another synchronization point to the kernel --- it prevents write
+calls to files having marked, mapped pages. While it is possible to deadlock
+a thread by mapping a file, and then passing the mapped pages as the arguments to
+the write call to the same file, we have not encountered such a case. The authors
+do not know of the program that uses such a communication pattern. Finally, adding
+system calls that write to files can be a good performance optimization and prevent
+the call. Performing a TOCTTOU attack on the content of the write call is equivalent
+to writing different data to the file.
 
 \section{Evaluation}
 \label{sec:evaluation}
@@ -1049,34 +1117,26 @@ up to the total overhead in the IPC benchmark.
 \section{Related Work}
 \label{sec:relatedwork}
 
-%\mat{Numbers smaller than 10 should be written out: two!}
-The literature related to TikTok can be broadly divided into two groups. In the
-first group are system call wrappers whose main vulnerability TikTok is
-mitigating. The second ones are the mitigations and solutions for
-double-fetches, which are a superclass of TOCTTOU bugs.
+The literature related to double-fetches can be broadly divided into two groups.
+In the first group are the static solutions (\autoref{subsec:dfstatic}) that use
+techniques such as source or binary analysis to detect double-fetch bugs. The
+second group (\autoref{subsec:dfdynamic}) uses run-time information to detect
+and (rarely) prevent double-fetches.
 
-We describe the benefits that system call wrappers compared to other solutions.
-We show that all other filters that ignore or remove the TOCTTOU problem have
-to either reduce the security guarantees they offer, or violate the separation
-of the filter and the system call.
-% \nb{it could be interesting to mention these
-% things beforehand as motivation for tiktok. Otherwise the impostance is not
-% obvious to the reader.}
+The most important work related to \sysname is the paper by
+Watson~\cite{watson2007exploiting} criticizing the security of system call
+wrappers (\autoref{subsec:watson}). The implications of \sysname for system call
+wrappers are discussed in \autoref{sec:furtherwork}.
 
-Afterward, we take a look at alternative ways to address the TOCTTOU bug of the
-system call wrappers. Most of them are focused on finding and fixing the bug,
-which isn't possible in this case. TikTok is also compared against other runtime
-mitigations of double-fetches.
-
-\subsection{System Call Wrappers and Filters}
-
-Watson \cite{watson2007exploiting} scrutinized the security of many system call
-wrappers. Not only did he found that all of them were insecure, Watson also
-described the different types of TOCTTOU bugs and discussed potential fixes. In
-a short paragraph, he mentions that Pawel Dawidek, the creator of CerbNG
-\cite{zak_frasunek_dawidek}, has experimented with marking arguments read-only.
-CerbNG was an early system call filtering system for BSD that used
-copy-on-read-and-write to a new memory page.
+\subsection{Watson's Critique of System Call Wrappers}
+\label{subsec:watson}
+Watson's paper~\cite{watson2007exploiting} scrutinized the security of many
+system call wrappers. Not only did he find that all of them were insecure,
+Watson also described the different types of TOCTTOU bugs that compromised them
+and discussed potential fixes. In a short paragraph, he mentions that Pawel
+Dawidek, the creator of CerbNG~\cite{zak_frasunek_dawidek}, has experimented
+with marking arguments read-only. CerbNG was an early system call filtering
+system for BSD that used copy-on-read-and-write to a new memory page.
 
 Afterward, Watson briefly discusses problems such memory marking systems
 need to solve: 
@@ -1088,71 +1148,21 @@ need to solve:
 \end{itemize}
 
 According to Watson, no memory-marking system (including CerbNG) addressed all
-of these problems. TikTok does exactly that. Unnecessary page-faults are rare
+of these problems. \sysname does exactly that. Unnecessary page-faults are rare
 and they are used to make the offending threads wait for unmarking. After the
 page has been unmarked, the write proceeds without any consequences. Write
 system call does not proceed until there are no marked pages of the file. If
-needed, pages are marked when they are mapped. TikTok postpones all writes to
+needed, pages are marked when they are mapped. \sysname postpones all writes to
 marked pages coming from the kernel while allowing the system calls to execute
 correctly.
-%\nb{Good paragraph!}
 
-Modern system call wrappers can be classified into two groups, based on how they
-approach the TOCTTOU attack. The first group eliminates all functionality
-vulnerable to the attack. Linux's \emph{SecComp}\cite{seccomp} and
-\emph{eBPF}\cite{ebpf} belong to this group. The second group moves the filter
-checks deeper into the system calls, eliminating the need to read the arguments
-twice. \emph{Landlock Linux} \cite{landlock} and Google's \emph{Kernel Runtime
-Security Instrumentation} (KRSI)\cite{krsi} embrace this technique.
-
-\subsubsection{Partial Solutions}
-SecComp\cite{seccomp} uses \emph{Berkeley Packet Filter} (BPF) to provide small,
-programmable filters that execute before the system call. Based on the values
-in registers, Linux can decide whether to allow or to prevent a system call.
-However, BPF cannot dereference pointers because an adversary would be able to
-bypass those checks using a TOCTTOU attack. \emph{Extended Berkeley Packet
-Filter} (eBPF)\cite{ebpf} provides larger filters that can also dereference
-user pointers. However, eBPF cannot be used for security purposes --- it cannot
-stop system calls from executing. eBPF is completely read-only and can only be
-used for tracing.
-
-\subsubsection{LSM-based Solutions}
-Landlock\cite{landlock} and KRSI\cite{krsi} use the \emph{Linux Security Module}
-\cite{morris2002linux} (LSM) hooks to call filter checks after the arguments
-have already been copied into the kernel. LSM hooks have been imagined as a set
-of places where arbitrary checks can be performed before accessing a kernel
-resource. Execution proceeds only if the execution has been successful.
-Different security modules can provide different hooks to provide different
-guarantees (e.g., \emph{SELinux}\cite{smalley2001implementing} and
-\emph{AppArmor}\cite{gruenbacher2007apparmor}).
-
-Both Landlock and KPSI attach eBPF filters to hooks, allowing users to provide
-custom rules for system calls. For this solution to work everywhere for perfect
-syscall filtering, LSM hooks would need to be manually added to all Linux
-drivers and \texttt{ioctls}. Unfortunately, this is highly impractical and requires
-considerable effort from a large group of developers. Considering that LSM
-focuses on access control to kernel objects, it is questionable if an LSM module
-can be used to mitigate bugs based on the system call arguments. Some of the
-bugs could manifest themselves before a hook has been executed. TikTok is a
-generic solution that does not require modifying the drivers, nor the use of
-LSM hooks. Once it is deployed, all double-fetch bugs are eliminated from all
-the drivers. A system call wrapper that uses TikTok can be completely
-independent of the implementation of the system calls it is filtering.
-
-\subsection{Double-Fetch Solutions}
-
-Solutions for double-fetch bugs can be divided into \emph{static} and
-\emph{dynamic} techniques. Static techniques do not execute the program but
-analyze the source code. Dynamic techniques analyze the execution of the
-program to find any violations.
-
-\subsubsection{Static Analysis Work}
+\subsection{Static Analysis Work}
 \label{subsec:dfstatic}
 Static analysis techniques analyze the source code to find double-fetch bugs.
-Wang et al. \cite{wang2017double} used pattern matching to find potential
+Wang et al.~\cite{wang2017double} used pattern matching to find potential
 double-fetches. They implemented a tool that patches certain double-fetches
 automatically. However, their method in the general case produces false
-positives that need to be inspected manually. Xu et al.\cite{xu2018precise}
+positives that need to be inspected manually. Xu et al.~\cite{xu2018precise}
 improved on this work by proposing Deadline. Deadline does not use the pattern 
 analysis on the source files to detect double-fetches, but a compiler's
 intermediate representation and constraint solving to eliminate false positives.
@@ -1164,48 +1174,48 @@ the tools can fix some bugs automatically, this is not always possible. The
 TOCTTOU bug is in system call wrappers by design. Double-fetches not visible in
 the source, nor in the intermediate representation are another problem.
 Compilers can introduce such invisible double-fetches when allocating registers
-to variables. TikTok is a mitigation technique that works even in such cases.
+to variables. \sysname works even in such cases.
 
 
-\subsubsection{Dynamic Analysis Work}
-Google Project Zero's Bochspwn \cite{jurczyk2013bochspwn} uses an emulator to
+\subsection{Dynamic Analysis Work}
+\label{subsec:dfdynamic}
+Google Project Zero's Bochspwn~\cite{jurczyk2013bochspwn} uses an emulator to
 detect double-fetches. It found quite a large number of bugs in the Windows
 kernel. Bochspwn works on binaries. It does not require access to the source
 code and it detects bugs introduced by compilers.
-DFTracker\cite{wang2019dftracker} is another dynamic analysis technique work
+DFTracker~\cite{wang2019dftracker} is another dynamic analysis technique work
 with a lower overhead, that relies on taint tracking. However, these dynamic
-techniques are limited to the detection of double-fetches. Similarly to work
+techniques are limited to the detection of double-fetches. Similar to work
 presented in \cref{subsec:dfstatic}, developers need to manually fix the bugs.
-However, with dynamic analysis a double-fetch needs to be executed, limiting
+However, with dynamic analysis a double-fetch must also be executed, limiting
 this technique to the core kernel and to the drivers with the available
 hardware.
 
-A big leap in dynamic analysis techniques has been presented by Schwartz et al.
-\cite{schwarz2018automated}. The first part of the paper introduces DECAF - a
-framework that uses side-channel attacks to create a fuzzing oracle for
+A big leap in dynamic analysis techniques has been presented by Schwartz et
+al.~\cite{schwarz2018automated}. The first part of the paper introduces DECAF
+--- a framework that uses side-channel attacks to create a fuzzing oracle for
 double-fetch bugs. While Bochspwn relies on emulation, slowing the execution
 significantly, DECAF runs natively. It also eliminates false positives by
 automatically exploiting found bugs.
 
 Schwartz et al. then discuss a real-time mitigation technique for double
-fetches - DropIt. DropIt uses Intel's \emph{Transactional Synchronization 
-Extensions} (TSX)\cite{intel64and} in a creative way to prevent double-fetch
+fetches --- DropIt. DropIt uses Intel's \emph{Transactional Synchronization 
+Extensions} (TSX)~\cite{intel64and} in a creative way to prevent double-fetch
 bugs. By encapsulating the code in a TSX transaction, writes from other threads
-to the addresses that have been accessed will result in the
+will result in the
 transaction being aborted. However, the code executing inside a TSX transaction
 is severely limited. All reads must fit in the L3 cache, and all writes in L1.
-Some instructions are also forbidden. TikTok has none of those limitations.
-It works on non-Intel processors and relies on page tables for protection - a
+Some instructions are also forbidden. \sysname has none of those limitations.
+It works on non-Intel processors and relies on page tables for protection --- a
 technique that has been present for several decades.
 
 \section{Further Work}
-
-Considering the performance impact, it isn't feasable to run TikTok for all
-system-calls. Integration with an existing system-call wrapper would lead to the
-improved flexibility and performance. SecComp\cite{seccomp} and eBPF\cite{ebpf}
-are obvious candidates that would benefit from such an extension. Another
-optimization would be to mark only the pages accessed by the filter, and not the
-system-call body.
+\label{sec:furtherwork}
+Integration with an existing system-call wrapper would lead to the improved
+flexibility and performance of \sysname. SecComp\cite{seccomp} and
+eBPF\cite{ebpf} are obvious candidates that would benefit from such an
+extension. The obvious optimization would be to mark only the pages accessed by
+the filter, and not the system-call body.
 
 \section{Conclusion}
 
