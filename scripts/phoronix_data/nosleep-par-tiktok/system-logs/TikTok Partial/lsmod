@@ -1,0 +1,112 @@
+Module                  Size  Used by
+nls_iso8859_1          16384  1
+snd_soc_skl           131072  0
+intel_rapl_msr         20480  0
+intel_rapl_common      24576  1 intel_rapl_msr
+snd_soc_sst_ipc        20480  1 snd_soc_skl
+snd_soc_sst_dsp        28672  1 snd_soc_skl
+x86_pkg_temp_thermal    20480  0
+intel_powerclamp       20480  0
+snd_hda_ext_core       24576  1 snd_soc_skl
+coretemp               20480  0
+snd_soc_acpi_intel_match    28672  1 snd_soc_skl
+snd_soc_acpi           16384  2 snd_soc_acpi_intel_match,snd_soc_skl
+snd_soc_core          192512  1 snd_soc_skl
+snd_hda_codec_hdmi     53248  1
+kvm_intel             262144  0
+kvm                   528384  1 kvm_intel
+snd_compress           24576  1 snd_soc_core
+ac97_bus               16384  1 snd_soc_core
+snd_hda_codec_realtek    94208  1
+snd_pcm_dmaengine      16384  1 snd_soc_core
+snd_hda_codec_generic    69632  1 snd_hda_codec_realtek
+ledtrig_audio          16384  2 snd_hda_codec_generic,snd_hda_codec_realtek
+snd_hda_intel          40960  0
+snd_intel_nhlt         20480  2 snd_hda_intel,snd_soc_skl
+irqbypass              16384  1 kvm
+snd_hda_codec          98304  4 snd_hda_codec_generic,snd_hda_codec_hdmi,snd_hda_intel,snd_hda_codec_realtek
+snd_hda_core           69632  7 snd_hda_codec_generic,snd_hda_codec_hdmi,snd_hda_intel,snd_hda_ext_core,snd_hda_codec,snd_hda_codec_realtek,snd_soc_skl
+snd_hwdep              20480  1 snd_hda_codec
+snd_pcm                90112  7 snd_hda_codec_hdmi,snd_hda_intel,snd_hda_codec,snd_soc_core,snd_soc_skl,snd_hda_core,snd_pcm_dmaengine
+intel_cstate           20480  0
+dell_wmi               20480  0
+input_leds             16384  0
+intel_rapl_perf        20480  0
+mei_me                 36864  0
+intel_lpss_pci         20480  0
+mei                    86016  1 mei_me
+snd_timer              32768  1 snd_pcm
+dell_smbios            24576  1 dell_wmi
+dell_wmi_descriptor    20480  2 dell_wmi,dell_smbios
+dcdbas                 20480  1 dell_smbios
+snd                    73728  10 snd_hda_codec_generic,snd_hda_codec_hdmi,snd_hwdep,snd_hda_intel,snd_hda_codec,snd_hda_codec_realtek,snd_timer,snd_compress,snd_soc_core,snd_pcm
+intel_lpss             16384  1 intel_lpss_pci
+wmi_bmof               16384  0
+intel_pch_thermal      16384  0
+dell_wmi_aio           16384  0
+soundcore              16384  1 snd
+sparse_keymap          16384  2 dell_wmi,dell_wmi_aio
+intel_wmi_thunderbolt    20480  0
+idma64                 20480  0
+virt_dma               20480  1 idma64
+ie31200_edac           16384  0
+mac_hid                16384  0
+acpi_pad              184320  0
+sch_fq_codel           20480  2
+ib_iser                45056  0
+rdma_cm                53248  1 ib_iser
+iw_cm                  45056  1 rdma_cm
+ib_cm                  53248  1 rdma_cm
+ib_core               249856  4 rdma_cm,iw_cm,ib_iser,ib_cm
+iscsi_tcp              24576  0
+libiscsi_tcp           28672  1 iscsi_tcp
+libiscsi               49152  3 libiscsi_tcp,iscsi_tcp,ib_iser
+scsi_transport_iscsi    73728  4 libiscsi_tcp,iscsi_tcp,ib_iser,libiscsi
+ip_tables              32768  0
+x_tables               32768  1 ip_tables
+autofs4                40960  2
+btrfs                1126400  0
+zstd_compress         159744  1 btrfs
+raid10                 57344  0
+raid456               139264  0
+async_raid6_recov      24576  1 raid456
+async_memcpy           20480  2 raid456,async_raid6_recov
+async_pq               24576  2 raid456,async_raid6_recov
+async_xor              20480  3 async_pq,raid456,async_raid6_recov
+async_tx               20480  5 async_pq,async_memcpy,async_xor,raid456,async_raid6_recov
+xor                    24576  2 async_xor,btrfs
+raid6_pq              110592  4 async_pq,btrfs,raid456,async_raid6_recov
+libcrc32c              16384  2 btrfs,raid456
+raid1                  45056  0
+raid0                  24576  0
+multipath              20480  0
+linear                 20480  0
+hid_generic            16384  0
+uas                    24576  0
+usbhid                 49152  0
+usb_storage            65536  3 uas
+hid                   118784  2 usbhid,hid_generic
+crct10dif_pclmul       16384  1
+crc32_pclmul           16384  0
+ghash_clmulni_intel    16384  0
+aesni_intel           331776  0
+crypto_simd            16384  1 aesni_intel
+cryptd                 20480  2 crypto_simd,ghash_clmulni_intel
+glue_helper            16384  1 aesni_intel
+i915                 1769472  2
+i2c_algo_bit           16384  1 i915
+nvme                   36864  0
+e1000e                221184  0
+drm_kms_helper        139264  1 i915
+syscopyarea            16384  1 drm_kms_helper
+sysfillrect            16384  1 drm_kms_helper
+sysimgblt              16384  1 drm_kms_helper
+ptp                    24576  1 e1000e
+nvme_core              81920  1 nvme
+ahci                   40960  0
+fb_sys_fops            16384  1 drm_kms_helper
+pps_core               24576  1 ptp
+libahci                28672  1 ahci
+drm                   446464  3 drm_kms_helper,i915
+wmi                    28672  6 intel_wmi_thunderbolt,dell_wmi,dell_wmi_aio,wmi_bmof,dell_smbios,dell_wmi_descriptor
+video                  45056  2 dell_wmi,i915
