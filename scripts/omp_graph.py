@@ -36,27 +36,26 @@ par_dict = parseData(par_dir)
 off_dict = parseData(off_dir)
 
 
-all_data = {"FULL":{}, "PART":{}, "OFF":{}}
+means = {}
 
 for key, value in off_dict.items():
-    all_data["OFF"][key] = np.mean(value)
+    means[key] = np.mean(value)
 
-for key, value in full_dict.items():
-    all_data["FULL"][key] = np.mean(value)/all_data["OFF"][key]
 
-for key, value in par_dict.items():
-    all_data["PART"][key] = np.mean(value)/all_data["OFF"][key]
-
-for key, value in off_dict.items():
-    all_data["OFF"][key] = 1.00
-
-df = pandas.DataFrame(all_data)
 new_df = pandas.DataFrame(columns=["Benchmark", "TikTok", "Time"])
 
+for key, value in off_dict.items():
+    for time in value:
+        new_df = new_df.append({"Benchmark":key, "TikTok":"Off", "Time":time/means[key]}, ignore_index=True)  
+  
 
-for i in range(len(df.values)):
-    for j in range(len(df.values[i])):
-        new_df = new_df.append({"Benchmark":df.axes[0][i], "TikTok":df.axes[1][j], "Time":df.values[i][j]}, ignore_index=True)
+for key, value in par_dict.items():
+    for time in value:
+        new_df = new_df.append({"Benchmark":key, "TikTok":"Partial", "Time":time/means[key]}, ignore_index=True)
+
+for key, value in full_dict.items():
+    for time in value:
+        new_df = new_df.append({"Benchmark":key, "TikTok":"Full", "Time":time/means[key]}, ignore_index=True)
 
 fig, ax1 = pyplot.subplots(figsize=(27, 10))
 seaborn.set_style("whitegrid", {'grid.linestyle': '--'})
