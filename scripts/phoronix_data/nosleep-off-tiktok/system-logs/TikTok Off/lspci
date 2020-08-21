@@ -1,0 +1,160 @@
+Slot:	00:00.0
+Class:	Host bridge [0600]
+Vendor:	Intel Corporation [8086]
+Device:	Device [3e30]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	0d
+Driver:	skl_uncore
+Module:	ie31200_edac
+
+Slot:	00:02.0
+Class:	VGA compatible controller [0300]
+Vendor:	Intel Corporation [8086]
+Device:	Device [3e98]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	02
+Driver:	i915
+Module:	i915
+
+Slot:	00:08.0
+Class:	System peripheral [0880]
+Vendor:	Intel Corporation [8086]
+Device:	Xeon E3-1200 v5/v6 / E3-1500 v5 / 6th/7th Gen Core Processor Gaussian Mixture Model [1911]
+SVendor:	Dell [1028]
+SDevice:	Xeon E3-1200 v5/v6 / E3-1500 v5 / 6th/7th Gen Core Processor Gaussian Mixture Model [092e]
+
+Slot:	00:12.0
+Class:	Signal processing controller [1180]
+Vendor:	Intel Corporation [8086]
+Device:	Cannon Lake PCH Thermal Controller [a379]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+Driver:	intel_pch_thermal
+Module:	intel_pch_thermal
+
+Slot:	00:14.0
+Class:	USB controller [0c03]
+Vendor:	Intel Corporation [8086]
+Device:	Cannon Lake PCH USB 3.1 xHCI Host Controller [a36d]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+ProgIf:	30
+Driver:	xhci_hcd
+
+Slot:	00:14.2
+Class:	RAM memory [0500]
+Vendor:	Intel Corporation [8086]
+Device:	Cannon Lake PCH Shared SRAM [a36f]
+SVendor:	Intel Corporation [8086]
+SDevice:	Device [7270]
+Rev:	10
+
+Slot:	00:15.0
+Class:	Serial bus controller [0c80]
+Vendor:	Intel Corporation [8086]
+Device:	Device [a368]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+Driver:	intel-lpss
+Module:	intel_lpss_pci
+
+Slot:	00:16.0
+Class:	Communication controller [0780]
+Vendor:	Intel Corporation [8086]
+Device:	Cannon Lake PCH HECI Controller [a360]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+Driver:	mei_me
+Module:	mei_me
+
+Slot:	00:16.3
+Class:	Serial controller [0700]
+Vendor:	Intel Corporation [8086]
+Device:	Device [a363]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+ProgIf:	02
+Driver:	serial
+
+Slot:	00:17.0
+Class:	SATA controller [0106]
+Vendor:	Intel Corporation [8086]
+Device:	Cannon Lake PCH SATA AHCI Controller [a352]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+ProgIf:	01
+Driver:	ahci
+Module:	ahci
+
+Slot:	00:1b.0
+Class:	PCI bridge [0604]
+Vendor:	Intel Corporation [8086]
+Device:	Device [a340]
+Rev:	f0
+Driver:	pcieport
+
+Slot:	00:1f.0
+Class:	ISA bridge [0601]
+Vendor:	Intel Corporation [8086]
+Device:	Device [a306]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+
+Slot:	00:1f.3
+Class:	Audio device [0403]
+Vendor:	Intel Corporation [8086]
+Device:	Cannon Lake PCH cAVS [a348]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+Driver:	snd_hda_intel
+Module:	snd_hda_intel
+Module:	snd_soc_skl
+
+Slot:	00:1f.4
+Class:	SMBus [0c05]
+Vendor:	Intel Corporation [8086]
+Device:	Cannon Lake PCH SMBus Controller [a323]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+Module:	i2c_i801
+
+Slot:	00:1f.5
+Class:	Serial bus controller [0c80]
+Vendor:	Intel Corporation [8086]
+Device:	Cannon Lake PCH SPI Controller [a324]
+SVendor:	Dell [1028]
+SDevice:	Device [092e]
+Rev:	10
+
+Slot:	00:1f.6
+Class:	Ethernet controller [0200]
+Vendor:	Intel Corporation [8086]
+Device:	Ethernet Connection (7) I219-LM [15bb]
+SVendor:	Dell [1028]
+SDevice:	Ethernet Connection (7) I219-LM [092e]
+Rev:	10
+Driver:	e1000e
+Module:	e1000e
+
+Slot:	01:00.0
+Class:	Non-Volatile memory controller [0108]
+Vendor:	Vendor [1e0f]
+Device:	Device [0001]
+SVendor:	Unknown vendor [1e0f]
+SDevice:	Device [0001]
+ProgIf:	02
+Driver:	nvme
+Module:	nvme
+NUMANode:	0
+
