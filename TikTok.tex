@@ -62,15 +62,27 @@
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{cleveref}
+
+\usepackage[english]{babel}  
+\addto\extrasenglish{  
+  \def\sectionautorefname{Section}  
+  \def\subsectionautorefname{Subsection}
+  \def\itemautorefname{Attack}
+  \def\figureautorefname{Figure}
+  \def\tableautorefname{Table}
+}
 \usepackage{hyperref}
 
 % Comment macros
+\newcommand{\uros}[1]{\textcolor{pink}{\textbf{UT:} #1}}
 \newcommand{\pra}[1]{\textcolor{blue}{\textbf{PS:} #1}}
 \newcommand{\nb}[1]{\textcolor{green}{\textbf{NB}: #1}}
 \newcommand{\mat}[1]{\textcolor{red}{\textbf{Mat:} #1}}
 \newcommand{\evalfull}[1]{20}
 \newcommand{\evalnocalls}[1]{3}
 \newcommand{\sysname}{TikTok}
+\newcommand{\roughevaloverheadbad}{18\%}
+\newcommand{\roughevaloverheadbetter}{2-4\%}
 
 
 %-------------------------------------------------------------------------------
@@ -103,10 +115,11 @@ Anonymous submission \#TODO to Usenix SEC21
 \begin{abstract}
 %-------------------------------------------------------------------------------
 
-Double-fetch bugs have been discovered in all the major operating systems.
+Double-fetch bugs have been discovered in all major operating systems.
 They occur when the data has been fetched across the trust-boundary the second
-time without verifying that it is unchanged. This leaves the kernel in an
-inconsistent state, making it possible to access illegal memory.
+time without verifying that it has not changed. This leaves the kernel in an
+inconsistent state, making it possible to access illegal memory, deny service and
+even escalate privilege.
 
 Today, the solution for double-fetches is to detect and fix them. However, they
 exhibit illegal behavior only under specific conditions, making the detection
@@ -117,9 +130,9 @@ approach useless. We propose \sysname - the mitigation for double-fetches.
 while the call is executing.
 
 \sysname shows no noticable drop of performance when evaluated on CPU-bound
-workloads. On workloads with a large number of system calls, \sysname shows less
-than 5\% when protecting rare system calls, and 20\% when all of the system
-calls are secured.
+workloads. On workloads with a large number of system calls, \sysname shows
+\roughevaloverheadbetter when protecting rare system calls, and
+\roughevaloverheadbad when all of the system calls are secured.
 
 
 \end{abstract}
@@ -130,24 +143,25 @@ calls are secured.
 
 
 % Syscalls are a lucrative attack surface for adversaries which needs to be protected
-To improve security systems are partitioned into an \emph{untrusted} and a
+To improve security, systems are partitioned into \emph{untrusted} and a
 \emph{trusted} zones by a \emph{trust boundary}. All data that crosses the trust
 boundary from the untrusted zone must be verified.
-Double-fetches\cite{serna08doublefetch, twizsgrakky07ring0, wilhelm2016xenpwn,
+Double-fetches~\cite{serna08doublefetch, twizsgrakky07ring0, wilhelm2016xenpwn,
 wang2018survey} occur when a higher-privileged code (e.g., the kernel) reads the
 same data twice from the lower-privileged space (e.g., user-space). In-between
-the two reads, the data can be changed concurrently. This makes double-fetches a
-type of a \emph{race condition} between the two threads of different privileges.
-\emph{Time-of-check to time-of-use (TOCTTOU)} occurs when the first read is used
-in a check, while the second one is used for processing. Many double-fetch bugs
-have been found in different kernels and hypervisors~\cite{cve201812633,
-cve202012652, cve20131332, cve201920610, cve20158550, cve201610439,
-cve201610435, cve201610433, cve20195519, cve20168438}. Considering that
-double-fetches frequently appear in drivers, legacy systems with binary drivers
-currently have no solution for them. Furthermore, Watson~\cite{watson2007} blames
-an unfixable TOCTTOU bug as a reason why \emph{system call wrappers} aren't
-secure. A system that mitigates double-fetches in system calls is needed to
-protect the kernel in case the bugs cannot be fixed.
+the two reads, the data could have been changed concurrently. This makes
+double-fetches a type of a \emph{race condition} between the two threads of
+different privileges. \emph{Time-of-check to time-of-use (TOCTTOU)} occurs when
+the first read is used in a check, while the second one is used in computation.
+Many double-fetch bugs have been found in different kernels and
+hypervisors~\cite{cve201812633, cve202012652, cve20131332, cve201920610,
+cve20158550, cve201610439, cve201610435, cve201610433, cve20195519,
+cve20168438}. Considering that double-fetches frequently appear in drivers,
+legacy systems with binary-only drivers cannot be patched, even if a bug is
+found. Furthermore, Watson~\cite{watson2007} blames an unfixable TOCTTOU bug as
+a reason for the insecurity of \emph{system call wrappers}. A system that
+mitigates double-fetches in system calls is needed to protect the kernel in case
+the bugs cannot be fixed.
 
 
 % Define our goal
@@ -171,75 +185,76 @@ Double-fetch bugs occur when an adversary invokes a system call with arguments
 stored in memory. The kernel will read the arguments the first time and perform
 corresponding checks. If the timing is perfect, the adversary can use the
 additional thread under their control to change the arguments, right after the
-necessary checks have been finished. In case of the double-fetch bug, the kernel
-will read in the values again and presume that they haven't changed.
+checks have been finished. In case of the double-fetch bug, the kernel
+will read the data again and presume that it has not changed.
 
-The main issue is that the adversary was able to change values in the memory
-while the system call was still executing. \sysname fixes double-fetch bugs by
-preventing the adversary from writing to the arguments, until the end of the
-system call. This is accomplished by extending the API for reading from user
-space to mark the pages containing arguments in the \emph{system page table} as
-\emph{read-only}. All of the writes to those pages will trigger a \emph{page-fault}
-and execute a \emph{page-fault handler}. In the handler, they will wait for all
-the system calls to finish, and continue execution. \sysname thus prevents the
-changes to the system call arguments.
+The main issue is the adversary changing the values in memory, while the system
+call was still executing. \sysname mitigates double-fetch bugs by preventing the
+adversary from writing to the arguments, until the end of the system call. This
+is accomplished by extending the API for reading from user-space The pages
+containing arguments are marked in the \emph{system page table} as
+\emph{read-only}. All of the writes to those pages trigger a \emph{page-fault}
+and execute a \emph{page-fault handler}. In the handler, the offending threads
+wait for all the system calls to finish, before continuing execution. \sysname
+thus prevents the changes to the system call arguments.
 
 % Cover the second point. Mention the calls for which it makes no sense to protect
-Enabling writes to the marked pages from the kernel would enable the adversary
-to abuse system calls to write and change the arguments. Prevention of writes
-from the kernel is also necessary to stop the arguments from being changed.
+Preventing writes from user-space is not enough to guarantee immutability of arguments.
+The adversary can invoke system calls which write to memory and force the kernel
+to perform the write for them. The protection against kernel writes is necessary
+as well.
 
 Unfortunately, some system calls both read from and write into the same memory.
-Such calls would first mark a page as read-only, and them fault and wait for
-themselves (\emph{deadlock}) when they try to write. To accomodate such calls,
-we extend the API for writing to user space to save and defer the writes into
-the marked pages until the end of the call. At that time, they can be either
-successfully performed, or safely wait for other system calls to also end and
-unmark the pages.
+Such calls need to be able to write to the pages only they have marked, and no
+other pages. To accomodate such calls, we extend the API for writing to user
+space to save and defer the writes into the marked pages until the end of the
+call. At that time, they can be either successfully performed, or safely wait
+for other system calls to exit and unmark the pages.
 
 By introducing these changes to the API for reading from and writing into userspace,
-system calls turn into transactions. They have a view of the memory frozen in time
-when each memory location has been read for the first time, while all the writes
-are executed together (commited) at the end of the call.
+system calls have a view of memory similar to transactions. \sysname freezes the
+value of all addresses at the moment they were read the first time by the call. 
+The writes to marked pages also become visible only at the end of the call. 
 
 A small subset of system-calls (e.g. \texttt{pollfd}, \texttt{futex}) depend on
-the writes from user-space or double-fetches for the correct behavior. Also,
+the writes from user-space or double-fetches for the correct behavior. Similarly,
 system calls that read memory and potentially take a long time to execute will
 keep those pages marked during their execution. \sysname must be disabled for
 such calls and they need to be manually inspected for double-fetches.
 
-By turning system calls into transactions and ignoring certain calls, \sysname
-guarantees the correct execution of the system with the protections enabled.
+By changing the view of the memory that system calls have and ignoring certain
+calls, \sysname guarantees the correct execution of the system with the
+protections enabled.
 
 % Cover the third point
 Writes from the user-space will trigger a \emph{page-fault handler} where they
-will wait for the unmarking. All the offending threads will therefore be stopped.
+wait for the unmarking. All the offending threads pause execution.
 After all the system calls exit, the threads waiting for them to free arguments
-will continue the execution by repeating the write. All of them will execute
-correctly -- after a short delay.
+continues the execution by repeating the write. All of them will execute 
+--- after a short delay.
 
 % Introduce TikTok
 We present \sysname --- a memory marking extension to the Linux kernel. \sysname
-provides system-calls with a checkpointed view of the memory at the time they
-have been read the first time. \sysname also groups all the writes in a system
-call into a transaction which is executed at its end. By mitigating
+provides system-calls with a view of the memory frozen at the time it
+has been read the first time. \sysname also groups all the writes that could
+modify protected memory and executes them at the end of the call. By mitigating
 double-fetches, \sysname provides protection even against the double-fetch bugs
-even in legacy drivers, which are not maintained any more. Furthermore, \sysname
-will render previously unavoidable double-fetches (such as a TOCTTOU in
-system-call wrappers) completely benign and safe to use. \sysname works on modern
+in the drivers which are not maintained anymore. Furthermore, \sysname
+renders previously unavoidable double-fetches (such as a TOCTTOU in
+system-call wrappers) completely benign. \sysname works on modern
 Linux distributions (Ubuntu Server 18.04 LTS) and doesn't require any
-modifications to user programs. It can be implemented in other kernels
+modifications to the user programs. It can be implemented in other kernels
 and architectures which use page-tables and a well defined API to communicate
-with the user space.
+with the user space (\texttt{read\_in} and \texttt{write\_out} abstractions).
 
 % Sneak-peek into the results
 Benchmarking \sysname showed that multithreaded programs with lots of marking
-system-calls, such as Apache and NginX, show an 18\% drop in performance with
-TikTok protecting almost all the system-calls. By reducing the number of
-protected calls, the overhead drops to 2-4\%. CPU-bound programs showed almost
-no performance drop when using \sysname, even when they comprised multiple
-threads and message passing (OMP, MPI).
-\mat{Create marcos for overhead.}
+system-calls, such as Apache and NginX, suffer an \roughevaloverheadbad drop in
+performance with \sysname protecting almost all the system-calls. By reducing
+the number of protected calls, the overhead drops to \roughevaloverheadbetter.
+CPU-bound programs showed almost no performance drop when using \sysname, even
+when they used multiple threads (OMP) and message passing (MPI).
+
 
 
 % Three new things in this paper
@@ -248,8 +263,8 @@ The main contributions of this paper are:
 
 \begin{itemize}
 \item A technique how to temporarily prevent the change of memory by safely
-      postponing both userspace and kernel threads
-\item \sysname --- mitigation for the double-fetch and TOCTTOU attacks on system
+      postponing both userspace and kernel writes
+\item \sysname --- a mitigation for the double-fetch and TOCTTOU attacks on system
       call arguments in the Linux kernel
 \end{itemize}
 
@@ -268,27 +283,27 @@ The main contributions of this paper are:
 arguments as \emph{read-only}. Different system calls have different
 relationships with shared memory, and interact with \sysname differently in
 practice. This section provides the background information necessary to reason
-why \sysname protects the arguments from change, while enabling the threads to
+why \sysname protects the arguments from change while enabling the threads to
 execute correctly.
 
 % I want to cover why this background is needed. IPC is the most problematic
 % because it is used to justify the abscence of deadlocks
 \autoref{subsec:ipc} introduces two different ways of communication between
-processes - \emph{shared memory} and \emph{message-passing}. \sysname affects both
-of these methods because the arguments of the message-passing system calls are
-stored in (potentially shared) memory. If \sysname marks message-passing
+processes - \emph{shared memory} and \emph{message-passing}. \sysname affects
+both of these methods because the arguments of the message-passing system calls
+are stored in (potentially shared) memory. If \sysname marks message-passing
 system-call arguments, this introduces additional synchronization points (waits)
-when writing to them. These new waits can interact with already present
-synchronization primitives to cause deadlocks. In \autoref{sec:deadlocks} it is
-explained why they do not appear in practice.
+when writing to them. The new waits can interact with already present
+synchronization primitives to cause deadlocks. In \autoref{sec:deadlocks} we
+explain why they do not appear in practice.
 
 \autoref{subsec:vm} covers the organization of \emph{virtual memory},
-\emph{page-tables} and the interface the Linux kernel uses to access the user
-space memory. This section is essential to understanding the implementation of
-\sysname.
+\emph{page-tables} and the interface the Linux kernel uses to access the
+user-space memory. This section is essential to understanding the implementation
+of \sysname.
 
 \autoref{subsec:doublefetch} details the \emph{double-fetch} bug that \sysname
-is mitigating. It explains the source and different types of double-fetch bugs.
+is mitigating. It explains its cause and the different types of double-fetch bugs.
 
 
 \subsection{Interprocess Communication}
@@ -304,24 +319,20 @@ Processes must monitor shared memory for changes, leading to unnecessary
 polling.
 
 % Intro to message-passing
-Message passing consists of one process calling send, and another one calling
-receive to fetch the message. Synchronous message passing blocks execution until
-the execution of the calls has finished. However, on systems with shared memory
-unnecessary copying of messages can occur instead of passing the same buffer to
-the receiver.
-
+Message passing consists of one process calling \texttt{send}, and another one
+calling \texttt{receive} to fetch the message. Synchronous message passing
+blocks execution until the calls have finished.
 % The state of the modern OSs and concurrent programs
 Modern operating systems support both of these approaches. \sysname interferes
-with message passing system calls by linking them to shared memory. Synchronous
-message passing calls will keep their arguments marked, until they end. This
-behavior introduces additional synchronization points and can be problematic if
-the threads also share memory.
+with message-passing system calls by linking them to shared memory. Marking the
+arguments adds additional synchronization points that can interact with the
+blocking semantics of some system calls.
 
-\subsection{Linux Memory Subsystem} \label{subsec:vm}
-
+\subsection{Linux Memory Subsystem}
+\label{subsec:vm}
 
 % Paged VM and the introduction to permissions we will later use in TikTok
-Linux uses \emph{Paged virtual memory}. Programs use \emph{virtual addresses}
+Linux implements \emph{paged virtual memory} and uses \emph{virtual addresses}
 which map to \emph{physical addresses} in RAM. The mapping function is defined
 for each process by a multi-level \emph{page-table}.
 
@@ -369,9 +380,9 @@ software.
 On an invalid access (e.g., wrong permissions, page not present) the MMU will
 trigger a page-fault. The page-fault handler executes in the kernel context of
 the faulting thread and performs the appropriate action (e.g. load a page, kill
-a thread). With the advent of cloud computing, \emph{user-space page-fault
+the thread). With the advent of cloud computing, \emph{user-space page-fault
 handling} has been added to the Linux kernel. \sysname relies on the page-fault
-handler for protection, so this feature must be disabled.
+handler for protection, so the user-space page-fault handling must be disabled.
 
 Memory in Linux can be either \emph{file-backed} or \emph{anonymous}.
 File-backed pages have a map to the corresponding file. Anonymous pages do not
@@ -380,7 +391,7 @@ have a backing file (e.g., stack and heap).
 Another classification is based on privacy: \emph{private} and \emph{shared}. 
 Private memory is part of only one virtual memory space. This memory space can 
 be accessed by multiple threads in a process, but no threads outside the process
-have access. Shared memory can be accessed by multiple processes.
+have access. Shared memory can be accessed by different processes.
 
 % This is the most important paragraph and a basis for one of the attacks. The
 % previous two paragraphs are just the introduction
@@ -393,22 +404,20 @@ data is \emph{preserved} between (un)mappings.
 
 Linux user a well-defined interface to communicate with the user-space:
 \texttt{(\_\_)copy\_(from/to)\_user}, \texttt{(\_\_)(get/put)\_user},
-\texttt{user\_str(cpy/len)}. BSD also provides a similar interface using
-\texttt{copy\_in} and \texttt{copy\_out} functions.
+\texttt{user\_str(cpy/len)}. When the actual implementation is not important,
+this API is refered to \texttt{read\_in} and \texttt{write\_out}.
 
 The abstraction is needed due to different handling of page-faults in user-space
-and in the kernel. User-space memory can be \emph{paged-out} to the disk, and
+and in the kernel. User-space memory can be \emph{paged-out} to the disk and
 trigger a page-fault on access. However, kernel memory is never paged-out and
-should not cause a page-fault. All the user-space pointers in the kernel are
-processed by this limited set of functions that know how to handle a fault.
+does not cause page-faults. All the user-space pointers in the kernel are
+processed by this limited set of functions that know how to handle page-faults.
 
-\sysname extends this interface to perform additional checks and bookkeeping of
-marked pages.
+\sysname extends this interface to perform additional checks and the bookkeeping
+of marked pages.
 
 \subsection{Double Fetch Bugs}
 \label{subsec:doublefetch}
-
-\mat{This is actually essential and one of the main parts of the BG!}
 
 \begin{figure}[]
   \centering
@@ -457,7 +466,7 @@ static long vbg_misc_device_ioctl(
 \emph{Double-fetch} bugs occur when a privileged environment (such as the
 kernel) reads untrusted memory two or more times and the read values aren't
 identical. (\autoref{fig:doublefetch}) In between those two reads, memory could
-have been changed by an unprivileged adversary. Considering that this bug relies
+have been changed by an unprivileged adversary. Considering that the bug relies
 on carefully timed accesses for two different threads, it is a variant of a race
 condition. The situation where the first fetch validates the value of the
 fetched variable, but the computation is only performed on the second fetch, is
@@ -468,17 +477,17 @@ pu2006methodical, wei2010modeling, tsafrir2008portably}.
 
 \autoref{code:cvedoublefetch} displays the double-fetch bug in the Virtual Box
 drivers for the Linux kernel~\cite{cve201812633}. The first fetch occurs on line
-10. The program performs gets a header and checks the arguments (lines 13 -- 17)
+10. The program performs gets a header, checks the arguments (lines 13 -- 17)
 and fetches the whole argument into the variable \texttt{buf} (line 21). The new
-value is then processed (line 27).
+value is then used (line 27).
 
 Note that the header is fetched twice --- on lines 10 and 21. This gives the
-opportunity for the attacker to change the values in the header. Considering
-that the header isn't verified the second time it is read, the attacker can
+opportunity for the attacker to change the values in it. Considering
+that the header isn't verified the second time, the attacker can
 leave the kernel in an inconsistent state. The fix for this bug
 (\autoref{cvedoublefetchfix}) doesn't fetch the header the second time. It
-copies the header into \texttt{buf}, while the second fetch copies everything
-except the header.
+copies the header into \texttt{buf}, while the second fetch skips reading the header
+again.
 
 \begin{lstlisting}[language=C, caption=CVE-2018-12633 Double Fetch Fix,
   label=code:cvedoublefetchfix,  breaklines=true
@@ -512,10 +521,10 @@ vulnerabilities in different kernels~\cite{jurczyk2013bochspwn, wang2018survey}.
 % stopping the writes, preventing bypass using file-backed pages, system calls
 % that are ignored. The most important part is showing the conditions for 
 % introducing deadlocks
-The adversary has access to a user account on a target machine. They can compile
-and execute arbitrary code, including the system calls. Some of the system calls
-have double-fetch vulnerabilities, and the adversary wants to exploit them to
-obtain root access.
+The adversary has access to a user account on the target machine. They can compile
+and execute arbitrary code, including system calls. Some of the system calls
+have double-fetch vulnerabilities, and the adversary wants to exploit them for
+privilege escalation.
 
 \section{TOCTTOU Attacks}
 
@@ -535,25 +544,26 @@ Watson~\cite{watson2007exploiting} in his analysis of CerbNG mentioned attacks
 
 \subsection{User-Space Writes}
 
-\emph{Writes from user-space} consist of a malicious user trying to directly
+\emph{Writes from user-space} consist of the malicious user trying to directly
 write to the argument stored in memory, while the system-call is being executed
 in another thread. The protection should stop the write from being visible in
-the call, but the write should still execute eventually.
+the call, but the write should still occur eventually.
 
 \subsection{Kernel Writes}
 
 \emph{Writes from the kernel} are indirectly triggered. The user performs a
 \texttt{read} system-call with the target address as the destination. The data
-is then written to this location by the \texttt{read} system-call with the
-kernel privileges. The protection should prevent the write from being visible in
-the marking system call, but \texttt{read} should still execute eventually.
+is then written to this location by the \texttt{read} system-call from the
+kernel. The protection should prevent the write from being visible in the
+marking system call, but \texttt{read} should still execute eventually.
 
 \subsection{Remapping File-Backed Pages}
 
 \emph{Remapping file-backed pages} is accomplished by mapping marked pages in
-another process. The user stores the arguments on a file-backed page and maps
-the file as writable while the system call is executing. They are then free to
-write to the marked arguments, even though \emph{other mappings} are read-only.
+another process. The malicious user stores the arguments on a file-backed page
+and maps the file again as writable, while the system call is executing. The
+user is then free to write to the new mapping, even though \emph{other mappings}
+are read-only.
 
 \begin{enumerate}
   \item Map a file \texttt{F} in the process \texttt{A} to a page \texttt{P}
@@ -572,7 +582,7 @@ marked as read-only.
 Files in Linux can be accessed in two ways:
 \begin{itemize}
     \item by mapping the file to memory
-    \item by using system calls to modify the file (e.g., \texttt{write})
+    \item by using the system calls to modify the file (e.g., \texttt{write})
 \end{itemize}
 
 If the file-system allows the destination pages of the \texttt{write} call to be
@@ -588,6 +598,12 @@ even if no writes occur in-between the reads.
 
 \section{Design}
 \label{sec:design}
+
+In this section we introduce the design of \sysname and iteratively improve upon
+it. The main idea is introduced in \autoref{subsec:mainmechanism}. It is
+subsequently developed in \autoref{subsec:simplistic} and improved in \autoref{subsec:complex}.
+Modifications that prevent the bypassing of the system are described in \autoref{subsec:fileprot}.
+Finally, the system calls that cannot be protected are discussed in \autoref{subsec:ignoredcalls}.
 
 \subsection{The Main Protection Mechanism}
 \label{subsec:mainmechanism}
@@ -616,7 +632,7 @@ offending write is repeated.
 
 
 \subsection{Simplistic Designs}
-\label{simplistic}
+\label{subsec:simplistic}
 The easiest way to implement the protection from \autoref{subsec:mainmechanism}
 is to mark user-space pages as accessible only from the kernel. On modern
 architectures this is accomplished by setting the \emph{superuser} flag in the
@@ -640,7 +656,7 @@ memory-marking system.
 
 
 \subsection{Protecting Anonymous Pages}
-\label{complex}
+\label{subsec:complex}
 
 Deadlocks in self-writing calls in \autoref{simplistic} are a consequence of
 writing into a marked page. To solve this problem, \sysname needs to also extend
@@ -680,7 +696,7 @@ After reaquiring them, the operations are either repeated or continued (if the
 needed data structure hasn't changed).
 
 \subsection{Protecting File-Backed Pages}
-
+\label{subsec:fileprot}
 The previous design protects against changes to marked anaonymous pages. It is
 still possible to bypass these protections if file-backed pages are used.
 Watson~\cite{watson2007exploiting} described two ways to bypass such a system.
@@ -1030,40 +1046,90 @@ to writing different data to the file.
 \section{Evaluation}
 \label{sec:evaluation}
 
-\begin{figure*}[]
-  \centering
-  \includegraphics[width=\linewidth]{img/eval.pdf}
-  \caption{Performance of TikTok Compared to the Stock Kernel}
-  \label{fig:tiktokeval}
-\end{figure*}
+\sysname was evaluated on different benchmarks to measure the drop in performance.
+The three main profiles have been compared:
+\begin{description}
+  \item[\sysname On] protects as many system calls as possible
+  \item[\sysname Partial] does not protect the arguments of \texttt{write} and its variants
+  \item[\sysname Off] is Linux kernel compiled without \sysname  
+\end{description}
 
-\mat{Describe what you evaluate and why you evaluate it. Break up into
-microbenchmarks to show overhead and different usage scenarios. For each section
-talk about trade-offs and results.}
+\subsection{NAS Parallel Benchmark}
 
-TikTok has been evaluated on various kernel benchmarks in Phoronix
-Test Suite\cite{phoronix}. The test machine was running Ubuntu Server 18.04 LTS
-with the Linux kernel 5.4.0-rc3+ on Intel i7-9700 with 16GB of RAM.
+\emph{NAS Parallel Benchmarks (NPB)} is a benchmark introduced by NASA. It
+consists of several parallel programs using different communication patterns.
+\sysname introduces additional synchronization points between threads, so it
+should affect multi-threaded programs more than single-threaded. NPB also
+features multiple workload sizes. NPB is available for multiple technology
+stacks for parallel programming. \sysname was evaluated on both \emph{OpenMP}
+and \emph{MPI} versions of the benchmark with workloads of class A.
 
-\Cref{fig:tiktokeval} shows the results of the Phoronix benchmark. All
-results have been normalized to measure performance (higher is better) with the
-performance of the stock kernel being the baseline.
+OpenMP is a compiler extension that with minimal effort parallelizes the software
+by using multiple threads. All the threads still use the same VM space, keeping
+the overhead minimal. \sysname was evaluated with 8 threads.
 
-Benchmarks Linux compilation, OpenSSL, Redis, Basis, Git and PyBench show a
-small degradation in performance --- less than 2\%. These programs don't feature
-a lot of inter-process communication. Even the parallelized benchmarks such as
-Linux kernel compilation generate independent processes.
+MPI implements parallel execution by launching multiple processes which communicate
+by message-passing. It is more heavyweight than OpenMP as every process has a
+separate VM space. Due to the limitations of some benchmarks, \sysname was 
+evaluated with 16 processes.
+
+The benchmarks were run with \sysname protecting almost all calls, with
+\texttt{write} disabled and without \sysname at all. Both benchmarks show no
+significant difference between different setups. MPI however has wider
+standard-error margins, probably introduced by the heavier startup and
+communication. Shorter benchmarks magnify relative differences (explaining the
+artifacts for \texttt{is} and \texttt{ep}). We can draw a conclusion that \sysname
+doesn't incur a noticable performance penality for CPU-bound workloads, even when
+they involve multiple threads/processes.
+
+\subsection{Phoronix Test Suite}
+
+\emph{Phoronix Test Suites (PTS)} evaluates systems on real-world software and
+hardware. We evaluated \sysname on it to judge the actual performance impact
+during the everyday use.
+
+\autoref{fig:tiktokeval} shows the results of the Phoronix benchmark. All
+results have been normalized to with \sysname disabled as a baseline. Benchmarks
+marked with an asterisk (\*) measure execution time (lower is better), while others
+measure performance (higher is better).
+
+Linux compilation, OpenSSL, Redis, Git and PyBench do not show a noticable
+degradation of performance. These programs don't feature a lot of inter-process
+communication. Even the parallelized benchmarks such as Linux kernel compilation
+generate independent processes.
 
 However, the two web servers (Apache and NGINX) show a significant drop in
-performance (13.6\% and 11.0\%). They are multithreaded applications with a
-significant number of system calls being executed. The IPC TCP benchmark has
-only two communicating processes and exhibits a smaller overhead (4.3\%).
-\mat{This needs a much longer explanation.}
+performance (Apache -- 16.87\% and NGINX -- 16.38\%) with \sysname protecting all calls. \sysname
+by design affects parallel applications the most (by introducing forced
+synchronization on accesses and featuring more PTEs to mark) and software with
+numerous system calls (by marking all the arguments stored in-memory). Ignoring
+writes calls improves the situation slightly (Apache -- 15.64\% and NGINX -- 13.41\%).
+
+The IPC TCP benchmark consists only of executing 2 system calls to transfer
+the data between two threads. Compared to other benchmarks IPC benchmark has fewer
+threads than web-servers, but also executes a significant number of system calls.
+This places it in-between two groups with respect to the drop in performance ().
+
+Apache and NGINX benchmarks were executed with two more \sysname profiles to 
+see how reducing the number of protected system calls affects performance:
+
+\begin{description}
+  \item[Frequent system calls ignored] ignores the most frequent calls executed in the benchmarks, as well as \texttt{write}.
+  \item[All system calls ignored] does not protect any system calls.
+\end{description}
+
+Ignoring frequent system calls leads to a smaller overhead (Apache -- 5.34\% and
+NGINX -- 2.77\%). The performance is almost equal to not protecting any system
+calls at all (Apache -- 2.46\% and NginX -- 2.25\%). Even when \sysname
+is not providing any protection, the overhead of \texttt{copy\_to\_user} checks
+is present.
+
+\uros{I will need to obtain new numbers from perf, because I slightly changed the system. I expect the same results.}
 
 Analyzing Apache and IPC benchmark executions with \texttt{perf} it was possible
 to determine which functions were executing slower with TikTok.
 \Cref{table:perf} shows how much time the programs spend in the functions added
-by TikTok. Percentages of individual segments have been measured by
+by \sysname. Percentages of individual segments have been measured by
 \texttt{perf}, while the total overhead is calculated from the results of the
 benchmark. Furthermore, TLB is flushed both during the marking and unmarking of
 pages.
@@ -1103,7 +1169,7 @@ overhead.
 
 IPC benchmark executes only \texttt{write} and \texttt{read} calls. It doesn't
 incur any overhead on TLB flushes because none of these calls mark pages.
-However, the protections against bypassing TikTok using these calls are still
+However, \texttt{copy\_to\_user} checks are still
 active, leading to a significant locking overhead. Without TLB flushes it is
 interesting to notice that the overhead of individual components roughly adds
 up to the total overhead in the IPC benchmark.
@@ -1128,7 +1194,7 @@ Watson~\cite{watson2007exploiting} criticizing the security of system call
 wrappers (\autoref{subsec:watson}). The implications of \sysname for system call
 wrappers are discussed in \autoref{sec:furtherwork}.
 
-\subsection{Watson's Critique of System Call Wrappers}
+\subsection{Dr Watson's Critique of System Call Wrappers}
 \label{subsec:watson}
 Watson's paper~\cite{watson2007exploiting} scrutinized the security of many
 system call wrappers. Not only did he find that all of them were insecure,
@@ -1213,9 +1279,11 @@ technique that has been present for several decades.
 \label{sec:furtherwork}
 Integration with an existing system-call wrapper would lead to the improved
 flexibility and performance of \sysname. SecComp\cite{seccomp} and
-eBPF\cite{ebpf} are obvious candidates that would benefit from such an
-extension. The obvious optimization would be to mark only the pages accessed by
-the filter, and not the system-call body.
+eBPF\cite{ebpf} are the obvious candidates that would benefit from such an
+extension. A possible optimization would be to mark only the pages accessed by
+the filter, and not the system-call body. It would also be beneficial to
+investigate possible batching of TLB flushes, considering how much they
+contribute to the execution overhead.
 
 \section{Conclusion}
 

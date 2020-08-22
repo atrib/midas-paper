@@ -44,22 +44,22 @@ for key, value in off_dict.items():
 
 new_df = pandas.DataFrame(columns=["Benchmark", "TikTok", "Time"])
 
-for key, value in off_dict.items():
+for key, value in sorted(off_dict.items()):
     for time in value:
-        new_df = new_df.append({"Benchmark":key, "TikTok":"Off", "Time":time/means[key]}, ignore_index=True)  
+        new_df = new_df.append({"Benchmark":key, "TikTok":"Off", "Time [%]":100.0*time/means[key]}, ignore_index=True)  
   
 
-for key, value in par_dict.items():
+for key, value in sorted(par_dict.items()):
     for time in value:
-        new_df = new_df.append({"Benchmark":key, "TikTok":"Partial", "Time":time/means[key]}, ignore_index=True)
+        new_df = new_df.append({"Benchmark":key, "TikTok":"Partial", "Time [%]":100.0*time/means[key]}, ignore_index=True)
 
-for key, value in full_dict.items():
+for key, value in sorted(full_dict.items()):
     for time in value:
-        new_df = new_df.append({"Benchmark":key, "TikTok":"Full", "Time":time/means[key]}, ignore_index=True)
+        new_df = new_df.append({"Benchmark":key, "TikTok":"Full", "Time [%]":100.0*time/means[key]}, ignore_index=True)
 
 fig, ax1 = pyplot.subplots(figsize=(27, 10))
 seaborn.set_style("whitegrid", {'grid.linestyle': '--'})
 
 ax1.grid(True, axis='y')
-seaborn.barplot(data=new_df, x="Benchmark", y="Time", hue="TikTok", ax=ax1).set_title("OMP Performance")
+seaborn.barplot(data=new_df, x="Benchmark", y="Time [%]", hue="TikTok", ax=ax1).set_title("OMP Performance")
 pyplot.show()

@@ -48,7 +48,7 @@ for i in range(len(TIKTOK_FULL)):
 
 
 df = pandas.DataFrame({
-    'Benchmark': ['*Timed Linux \nKernel Compilation \nv5.4', 'OpenSSL v1.1.1 \nRSA 4096-bit', 'Redis v5.0.5 \nGET', 'Redis v5.0.5 \nSET', '*PyBench \nv2018-02-16', '*Git', 'Apache Benchmark \nv2.4.29', 'NGINX Benchmark \nv1.9.9', 'IPC TCP 128b'],
+    'Benchmark': ['Timed Linux \nKernel Compilation \nv5.4*', 'OpenSSL v1.1.1 \nRSA 4096-bit', 'Redis v5.0.5 \nGET', 'Redis v5.0.5 \nSET', 'PyBench \nv2018-02-16*', 'Git*', 'Apache Benchmark \nv2.4.29', 'NGINX Benchmark \nv1.9.9', 'IPC TCP 128b'],
     'TikTok OFF': tiktok_off_percent,
     'TikTok PART': tiktok_part_percent,
     'TikTok ON': tiktok_on_percent
@@ -56,6 +56,7 @@ df = pandas.DataFrame({
 fig, ax1 = pyplot.subplots(figsize=(27, 10))
 tidy = df.melt(id_vars='Benchmark').rename(columns=str.title)
 tidy["Errors"] = ERRORS_OFF + ERRORS_PART + ERRORS_FULL
+print(tidy)
 ax1 = barplot_err(x="Benchmark", y="Value", hue="Variable", data=tidy, ax=ax1, yerr="Errors")
 #seaborn.barplot(x='Benchmark', y='Value', hue='Variable', data=tidy, ax=ax1)
 seaborn.despine(fig)
@@ -65,7 +66,7 @@ seaborn.set_context("paper")
 ax1.yaxis.set_major_locator(MultipleLocator(10))
 ax1.grid(True, axis='y')
 ax1.tick_params(labelsize=15)
-ax1.set_ylabel('TikTok OFF Performance',fontsize=15)
+ax1.set_ylabel('TikTok OFF Results [%]',fontsize=15)
 ax1.set_xlabel('')
 pyplot.setp(ax1.get_xticklabels(),  wrap=True)
 pyplot.legend(title='', fontsize=15, loc="right")
