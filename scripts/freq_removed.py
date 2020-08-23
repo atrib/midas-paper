@@ -74,30 +74,31 @@ errors = ERRORS_OFF + ERRORS_NOCALLS + ERRORS_FREQ + ERRORS_PART + ERRORS_FULL
 df = pandas.DataFrame({
     'Benchmark': ['Apache Benchmark \nv2.4.29', 'NGINX Benchmark \nv1.9.9'],
     'TikTok Off': tiktok_off_percent,
-    'TikTok On - No Calls Protected': tiktok_nocalls_percent,
-    'TikTok On - No Writes + Frequent Calls Removed': tiktok_freq_removed_percent,
-    'TikTok On - No Writes': tiktok_part_percent,
+    'No Calls': tiktok_nocalls_percent,
+    'Frequent Removed': tiktok_freq_removed_percent,
+    'No Writes': tiktok_part_percent,
     'TikTok On': tiktok_on_percent
 })
+seaborn.set(font_scale=5)
 fig, ax1 = pyplot.subplots(figsize=(27, 10))
 tidy = df.melt(id_vars='Benchmark').rename(columns=str.title)
 
 tidy["Errors"] = errors
-print(tidy)
+
 ax1 = barplot_err(x="Benchmark", y="Value", hue="Variable", data=tidy, ax=ax1, yerr="Errors")
 #seaborn.barplot(x='Benchmark', y='Value', hue='Variable', data=tidy, ax=ax1)
 seaborn.despine(fig)
 seaborn.set_style("whitegrid", {'grid.linestyle': '--'})
-seaborn.set_context("paper")
+#seaborn.set_context("paper")
 
 
 
-ax1.yaxis.set_major_locator(MultipleLocator(10))
+#ax1.yaxis.set_major_locator(MultipleLocator(10))
 ax1.grid(True, axis='y')
-ax1.tick_params(labelsize=15)
-ax1.set_ylabel('TikTok OFF Performance [%]',fontsize=15)
+#ax1.tick_params(labelsize=15)
+ax1.set_ylabel('TikTok OFF Performance [%]')
 ax1.set_xlabel('')
 pyplot.setp(ax1.get_xticklabels(),  wrap=True)
-pyplot.legend(title='', fontsize=15, loc="right")
+pyplot.legend(title='')
 #pyplot.savefig("../img/eval.pdf",bbox_inches='tight')
 pyplot.show()
