@@ -975,27 +975,41 @@ incurs the overhead of writing to pages individually.
 \section{Evaluation}
 \label{sec:evaluation}
 
-\sysname{} has been evaluated on different benchmarks to measure the drop in performance.
+The majority of \sysname{} executes when marking and unmarking pages in system calls.
+This overhead is also proportional to the number of VM spaces (processes) that have the pages mapped.
+Benchmarks should measure the \sysname{} overhead for the multithreaded and multiprocessed workloads,
+as well as the workloads with many marking system calls.
+
+We evaluate \sysname on two different benchmark suites --- NAS Parallel
+Benchmark (NPB) and Phoronix Test Suite (PTS). The evaluation on NPB tests
+\sysname{} on multithreaded or multiprocessed CPU-bound workloads. NPB is a
+suitable benchmark to measure a drop of performance due to multithreading and
+multiprocessing. PTS evaluates \sysname on several real-world applications. They
+complement NPB in that they consist of system call heavy applications, with
+varying degrees of parallelism. These programs are good for evaluating \sysname
+overhead due to frequent system calls.
+
+All benchmarks have been performed on Ubuntu Server 18.04 LTS (Linux 5.4.0-rc3)
+with Intel i7-9700 and 16 GB of RAM.
+
 The three main profiles have been compared:
 \begin{LaTeXdescription}
   \item[\sysname{} On] protects as many system calls as possible
-  \item[\sysname{} Partial] does not protect the arguments of \texttt{write} and its variants
+  \item[\sysname{} Partial] does not protect the arguments of \texttt{write} and
+  its variants
   \item[\sysname{} Off] is the Linux kernel compiled without \sysname{}  
 \end{LaTeXdescription}
-
-\mat{Specify which parts you want to evaluate. Specify on what machines you
-evaluate. Specify why you want to evaluate these parts and what they show.}
 
 \subsection{NAS Parallel Benchmark}
 \label{subsec:npb}
 
-\emph{NAS Parallel Benchmarks (NPB)} is a benchmark introduced by NASA. It
-consists of several parallel programs using different communication patterns.
-\sysname{} introduces additional synchronization points between threads, so it
-should affect multi-threaded programs more than single-threaded ones. NPB is
-available for multiple technology stacks for parallel programming. \sysname{}
-was evaluated on \emph{OpenMP} and \emph{MPI} versions of the benchmark
-with workloads of class A.
+\emph{NAS Parallel Benchmarks (NPB)}~\cite{npb} is a benchmark introduced by
+NASA. It consists of several parallel programs using different communication
+patterns. \sysname{} introduces additional synchronization points between
+threads, so it should affect multi-threaded programs more than single-threaded
+ones. NPB is available for multiple technology stacks for parallel programming.
+\sysname{} was evaluated on \emph{OpenMP}~\cite{omp} and \emph{MPI}~\cite{mpi}
+versions of the benchmark with workloads of class A.
 
 \begin{figure}[]
   \centering
@@ -1040,7 +1054,7 @@ threads/processes.
   \label{fig:phoronix}
 \end{figure*}
 
-\emph{Phoronix Test Suites (PTS)} evaluates systems on real-world software. We
+\emph{Phoronix Test Suites (PTS)}~\cite{pts} evaluates systems on real-world software. We
 ran \sysname{} on it to judge the actual performance impact during the
 everyday use.
 
@@ -1055,12 +1069,12 @@ communication. Even the parallelized benchmarks such as Linux kernel compilation
 generate independent processes.
 
 However, the two web servers (Apache and NginX) show a significant drop in
-performance (Apache -- 16.87\% and NGINX -- 16.38\%) with \sysname{} protecting
+performance (Apache -- 16.87\% and NginX -- 16.38\%) with \sysname{} protecting
 all calls. \sysname by design affects parallel applications the most (by
 introducing forced synchronization on accesses and featuring more PTEs to mark)
 and software with numerous system calls (by marking all the arguments stored
 in-memory). Ignoring write calls improves the situation slightly (Apache --
-15.64\% and NGINX -- 13.41\%).
+15.64\% and NginX -- 13.41\%).
 
 The IPC TCP benchmark consists only of executing 2 system calls to transfer
 the data between two threads. Compared to other benchmarks IPC benchmark has fewer
@@ -1108,8 +1122,11 @@ permissions to decode the kernel symbols. I expect the same results.}
   \caption{Perf Analysis of the Benchmarks}
 \end{table*}
 
-Analyzing Apache and IPC benchmark executions with \texttt{perf} it was possible
-to determine which functions were executing slower with \sysname{}.
+To contrast the overhead between two different workloads Apache and IPC
+benchmark executions was traced with \texttt{perf}. The traces were taken for
+the ground truth (\sysname Off) and \sysname with writes ignored. In this setup
+IPC benchmark does not incur any marking overhead.
+
 \autoref{table:perf} shows how much time the programs spend in the functions
 added by \sysname. Percentages of individual segments have been measured by
 \texttt{perf}, while the total overhead is calculated from the results of the
@@ -1121,24 +1138,24 @@ profiles. Apache spends a considerable amount of time marking and unmarking
 pages, while IPC does not mark pages at all. This is a consequence of the
 different system-calls used by these applications. IPC uses only \texttt{read}
 and \texttt{write} calls which do not mark arguments, while Apache also invokes
-system-calls which mark arguments (\texttt{accept}, \texttt{getsockname}).
+system calls which mark arguments (\texttt{accept}, \texttt{getsockname}).
 Consequentially, Apache spends a lot of time marking and unmarking pages.
 
-In these two segments Apache actually waits most of the time for the TLB
+In these two segments Apache waits most of the time for the TLB
 signaling functions to execute. \texttt{flush\_tlb\_mm\_range} amounts for
 2.51\% (marking) and 2.10\% (unmarking) of the total time spent executing the
 benchmark. Frequent TLB flushes are expensive because the CPU needs to make sure
 that all the cores have processed the signal before continuing. Unfortunately,
 this is only a part of the overhead incurred by flushing the TLB. Flushed pages
-will be accessed right afterward leading to a TLB miss, further inflating the
+will be accessed right afterward, leading to a TLB miss, further inflating the
 overhead.
 
 IPC benchmark executes only \texttt{write} and \texttt{read} calls. It doesn't
 incur any overhead on TLB flushes because none of these calls mark pages.
-However, \texttt{copy\_to\_user} checks are still active, leading to a
-significant locking overhead. Without TLB flushes it is interesting to notice
-that the overhead of individual components roughly adds up to the total overhead
-in the IPC benchmark.
+However, \texttt{copy\_to\_user} checks are still active, causing a significant
+locking overhead. It is interesting to notice that without the TLB flushed the
+overhead of individual components roughly adds up to the total overhead of the
+IPC benchmark.
 
 
 % In this section we need to convince the reader in two things:
