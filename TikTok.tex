@@ -10,6 +10,7 @@
 \usepackage{graphicx}
 \usepackage{caption}
 \usepackage{subcaption}
+\usepackage[inline]{enumitem}
 
 
 \usepackage{hyperref}
@@ -102,21 +103,20 @@ checked.  Double-fetch bus~\cite{serna08doublefetch, twizsgrakky07ring0,
 wilhelm2016xenpwn, wang2018survey} occur when higher-privileged code (e.g., the
 kernel) reads the same data twice from a lower-privileged address space (e.g.,
 user-space). As an attacker could change the data between the two reads, this
-allows a plethora of attack vectors.  Double-fetch bus are a type of a
+allows a plethora of attack vectors.  Double-fetch bugs are a type of a
 \emph{race condition} between two threads of different privileges. A
-\emph{Time-of-check to time-of-use (TOCTTOU)} violation occurs when from the
-first read is used to check an operation while the second read is used to modify
+\emph{Time-of-check to time-of-use (TOCTTOU)} violation occurs when the first
+read is used to check an operation while the second read is used to modify the
 state.  Double-fetch bugs are a frequent problem in kernels and
 hypervisors~\cite{cve201812633, cve202012652, cve20131332, cve201920610,
 cve20158550, cve201610439, cve201610435, cve201610433, cve20195519,
 cve20168438}. Considering that double-fetches also appear in drivers, legacy
 systems with binary-only drivers cannot be patched, even if a bug is found.
-Furthermore, Watson~\cite{watson2007} blames an unfixable TOCTTOU bug as a
-reason for the insecurity of \emph{system call wrappers}.  
+Furthermore, Watson~\cite{watson2007exploiting} blames an unfixable TOCTTOU bug
+as a reason for the insecurity of \emph{system call wrappers}.  
 
-This state of affairs
-calls for a system that \emph{mitigates} double-fetches in system calls to
-protect the kernel.
+This state of affairs calls for a system that \emph{mitigates} double-fetches in
+system calls to protect the kernel.
 %
 % Define system constraints
 To mitigates double-fetch bugs a system needs to
@@ -126,97 +126,88 @@ prevent any changes from concurrent threads to memory accessed by the system cal
 %  \item Enable correct system call execution
 %  \item Enable correct execution of threads trying to change the arguments
 %\end{enumerate}
-\mat{The other two points (enable correct...) are somewhat moot and noops.}
+%\mat{The other two points (enable correct...) are somewhat moot and noops.}
 
-% Cover the first point
-\mat{Repetition? This paragraph can go away.}
-Double-fetch bugs occur when an adversary invokes a system call with arguments
-stored in memory. The kernel will read the arguments the first time and perform
-corresponding checks. If the timing is perfect, the adversary can use the
-additional thread under their control to change the arguments, right after the
-checks have been finished. In case of the double-fetch bug, the kernel
-will read the data again and presume that it has not changed.
 
-\mat{You do not introduce \sysname but merely will it into existence. Introduce
-what the key aspects are and say we present \sysname.}
-The main issue is the adversary changing the values in memory, while the system
-call was still executing. \sysname{} mitigates double-fetch bugs by preventing the
-adversary from writing to the arguments, until the end of the system call. This
-is accomplished by extending the API for reading from user-space The pages
-containing arguments are marked in the \emph{system page table} as
-\emph{read-only}. All of the writes to those pages trigger a \emph{page-fault}
-and execute a \emph{page-fault handler}. In the handler, the offending threads
-wait for all the system calls to finish, before continuing execution. \sysname
-thus prevents the changes to the system call arguments.
+
+%\mat{You do not introduce \sysname but merely will it into existence. Introduce
+%what the key aspects are and say we present \sysname.}
+
 
 % Cover the second point. Mention the calls for which it makes no sense to protect
-Preventing writes from user-space is not enough to guarantee immutability of arguments.
-The adversary can invoke system calls which write to memory and force the kernel
-to perform the write for them. The protection against kernel writes is necessary
-as well.
-\mat{Watch for structure: you mix and match design criteria, attack vectors, and
-implementation aspects. Break them up into individual paragraphs and enumerate
-them so that you can reference what attack vector is solved by which design
-point.}
+Preventing writes from user-space is not enough to guarantee immutability of
+arguments. The adversary can invoke system calls which write to memory and force
+the kernel to perform the write for them. The protection against kernel writes
+is necessary as well. Guarding only the addresses where are the arguments are
+stored would enable the adversary to map them with different privileges,
+requiring the monitoring of the pages being mapped. Finally, the adversary can
+invoke a system call to write to the file directly. The \texttt{write} call uses
+kernel mappings of the pages that could be mapped in user-space, altering their
+data. Pages that belong to devices can change their values independently of the 
+user or the kernel. The possible attack vectors are:
+\begin{enumerate*}[label=(\roman*)]
+\item \label{attk:direct} direct writes from user-space
+\item \label{attk:systemcall} kernel writes from system calls
+\item \label{attk:remapping} remapping the pages with different permissions
+\item \label{attk:writebuffers}\texttt{write} calls to a file that alter mapped file pages
+\item \label{attk:devicefiles} storing arguments on device-backed pages
+\end{enumerate*}
+%\mat{Watch for structure: you mix and match design criteria, attack vectors, and
+%implementation aspects. Break them up into individual paragraphs and enumerate
+%them so that you can reference what attack vector is solved by which design
+%point.}
 
-\mat{I'm not your spell checker.}
-Unfortunately, some system calls both read from and write into the same memory.
-Such calls need to be able to write to the pages only they have marked, and no
-other pages. To accommodate such calls, we extend the API for writing to user
-space to save and defer the writes into the marked pages until the end of the
-call. At that time, they can be either successfully performed, or safely wait
-for other system calls to exit and unmark the pages.
+\emph{Marking} the pages \emph{read-only} when system call arguments are read
+the first time prevents \autoref{attk:direct} and \autoref{attk:systemcall}.
+As the page is loaded, it is checked for a mark, and the permissions of the 
+mapping are adjusted if necessary. This defends against \autoref{attk:remapping}.
+Pausing system calls that write to a file while some of its mapped pages are
+marked prevents \autoref{attk:writebuffers}. Finally, \autoref{attk:devicefiles}
+can be prevented by stopping the adversary from mapping devices through
+\emph{Discretionary Access Control (DAC)}.
 
-\mat{What's freezing of values?}
-By introducing these changes to the API for reading from and writing into userspace,
-system calls have a view of memory similar to transactions. \sysname{} freezes the
-value of all addresses at the moment they were read the first time by the call. 
-The writes to marked pages also become visible only at the end of the call. 
+The protection relies on the interface for reading from the user-space and the
+page-tables to protect the marked pages. The threads that attempt a write to a
+marked page are stopped in the \emph{page-fault handler}. They continue their
+execution after the page is unmarked. The interface for writing to user-space
+from kernel is extended to execute all writes to marked pages at the end of the
+call. This prevents the system calls that write to the pages they have marked
+from self-deadlocking and lets them execute correctly.
 
-A small subset of system-calls (e.g. \texttt{pollfd}, \texttt{futex}) depend on
-the writes from user-space or double-fetches for the correct behavior. Similarly,
-system calls that read memory and potentially take a long time to execute will
-keep those pages marked during their execution. \sysname{} must be disabled for
-such calls and they need to be manually inspected for double-fetches.
+A small subset of system calls (e.g. \texttt{pollfd}, \texttt{futex})
+depend on the writes from user-space or double-fetches for the correct behavior.
+Similarly, system calls that read memory and potentially take a long time to
+execute will keep those pages marked during their execution. For such calls
+protection must be disabled and they should be manually inspected for
+double-fetch bugs.
 
-By changing the view of the memory that system calls have and ignoring certain
-calls, \sysname{} guarantees the correct execution of the system with the
-protections enabled.
-
-% Cover the third point
-Writes from the user-space will trigger a \emph{page-fault handler} where they
-wait for the unmarking. All the offending threads pause execution.
-After all the system calls exit, the threads waiting for them to free arguments
-continues the execution by repeating the write. All of them will execute 
---- after a short delay.
 
 % Introduce TikTok
-\mat{You've been talking about \sysname for about 5-6 paragraphs, the
-introduction is late and very repetitive to what was said before. Improve the
-structure: attacks first, then design points, then one paragraph about the
-implementation key items (not details).}
-We present \sysname{} --- a memory marking extension to the Linux kernel. \sysname{}
-provides system-calls with a view of the memory frozen at the time it
-has been read the first time. \sysname{} also groups all the writes that could
+%\mat{You've been talking about \sysname for about 5-6 paragraphs, the
+%introduction is late and very repetitive to what was said before. Improve the
+%structure: attacks first, then design points, then one paragraph about the
+%implementation key items (not details).}
+We present \sysname{} --- a memory marking extension to the Linux kernel.
+\sysname{} provides system calls with a view of the memory at the time it has
+been read for the first time. \sysname{} also groups all the writes that could
 modify protected memory and executes them at the end of the call. By mitigating
-double-fetches, \sysname{} provides protection even against the double-fetch bugs
-in the drivers which are not maintained anymore. Furthermore, \sysname{}
-renders previously unavoidable double-fetches (such as a TOCTTOU in
-system-call wrappers) completely benign. \sysname{} works on modern
-Linux distributions (Ubuntu Server 18.04 LTS) and doesn't require any
-modifications to the user programs. It can be implemented in other kernels
-and architectures which use page-tables and a well defined API to communicate
-with the user space (\texttt{read\_in} and \texttt{write\_out} abstractions).
+double-fetches, \sysname{} provides protection even against the double-fetch
+bugs in the code that cannot be modified.. Furthermore, \sysname{} renders
+previously unavoidable double-fetches (such as a TOCTTOU in system-call
+wrappers) completely benign. \sysname{} works on modern Linux distributions
+(Ubuntu Server 18.04 LTS) and doesn't require any modifications to the user
+programs. It can be implemented in other kernels and architectures which use
+page-tables and a well defined API to communicate with the user space
+(\texttt{read\_in} and \texttt{write\_out} abstractions).
 
 % Sneak-peek into the results
-\mat{Imprecise: what's almost all? Why is it OK to leave out some? Check out my
-formulation in the abstract.}
+
 Benchmarking \sysname{} showed that multithreaded programs with lots of marking
-system-calls, such as Apache and NginX, suffer an \roughevaloverheadbad{} drop in
-performance with \sysname{} protecting almost all the system-calls. By reducing
+system calls, such as Apache and NginX, suffer an \roughevaloverheadbad{} drop in
+performance with \sysname{} protecting all possible system-calls. By reducing
 the number of protected calls, the overhead drops to \roughevaloverheadbetter{}.
 CPU-bound programs showed almost no performance drop when using \sysname{}, even
-when they used multiple threads (OMP) and message passing (MPI).
+when they used multiple threads (OMP) or multi-process message-passing (MPI).
 
 
 
@@ -225,7 +216,9 @@ The main contributions of this paper are:
 
 \begin{itemize}
 \item A technique how to temporarily prevent the change of memory by safely
-      postponing both userspace and kernel writes
+      postponing both user-space and kernel writes
+\item A \emph{confused deputy attack} on memory-marking systems that mark the pages with a \emph{superuser} bit (\autoref{attk:systemcall})
+\item A solution to the problem of system calls that write to the memory they have read
 \item \sysname{} --- a mitigation for the double-fetch and TOCTTOU attacks on system
       call arguments in the Linux kernel
 \end{itemize}
@@ -488,7 +481,7 @@ execute arbitrary code, including system calls. Some of the system calls
 have double-fetch vulnerabilities, and the adversary wants to exploit them,
 e.g., for privilege escalation.
 
-The attacker may execute an arbitrary sequence of system calls. \sysname
+The attacker may execute an arbitrary sequence of system calls. \sysname{}
 mitigates any unintended corruption that arises through double-fetch bugs.
 Hardware attacks such as Rowhammer~\cite{TODO} or side channels~\cite{TODO} are
 out of scope.
@@ -499,82 +492,39 @@ out of scope.
 bypassing the protections. The following attacks are possible:
 
 \begin{enumerate}
-  \item \label{first} Writes from user-space
-  \item \label{second} Writes from the kernel
-  \item \label{third} Remapping file-backed pages as writable
-  \item \label{fourth} Writing to file-backed pages using system calls
-  \item \label{fifth} The changing values of device-backed pages
+  \item \label{first} \emph{Writes from user-space} consist of the malicious user trying to directly
+  write to the argument stored in memory, while the system-call is being executed
+  in another thread. 
+  \item \label{second} \emph{Writes from the kernel} are indirectly triggered. The user performs a
+  \texttt{read} system-call with the target address as the destination. The data
+  is then written to this location by the \texttt{read} system-call from the
+  kernel.
+  \item \label{third} \emph{Remapping file-backed pages} is accomplished by mapping marked pages in
+  another process. The malicious user stores the arguments on a file-backed page
+  and maps the file again as writable, while the system call is executing. The
+  user is then free to write to the new mapping, even though \emph{other mappings}
+  are read-only.
+  \item \label{fourth} \emph{Writing to file-backed pages using system calls} bypasses
+  the protections present in user-space mappings by directly changing the data present in
+  the files.
+  \item \label{fifth} \emph{The data on a device-backed page} can change
+  independently of writes. Storing arguments on such pages can result in reading
+  different values from them, even if no writes occur in-between the reads.
 \end{enumerate}
 
 Watson~\cite{watson2007exploiting} in his analysis of CerbNG mentioned attacks
 \autoref{first}, \autoref{third} and \autoref{fourth}.
 
-\mat{Subsections are not needed here, summarize above in the enumerate.}
-
-\subsection{User-Space Writes}
-
-\emph{Writes from user-space} consist of the malicious user trying to directly
-write to the argument stored in memory, while the system-call is being executed
-in another thread. The protection should stop the write from being visible in
-the call, but the write should still occur eventually.
-
-\subsection{Kernel Writes}
-
-\emph{Writes from the kernel} are indirectly triggered. The user performs a
-\texttt{read} system-call with the target address as the destination. The data
-is then written to this location by the \texttt{read} system-call from the
-kernel. The protection should prevent the write from being visible in the
-marking system call, but \texttt{read} should still execute eventually.
-
-\subsection{Remapping File-Backed Pages}
-
-\emph{Remapping file-backed pages} is accomplished by mapping marked pages in
-another process. The malicious user stores the arguments on a file-backed page
-and maps the file again as writable, while the system call is executing. The
-user is then free to write to the new mapping, even though \emph{other mappings}
-are read-only.
-
-\begin{enumerate}
-  \item Map a file \texttt{F} in the process \texttt{A} to a page \texttt{P}
-  \item Execute a system-call with the arguments placed on \texttt{P}
-  \item The first fetch in the system-call occurs
-  \item Map the file \texttt{F} as writable in the process \texttt{B}
-  \item Change the values of the arguments on \texttt{P}
-  \item The second fetch in the system-call occurs
-\end{enumerate}
-
-The protection should make sure that all mappings of a marked page are \emph{always}
-marked as read-only.
-
-\subsection{Writing to File-Backed Pages Using System Calls}
-
-Files in Linux can be accessed in two ways:
-\begin{itemize}
-    \item by mapping the file to memory
-    \item by using the system calls to modify the file (e.g., \texttt{write})
-\end{itemize}
-
-If the file-system allows the destination pages of the \texttt{write} call to be
-mapped to user-space, it is possible to write to them using the \texttt{write}
-call. This will completely bypass the user-space permissions and change the data
-in the pages.
-
-\subsection{Device-Backed Pages}
-
-The data in the pages that represent devices can change independently of writes.
-Storing arguments on such pages can result in reading different values from them,
-even if no writes occur in-between the reads.
-
-\section{\sysname Design}
+\section{\sysname{} Design}
 \label{sec:design}
 
-We break the design of \sysname into three parts. 
-\autoref{subsec:mainmechanism} introduces key ideas that are then
-subsequently developed in \autoref{subsec:simplistic}, and finally optimized in
-\autoref{subsec:complex}. Modifications that prevent the bypass using
-file-backed pages are described in \autoref{subsec:fileprot}. Lastly, system
-calls that cannot be protected using memory-marking are discussed in
-\autoref{subsec:ignoredcalls}.
+We break the design of \sysname{} into three parts.
+\autoref{subsec:mainmechanism} introduces key ideas that are subsequently
+illustrated in \autoref{subsec:simplistic}. The design presented in
+\autoref{subsec:simplistic} fails to provide adequate protection, so we present
+the main design principles in \autoref{subsec:designprinciples}: \emph{Temporary
+Immutability} (\autoref{subsec:tempimmut}), \emph{Correctness}
+(\autoref{subsec:correctness}) and \emph{Soundness} (\autoref{subsec:soundness}).
 
 \subsection{The Main Protection Mechanism}
 \label{subsec:mainmechanism}
@@ -590,11 +540,13 @@ prevent changes to arguments during the execution of system calls.
 \end{itemize}
 
 The \texttt{read\_in} function reads an argument from the user-space memory and
-\emph{marks} those pages as unavailable during the execution of the call.
-\texttt{read\_in} must mark the pages in \emph{all} memory spaces mapping the
-page. Otherwise, an adversary could alter the argument from a different process.
-At the end of the call, the marked pages are \emph{unmarked} if there are no
-other calls marking them.
+protects it during the execution of the call. \texttt{read\_in} must protect the
+pages in \emph{all} memory spaces mapping the page. Otherwise, an adversary
+could alter the argument from a different process. At the end of the call, the
+guarded pages are set to the previous state if there are no other calls storing
+arguments on them. The process of protecting a page by setting the appropriate
+flags is called \emph{marking a page}. \emph{Unmarking} is the opposite process
+when the permissions are reset to original values.
 
 If the adversary tries to write to the marked page, they will trigger a
 page-fault exception. The page-fault handler will detect that the page is marked
@@ -604,138 +556,227 @@ offending write is then repeated.
 
 \subsection{Simplistic Design}
 \label{subsec:simplistic}
-The easiest way to implement the protection from \autoref{subsec:mainmechanism}
-is to mark user-space pages as accessible only from the kernel. On modern
-architectures this is accomplished by setting the \emph{superuser} flag in the
-page-table. User-space writes to marked pages trigger a page-fault, where they
-wait for the system call to end.
+ The easiest way to implement the
+protection from \autoref{subsec:mainmechanism} is to mark user-space pages as
+accessible only from the kernel.  On modern architectures this is accomplished
+by setting the \emph{superuser} flag in the page-table. User-space writes to
+marked pages trigger a page-fault, where they wait for the system call to end.
 
 Even though a system like this provides the protection from user-space
 writes to anonymous pages, it can easily be bypassed by calling a \texttt{read}
 system call. \texttt{read} executes in the kernel context and has access to 
 the pages marked with the \emph{superuser} flag. The attacker can provide the
 address of the marked argument as a destination of a \texttt{read} call and 
-change the data.
-\mat{You may want to highlight this as a neat attack vector that we add as a
-contribution.}
+change the data. This attack vector on the superuser-flag memory-marking system
+is one of the contributions of the paper.
 
 The solution is to mark pages as \emph{read-only} instead of \emph{superuser}.
-In that case no system call can change marked memory. Unfortunately,
-some system calls (e.g., \texttt{rt\_sigaction}) write to the arguments they
-read. Such \emph{self-writing} calls will deadlock. After trying to write to the
-marked page, they will wait for themselves to unmark it. A more complex solution
-is required to implement a memory-marking system.
-\mat{Introduce the idea of marking/unmarking first.}
+In that case no system call can change marked memory. Unfortunately, some system
+calls (e.g., \texttt{rt\_sigaction}) write to the arguments they read. Such
+\emph{self-writing} calls will deadlock. After trying to write to the marked
+page, they will wait for themselves to unmark it.
+Watson~\cite{watson2007exploiting} mentions self-writing calls as a big problem
+for memory-marking systems. A more complex solution is required to address this
+problem, and it is another major contribution.
+%\mat{Introduce the idea of marking/unmarking first.}
 
+\subsection{Design Principles}
+\label{subsec:designprinciples}
+\sysname needs to enforce several policies to protect against double-fetches:
 
-\subsection{Protecting Anonymous Pages}
-\label{subsec:complex}
-
-Deadlocks in self-writing calls in \autoref{simplistic} are a consequence of
-writing to a marked page. To accommodate such behavior, \sysname{} needs to also
-extend the kernel interface for writing to the user-space (\texttt{write\_out})
-and to keep track which memory ranges are marked for \emph{each virtual memory
-(VM) space}.
-
-When marking a page, in addition to marking it as read-only in all VM spaces
-mapping it, \sysname{} records it as a marked memory range for that VM space.
-When \texttt{write\_out} is called, it checks whether it is writing to a marked
-page. Writes to non-marked pages execute normally. Writes to marked pages are
-postponed. They are saved and executed chronologically at the end of the system
-call, after unmarking the pages. If the pages are still marked by another call,
-the thread will trigger a page-fault handler when writing to them, and safely
-wait for their unmarking.
-
-\mat{I'm not a fan of all those short itemizes.}
-This design requires locks to synchronize accesses to shared data structures for
-each VM space:
 \begin{itemize}
-  \item Page-table
-  \item Marked memory ranges
+  \item \label{policy:immutability} \emph{Temporary Immutability:} Pages storing
+  the arguments of a system call must be immutable after being read the first
+  time
+  \item \label{policy:correctness} \emph{Correctness:} Writes to protected pages
+  do not affect the correct execution of threads performing them
+  \item \label{policy:soundness} \emph{Soundness:} The only way to change the
+  protected pages is by writing to them
 \end{itemize}
 
-When marking a page, \sysname{} iterates over all the page-table entries in
-different VM spaces mapping the page. A page-table lock is taken to access the
-page-table. After marking a page-table entry, another lock is taken to add it to
-the marked memory ranges for that VM space.
+If these three principles hold, the system will mitigate double-fetch bugs and
+the protected programs will execute correctly.
 
-However, when writing to user-space memory in \texttt{write\_out}, a different
-order must be observed. The lock for marked memory ranges is taken first to
-ensure the thread is not writing to a marked page. Swapped-out pages are not
-marked. Writing to them triggers a page-fault handler and aquires a page-table
-lock.
+\subsection{Temporary Immutability}
+\label{subsec:tempimmut}
+\emph{Temporary Immutability} of the pages storing the arguments guarantees that
+fetch of the arguments will return the same data as the first one. This mitigates
+double-fetch bugs because all reads will return the same value.
 
-Taking two locks in the opposite ordering leads to deadlocks. To prevent
-deadlocks in the \sysname{} implementation, we use a deadlock resolution
-mechanism. When a thread notices a deadlock it releases its locks, preventing a
-it.
+As described in \autoref{subsec:mainmechanism} \sysname{} relies on the
+page-table and the page-fault handler to provide immutability. The interface for
+reading from the user-space (\texttt{read\_in}) is extended to change the
+permissions of the pages being read to \emph{read-only}. The pages need to be
+marked in all VM spaces. Otherwise, the adversary would be able to write to the
+page from a different process.
 
-\subsection{Protecting File-Backed Pages}
-\label{subsec:fileprot}
+\sysname{} extends mapping of pages to make sure the guarded pages are marked in
+all processes. This protection holds even if they are mapped as writable after
+being marked by another process. If the OS supports \emph{on-demand paging} the
+marking should happen when the page is accessed and loaded by the process.
 
-The previous design protects against changes to marked \emph{anonymous} pages. It is
-still possible to bypass these protections if \emph{file-backed} pages are used.
-Watson~\cite{watson2007exploiting} described two ways to bypass such a system.
-They correspond to attacks \autoref{third} and \autoref{fourth}. The system from
-\autoref{complex} can easily be extended to defend against them.
+Temporary immutability prevents \autoref{attk:direct}, \autoref{attk:systemcall}
+and \autoref{attk:remapping}.
 
-The attack \autoref{third} is possible because file-backed pages can be mapped
-at will in different VM spaces. This enables the adversary to map them as
-writable, even though they are marked as read-only in another process. The 
-solution is to check if they are marked during mapping and adjust the permissions
-in the page-table entry. In case of \emph{on-demand paging} the check is performed
-when the page is loaded.
+\subsection{Correctness}
+\label{subsec:corectness}
+Self-writing system calls are problematic for memory-marking systems, as noticed
+by Watson~\cite{watson2007exploiting} and illustrated in
+\autoref{subsec:simplistic}. Some system calls rely on double-fetches and
+user-space writes to the arguments to execute correctly. \sysname{} also
+introduces additional synchronization points to user-space programs, introducing
+a possibility of deadlocks. \sysname must guarantee the correct execution of
+these system calls and user-space programs.
 
-Another attack described (\autoref{fourth} by Watson~\cite{watson2007exploiting}
-is to use a \texttt{write} system call. This is possible if pages mapped in
-user-space are the same as the buffers used as the destination for the
-\texttt{write}. \sysname{} prevents these attacks by forcing \texttt{write} to
-wait for all mapped pages in the destination file to be unmarked.
+\subsubsection{Writes to User-Space}
 
-The final attack (\autoref{fifth}) requires the protection against changes in
-\emph{device-backed} pages. These changes are not caused by writes and cannot be
-mitigated by \sysname{}. However, the administrator controls which files and
-devices the adversary can map. It is enough to use \emph{Discretionary Access
-Control (DAC)} to prevent the adversary from mapping the devices and
-pseudo-file-systems to memory. This isn't a major limitation because users
-usually aren't allowed to access devices directly.
+\emph{Self-writing system calls} are addressed by preventing them from writing
+to marked pages and triggering a page-fault. When a page is marked, it is also
+added to a data structure containing marked memory memory ranges for each VM
+space. We will refer to this data structure as the interval-tree, considering
+that interval-trees store ranges efficiently. The interface for writing to
+user-space (\texttt{write\_out}) is changed to check if it is writing to a
+marked page. Writes to marked pages are saved, and executed at the end of the
+call, after unmarking the arguments. This guarantees that system calls will not
+wait for themselves to unmark the pages. Considering that
+Watson~\cite{watson2007exploiting} stressed that no system call wrappers had
+successfully addressed this problem, we consider it \emph{a key contribution of
+this paper}.
 
-\subsection{Ignored System Calls}
-\label{subsec:ignoredcalls}
+\subsubsection{Ignored Calls}
 
-Some system-calls rely on writes from user-space to user-space memory for their
-correct behavior. During the execution of these calls the memory is changed and
-re-read by the kernel. Hence, time-frozen memory view is detrimental to these calls.
-Changing the value of the arguments for these calls isn't an attack --- it is a
-part of their functionality.
+\emph{System calls that depend on double-fetches} cannot be protected by
+\sysname{}, so they are \emph{ignored} --- they do not mark pages. They should
+be manually inspected for bugs. Ignoring them does not diminish the protection
+of other calls. Ignored calls still stop before writing to marked pages.
 
 The best representatives are \texttt{pollfd} and \texttt{futex}. \texttt{pollfd}
 checks if any of the file-descriptors in the array passed as an argument are
 ready to perform I/O. The user can write \texttt{-1} to memory to indicate that
-the loop in the call needs to skip the descriptor. \texttt{futex} is a
-user-space mutex. Most of \texttt{futex} synchronization depends on atomic
+the loop in the call needs to skip the descriptor. \texttt{futex} is a mostly
+user-space lock. Most of \texttt{futex} synchronization depends on atomic
 user-space writes, with the system-call being performed only to awake or make
 threads wait. If \texttt{futex} marks a user-space address as read-only, other
-user-space threads will be incapable of unlocking the futex by writing to that
-address. Adding these calls and their variants to the exception list leads to a
-successful boot and functioning of the kernel in the prototype.
+user-space threads will be incapable of unlocking the \texttt{futex} by writing
+to that address. Even though they execute correctly under \sysname{}, long
+lasting calls (such as \texttt{sys\_nanosleep}) should be included in this
+group. Otherwise they could keep the pages marked for long periods of time.
 
-The previous calls cause infinite loops or deadlocks when protected. Even though
-\texttt{sys\_nanosleep} does execute correctly under \sysname{}, it marks the page
-with its argument for the whole duration of the sleep. In practice this can be
-quite long, and \texttt{sys\_nanosleep} should be ignored as well.
-
-Finally---if a system call can be verified not to have double-fetches, it can
+Finally --- if a system call can be verified not to have double-fetches, it can
 be ignored to improve performance. This is especially important in case of
-system-calls with large arguments such as \texttt{write}. Note that ignoring
-means that the arguments of those calls are not protected. Ignored calls
-still stop before writing to marked pages.
+system-calls with large arguments such as \texttt{write}.
 
-\mat{The structure of the design section needs to improve: we need a set of
-attack vectors and design principles, then list how each of them are achieved.
-Talking about the simplistic design is neat and serves as an introduction but,
-after the intro, I'd drill down into the design principles and how they are
-achieved.}
+\subsubsection{Preventing Deadlocks}
+\label{subsubsec:deadlocks}
+
+\sysname{} provides its guarantees by introducing additional synchronization
+points to executing programs. It does not introduce deadlocks
+\begin{enumerate*}\item by interacting with itself \item by interacting with
+blocking system calls\end{enumerate*}.
+
+\sysname{} cannot cause a circular locking dependency as a consequence of its
+\emph{system call reads, writes and markings}. Every dependency involves one
+marked page and a write to it. A self-deadlocking execution trace would involve
+a write from a system call to a page marked by another system call. The other
+system call would also need to write to the page marked by the first call to
+complete the cycle. This situation is impossible in \sysname{} because system
+calls postpone writes to marked pages until the end of the call, when the pages
+are unmarked.
+
+If a system call interacts with \sysname{} to cause a deadlock, such a call can
+be \emph{added to the ignore-list}. However, such calls are extremely rare.
+During our evaluation we haven't encountered them. The deadlocking pattern
+\autoref{fig:deadlock} requires three ingredients:
+
+\begin{itemize}
+  \item A synchronized marking call \texttt{S}
+  \item Storing the arguments of \texttt{S} in shared memory \texttt{A}
+  \item A thread to write to \texttt{A} while \texttt{S} is executing
+  \item An already existing waits-for dependency between the thread executing
+  \texttt{S} and a write
+\end{itemize}
+
+\begin{figure}
+  \centering
+  \begin{subfigure}[b]{0.45\linewidth}
+  \begin{minipage}{\linewidth}
+  \begin{lstlisting}
+  1: S(A,T1);  
+  \end{lstlisting}
+  \end{minipage}
+  \caption{Thread 1}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.45\linewidth}
+  \begin{minipage}{\linewidth}
+  \begin{lstlisting}
+  2: write(A);
+  3: unblock_S(T2);
+  \end{lstlisting}  
+  \end{minipage}
+  \caption{Thread 2}
+  \end{subfigure}
+  \caption{Executing instructions in the specified order causes a deadlock with \sysname}
+  \label{fig:deadlock}
+\end{figure}
+
+\autoref{fig:deadlock} shows an example of a deadlocking communication pattern.
+Thread 1 enters the system call \texttt{S} and marks a shared page \texttt{A}
+(\textbf{1}). The system call \texttt{S} blocks until the corresponding call
+\texttt{unblock\_S} is called in Thread 2 (\textbf{3}). While the page
+\texttt{A} is still marked, Thread 2 attempts to write to it, causing it to wait
+for \texttt{S} to finish (\textbf{2}). All of the deadlocking patterns need to
+exhibit a similar combination of paired blocking calls (\texttt{S},
+\texttt{unblock\_S}) with arguments in the shared memory (page \texttt{A}).
+
+The only candidates for \texttt{S} that the authors have encountered are
+blocking message-passing calls. They are synchronous and thus provide the
+necessary waits-for dependency, and they read buffers from user-space memory,
+marking pages. However, the deadlock would imply that data on the page
+\texttt{A} is shared both by message-passing and shared-memory. We haven't
+encountered such a pattern and there are a few reasons why it doesn't occur in
+practice:
+
+\begin{itemize}
+  \item Most programs use only one IPC method (either message-passing or
+  shared-memory)
+  \item System call arguments are usually stored on the stack, and accessed only
+  by the executing thread
+  \item The programs would need to use both IPC methods at the same time, on the
+  same data
+  \item Both system calls and shared-memory are relatively rare in programs, and
+  used in the well-defined patterns
+\end{itemize}
+
+\sysname{} adds another synchronization point to the kernel
+(\autoref{subsec:soundness}) --- it prevents write calls to files having marked
+mapped pages. While it is possible to deadlock a thread by mapping a file, and
+then pass the mapped pages as the arguments to the write call to the same file,
+we have not encountered such a program.
+
+\subsection{Soundness}
+\label{subsec:soundness}
+
+\sysname{} stops all writes to marked pages to prevent changes to the arguments.
+It is necessary to close off all other ways of changing data on marked pages to
+show \sysname{} is \emph{sound}. We identify and disable two other ways of
+changing pages --- write system calls and device-backed pages.
+
+Watson~\cite{watson2007exploiting} mentions that file-systems with shared
+\emph{mapped memory} and \emph{write buffers} could bypass the memory-marking
+protection in a \texttt{write} call. To prevent such an attack \sysname pauses
+all writes (\texttt{vfs\_write}) to files having marked mapped pages. If the
+file-system code can be verified to be immune to the attack, this protection can
+be disabled.
+
+\emph{Discretionary Access Control} (DAC) can be used to prevent mounting of
+devices to user-controlled processes. Device-backed pages may have a state
+independent of user actions, and even the kernel, making any form of preventing
+data changes impossible. We do not consider this a flaw in \sysname{} because
+users usually are not allowed to access devices directly.
+
+With these two changes \autoref{attk:writebuffers} and \autoref{attk:devicefiles}
+are prevented.
 
 
 \section{Implementation}
@@ -781,7 +822,7 @@ The marking metadata is stored in a hashmap based on the \emph{page frame
 number}. This enables us to store only the information on the pages which are
 currently marked and keep the memory consumption low. The access to these entries
 is protected by separate mutexes to improve the scalability of the system. The
-metadata constists of the page frame number, the count of threads marking the page
+metadata consists of the page frame number, the count of threads marking the page
 (\emph{owners}), the number of threads waiting for the page to get unmarked
 (\emph{guests}), and a \emph{completion} they are waiting on. 
 
@@ -841,8 +882,35 @@ mapping it.
 Unmarking follows a similar procedure. The appropriate locks are taken, and the
 number of owners is decremented. Only if there are no owners marking the page
 anymore, it is unmarked in all VM spaces. If there are threads waiting on the
-page, they are signalled. The last guest to wake-up will deallocate the marking
+page, they are signaled. The last guest to wake-up will deallocate the marking
 data for the page.
+
+\subsection{Deadlock Prevention Mechanism}
+
+The implementation of \sysname{} requires many data structures to be shared
+among multiple threads (pages, completions, page-tables, interval-trees \ldots).
+To prevent deadlocks all locks are taken in the same order in all places they
+are used. The only two locks taken in the opposite order are the
+\emph{page-table lock} and the \emph{interval-tree lock}.
+
+In \texttt{copy\_to\_user}~\autoref{fig:copytouser} the interval-tree lock must
+be taken first to check which memory ranges are marked. However, when marking a
+page the page-table lock needs to be acquired first to locate the page-table
+entry mapping the page~\autoref{fig:copyfromuser}. \sysname{} implements the
+deadlock resolution mechanism where if the page-fault handler notices that the
+interval-tree lock is already taken, it gets released.
+
+The prevention mechanism leads to the a way for system calls to write and block
+on marked pages. Ultimately, it cannot cause a deadlock. The thread executing
+\texttt{copy\_to\_user}~\autoref{fig:copytouser} writes to a page that is not
+present, and releases the interval-tree lock. Right after loading the page,
+another thread executes \texttt{copy\_from\_user}~\autoref{fig:copyfromuser} and
+marks it. The first thread is forced to re-execute the write by the the
+page-fault handler. Here, the first thread is executing \texttt{copy\_to\_user}.
+For the deadlock to occur it needs to execute \texttt{copy\_from\_user} in the
+same manner as the second thread. Fortunately, the \texttt{copy\_to\_user}
+thread is waiting for the unmarking, preventing it from executing
+\texttt{copy\_from\_user} and creating a second wait dependency.
 
 \subsection{Loading File-Backed Pages}
 
@@ -850,7 +918,7 @@ As described in \autoref{sec:design}, file-backed pages need to be marked as
 they are loaded to memory. On-demand paging takes place in the page-fault
 handler, but invokes the functions of the file-system storing the file. \sysname{}
 extends the functionality of \texttt{set\_alloc\_pte} to mark the page. The
-needed structures are prealocated, and passed into the \emph{atomic context} where 
+needed structures are preallocated, and passed into the \emph{atomic context} where 
 \texttt{set\_alloc\_pte} is called.
 
 When a marked page is loaded, its data is also added to the interval-tree.
@@ -885,7 +953,7 @@ Writes to marked pages are stored to freshly allocated memory, along with the
 destination address, and written at the end of the call.
 
 Writes to unmarked pages proceed as normal, unless the page is not present, when
-a page-fault exception happends (\autoref{fig:copytouser}). The page-fault
+a page-fault exception happens (\autoref{fig:copytouser}). The page-fault
 handler takes the page-table lock, loads the page and restarts the write. If the
 page-fault handler detects a potential deadlock, it will release the
 interval-tree lock. Page-table read-lock is not exclusive, so it does not need
@@ -894,7 +962,7 @@ to be released (\autoref{fig:pagefault}).
 \texttt{copy\_to\_user} will attempt to write to the page after exiting the
 page-fault handler. In the case it is indeed marked, it will block and wait for
 its unmarking. This is the only case where \sysname{} forces threads to wait in
-the middle of a system call. After the write, the thread reaquires the lock,
+the middle of a system call. After the write, the thread reacquires the lock,
 checks if the interval tree has changed and restarts the write if so.
 
 The restart of the write is necessary because any change to the interval-tree
@@ -903,137 +971,6 @@ making \texttt{copy\_to\_user} calls which do not encounter marked pages fast
 --- only one, large write occurs. The alternative is to check and write to every
 page individually. Such implementation does not need to restart the write, but
 incurs the overhead of writing to pages individually.
-
-\section{TikTok Deadlocks}
-\label{sec:deadlocks}
-\mat{Why is this its own section?}
-
-\sysname{} relies on locks and on blocking for the prevention of the
-double-fetch attacks. It introduces the additional synchronization points to the
-execution of programs. This section discusses the posibility of deadlocks.
-
-The deadlocks caused by locks that moderate the access to the common \sysname{}
-data structures are discussed in the \autoref{subsec:impldeadlocks}. The
-deadlocks caused by waiting in the page-fault handler is analyzed in
-\autoref{subsec:tiktokdeadlocks}.
-
-\subsection{Implementation Deadlocks}
-\label{subsec:impldeadlocks}
-
-Almost all of the locks in the implementation of \sysname{} follow a strict
-locking order based on the memory-management submodule's ordering. No deadlock
-can occur if the locks are always taken in the same order, in all threads.
-
-The only two locks taken in the opposite order are the \emph{page-table lock}
-and the \emph{interval-tree lock}. In \texttt{copy\_to\_user} the interval-tree
-lock must be taken first to check which memory ranges are marked. However, when
-marking a page the page-table lock needs to be aquired first to locate the
-page-table entry mapping the page. \sysname{} implements the deadlock resolution
-mechanism where if the page-fault handler notices that the interval-tree lock is
-already taken, it gets released.
-
-
-\subsection{Design Deadlocks}
-\label{subsec:tiktokdeadlocks}
-
-Unlike deadlocks that are a consequence of a poor implementation
-\autoref{subsec:impldeadlocks}, design deadlocks involve at least one process
-waiting in the page-fault handler. These deadlocks would be a consequence of the
-specification, and not of the programmer error. Such deadlocks can be easily
-resolved by ignoring the system calls involved. In this section we discuss the 
-conditions necessary for those calls to occur and why they are practically
-non-existant, even if the majority of system-calls are not ignored.
-
-\begin{figure}
-  \centering
-  \begin{subfigure}[b]{0.45\linewidth}
-  \begin{minipage}{\linewidth}
-  \begin{lstlisting}
-  1: S(A,T1);  
-  \end{lstlisting}
-  \end{minipage}
-  \caption{Thread 1}
-  \end{subfigure}
-  \hfill
-  \begin{subfigure}[b]{0.45\linewidth}
-  \begin{minipage}{\linewidth}
-  \begin{lstlisting}
-  2: write(A);
-  3: unblock_S(T2);
-  \end{lstlisting}  
-  \end{minipage}
-  \caption{Thread 2}
-  \end{subfigure}
-  \caption{Executing instructions in the specified order causes a deadlock with \sysname}
-  \label{fig:deadlock}
-\end{figure}
-
-
-\autoref{fig:deadlock} shows an example of a deadlocking communication pattern.
-Thread 1 enters the system call \texttt{S} and marks a shared page \texttt{A}
-(\textbf{1}). The system call \texttt{S} blocks until the corresponding call
-\texttt{unblock\_S} is called in Thread 2 (\textbf{3}). While the page
-\texttt{A} is still marked, Thread 2 attempts to write to it, causing it to wait
-for \texttt{S} to finish (\textbf{2}). All of the deadlocking patterns need to
-exibit a similar combination of paired blocking calls (\texttt{S},
-\texttt{unblock\_S}) with arguments in the shared memory (page \texttt{A}).
-
-Similar deadlocking patterns are possible with more threads. The necessary
-condition for all of them is a circular, waits-for dependancy graph when \sysname
-waits are combined with an already existing dependency. An already
-existing synchronized call is necessary for it to happen.
-
-\sysname{} cannot cause a circular dependency only as a consequence of its
-system call reads, writes and markings. Every dependency involves one marked
-page and a write to it. A self-deadlocking execution trace would have to involve
-a write from a system-call to a page marked by another system-call. The other
-system-call would also need to write to the page marked by the first call to
-complete the cycle. This situation is impossible in \sysname. System calls
-postpone writes to marked pages until the end of the call.
-
-The only exception is the back-off due to the deadlock prevention system. The
-thread executing \texttt{copy\_to\_user} writes to a page that is not present,
-and releases the interval-tree lock. Right after loading the page, another
-thread executes \texttt{copy\_from\_user} and marks it. The first thread is
-forced to reexecute the write by the the page-fault handler. Here, the first
-thread is executing \texttt{copy\_to\_user}. For the deadlock to occur it needs
-to execute \texttt{copy\_from\_user} in the same manner as the second thread.
-Fortunately, the \texttt{copy\_to\_user} thread must wait for the unmarking,
-preventing it from executing \texttt{copy\_from\_user} and the second write-wait
-pair from happening.
-
-Even though the deadlocking patterns can easily be resolved by updating the
-ignore list, the conditions for the deadlock to appear are almost impossible to
-encounter in practice. During our evaluation we haven't encountered such a
-deadlock. The deadlocking pattern \autoref{fig:deadlock} requires three
-ingredients:
-
-\begin{itemize}
-  \item A synchronized marking call \texttt{S}
-  \item Storing the arguments of \texttt{S} in shared memory \texttt{A}
-  \item A thread to write to \texttt{A} while \texttt{S} is executing
-  \item An already existing waits-for dependancy between the thread executing \texttt{S} and a write
-\end{itemize}
-
-The only candidates for \texttt{S} that the authors have encountered are
-blocking message-passing calls. They are synchronous and thus provide the
-necessary waits-for dependency, and they read buffers from user-space memory, marking
-pages. However, the deadlock would imply that data on the page \texttt{A} is shared both by
-message-passing and shared-memory. We haven't encountered such a pattern while
-testing \sysname{} and there are a few reasons why it doesn't occur in practice:
-
-\begin{itemize}
-  \item Most programs use only one IPC method (either message-passing or shared-memory)
-  \item System call arguments are usually stored on the stack, and accessed only by the executing thread
-  \item The programs would need to use both IPC methods at the same time, on the same data
-  \item Both system calls and shared-memory are relatively rare in programs, and used in the well-defined patterns
-\end{itemize}
-
-\sysname{} adds another synchronization point to the kernel --- it prevents
-write calls to files having marked, mapped pages. While it is possible to
-deadlock a thread by mapping a file, and then passing the mapped pages as the
-arguments to the write call to the same file, we have not encountered such a
-case.
 
 \section{Evaluation}
 \label{sec:evaluation}
