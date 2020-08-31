@@ -479,10 +479,16 @@ side-channels~\cite{kocher2019spectre} are out of scope.
 
 \section{TOCTTOU Attacks}
 
+\pra{This is too short to merit a section for itself. Section 3, 4, 5 can be merged
+together and presented under a unified heading}
+
 % List five attacks and explain them quickly
 \sysname{} needs to protect the arguments from different types of attacks and ways of
-bypassing the protections. The following attacks are possible:
-
+bypassing the protections\pra{Aren't 'attacks' and 'ways of bypassing protections' equivalent? I suggest
+just using one term}. The following attacks are possible:
+\pra{Before presenting attack vectors, you should reintroduce the attack itself again as you do in the intro. Something
+along the lines of:`double-fetch bugs provide opportunities for performing TOCTTOU attacks. These attacks can be mounted 
+in the following ways....`}
 \begin{enumerate}
   \item \label{first} \emph{Writes from user-space} consist of the malicious user trying to directly
   write to the argument stored in memory, while the system-call is being executed
@@ -495,7 +501,7 @@ bypassing the protections. The following attacks are possible:
   another process. The malicious user stores the arguments on a file-backed page
   and maps the file again as writable, while the system call is executing. The
   user is then free to write to the new mapping, even though \emph{other mappings}
-  are read-only.
+  are read-only.  
   \item \label{fourth} \emph{Writing to file-backed pages using system calls} bypasses
   the protections present in user-space mappings by directly changing the data present in
   the files.
@@ -503,6 +509,14 @@ bypassing the protections. The following attacks are possible:
   independently of writes. Storing arguments on such pages can result in reading
   different values from them, even if no writes occur in-between the reads.
 \end{enumerate}
+\pra{As a general comment for this sec: I feel like you jump into explaining how the attacks are mounted without a lead that
+explains \emph{why} these attacks can be mounted in the first place. This problem is not as
+evident in the first two attacks because they are straightforward but there are a host of questions
+that pop up as my reading the remaining attack vectors. For eg., when explaining the file-backed pages
+vector as I am reading the questions which pop up: Why was the malicious user allowed to remap the page
+as writable? What are these \emph{other mappings} that he is talking about? Why do multiple mappings exist?
+These why's would go away IMO if you present me the system design flaw first before you explain how its
+leveraged for malicious attack.}
 
 % Thank you Dr Watson
 Watson~\cite{watson2007exploiting} in his analysis of CerbNG mentions attacks
@@ -511,6 +525,8 @@ Watson~\cite{watson2007exploiting} in his analysis of CerbNG mentions attacks
 \section{\sysname{} Design}
 \label{sec:design}
 
+\pra{Use non-breaking spaces with refs and cites like so (unless they are free standing text) e.g.,
+'main design principles in~\autoref{subsec:designprinciples}. https://github.com/HexHive/HexDump/wiki/WritingTips\#iii-latex-dos-and-donts}
 We break the design of \sysname{} into three parts.
 \autoref{subsec:mainmechanism} introduces key ideas that are subsequently
 illustrated in \autoref{subsec:simplistic}. The design presented in
@@ -548,6 +564,12 @@ page-fault exception. The page-fault handler will detect that the page is marked
 by \sysname{} and force the thread to \emph{wait} until it is unmarked. The
 offending write is then repeated. 
 
+\pra{IMO the current flow between these subsections is very disjointed and all over the place.
+You introduce the strawman approach first, show problems with it, then directly jump into design principles.
+The optimal flow IMO for the design section would be as follows: (i) Motivate each of the design principles
+using the root causes behind the attack vectors and existing primitives, (ii) formally present each of the design principles
+and (iii) explain each of the design principles in detail. You already do (iii), the simplistic design section can be incorporated
+into (i)}
 % Two memory marking systems that backfire.
 \subsection{Simplistic Design}
 \label{subsec:simplistic}
@@ -563,7 +585,8 @@ system call. \texttt{read} executes in the kernel context and has access to
 the pages marked with the \emph{superuser} flag. The attacker can provide the
 address of the marked argument as a destination of a \texttt{read} call and 
 change the data. This attack vector on the superuser-flag memory-marking system
-is one of the contributions of the paper.
+is one of the contributions of the paper\pra{This flow is awkward. Don't just explicitly call finding this vector
+a contribution. Instead, weave it in more smoothly by saying something along the lines of `We discovered....'}.
 
 The solution is to mark pages as \emph{read-only} instead of \emph{superuser}.
 In that case no system call can change marked memory. Unfortunately, some system
@@ -635,7 +658,8 @@ these system calls and user-space programs.
 \emph{Self-writing system calls} are addressed by preventing them from writing
 to marked pages and triggering a page-fault. When a page is marked, it is also
 added to a data structure containing marked memory memory ranges for each VM
-space. We will refer to this data structure as the interval-tree, considering
+space. We will refer to this data structure as the interval-tree\pra{As a general rule, save
+implementation details such as types of data structures used for the implementation section}, considering
 that interval-trees store ranges efficiently. The interface for writing to
 user-space (\texttt{write\_out}) is changed to check if it is writing to a
 marked page. Writes to marked pages are saved, and executed at the end of the
@@ -738,7 +762,7 @@ for \texttt{S} to finish (\textbf{2}). All of the deadlocking patterns need to
 exhibit a similar combination of paired blocking calls (\texttt{S},
 \texttt{unblock\_S}) with arguments in the shared memory (page \texttt{A}).
 
-The only candidates for \texttt{S} that the authors have encountered are
+The only candidates for \texttt{S} that the authors{s/authors/we} have encountered are
 blocking message-passing calls. They are synchronous and thus provide the
 necessary waits-for dependency, and they read buffers from user-space memory,
 marking pages. However, the deadlock would imply that data on the page
