@@ -16,7 +16,8 @@
 \usepackage{hyperref}
 
 \renewcommand\sectionautorefname{Section}  
-\renewcommand\subsectionautorefname{Subsection}
+\renewcommand\subsectionautorefname{Section}
+\renewcommand\subsubsectionautorefname{Section}
 \renewcommand\itemautorefname{Attack}
 \renewcommand\figureautorefname{Figure}
 \renewcommand\tableautorefname{Table}
@@ -30,7 +31,7 @@
 \newcommand{\evalnocalls}[1]{3}
 \newcommand{\sysname}{TikTok}
 \newcommand{\roughevaloverheadbad}{18\%}
-\newcommand{\roughevaloverheadbetter}{2-4\%}
+\newcommand{\roughevaloverheadbetter}{2-6\%}
 
 
 
@@ -106,7 +107,7 @@ user-space). As an attacker could change the data between the two reads, this
 allows a plethora of attack vectors.  Double-fetch bugs are a type of a
 \emph{race condition} between two threads of different privileges. A
 \emph{Time-of-check to time-of-use (TOCTTOU)} violation occurs when the first
-read is used to check an operation while the second read is used to modify the
+read is used to check the operand while the second read is used to modify the
 state.  Double-fetch bugs are a frequent problem in kernels and
 hypervisors~\cite{cve201812633, cve202012652, cve20131332, cve201920610,
 cve20158550, cve201610439, cve201610435, cve201610433, cve20195519,
@@ -115,26 +116,14 @@ systems with binary-only drivers cannot be patched, even if a bug is found.
 Furthermore, Watson~\cite{watson2007exploiting} blames an unfixable TOCTTOU bug
 as a reason for the insecurity of \emph{system call wrappers}.  
 
+% Enumerate the attack vectors
 This state of affairs calls for a system that \emph{mitigates} double-fetches in
 system calls to protect the kernel.
-
-% The main point of the paper
-To mitigates double-fetch bugs a system needs to prevent any changes from
+To mitigate double-fetch bugs, a system needs to prevent any changes from
 concurrent threads to memory accessed by the system call.
-
-
-
-% Enumerate the attack vectors
-Preventing writes from user-space is not enough to guarantee immutability of
-arguments. The adversary can invoke system calls which write to memory and force
-the kernel to perform the write for them. The protection against kernel writes
-is necessary as well. Guarding only the addresses where are the arguments are
-stored would enable the adversary to map them with different privileges,
-requiring the monitoring of the pages being mapped. Finally, the adversary can
-invoke a system call to write to the file directly. The \texttt{write} call uses
-kernel mappings of the pages that could be mapped in user-space, altering their
-data. Pages that belong to devices can change their values independently of the 
-user or the kernel. The possible attack vectors are:
+The comprehensive system that protects against the modification of arguments
+must take into consideration all the way the user can change the arguments.
+The possible attack vectors are:
 \begin{enumerate*}[label=(\roman*)]
 \item \label{attk:direct} direct writes from user-space
 \item \label{attk:systemcall} kernel writes from system calls
@@ -142,34 +131,36 @@ user or the kernel. The possible attack vectors are:
 \item \label{attk:writebuffers}\texttt{write} calls to a file that alter mapped file pages
 \item \label{attk:devicefiles} storing arguments on device-backed pages
 \end{enumerate*}
+To prevent all the attacks, simple prevention of direct writes is not enough.
+All-encompassing system that monitors the system calls, write calls to file and
+redundant mappings is necessary.
 
 % Explain how we protect against the attacks briefly
 \emph{Marking} the pages \emph{read-only} when system call arguments are read
-the first time prevents \autoref{attk:direct} and \autoref{attk:systemcall}.
-As the page is loaded, it is checked for a mark, and the permissions of the 
-mapping are adjusted if necessary. This defends against \autoref{attk:remapping}.
-Pausing system calls that write to a file while some of its mapped pages are
-marked prevents \autoref{attk:writebuffers}. Finally, \autoref{attk:devicefiles}
-can be prevented by stopping the adversary from mapping devices through
-\emph{Discretionary Access Control (DAC)}.
+the first time prevents \autoref{attk:direct} and \autoref{attk:systemcall}. As
+the page is loaded into the memory space, it is checked if it is already marked.
+The permissions of the mapping are adjusted if necessary. This defends against
+\autoref{attk:remapping}. Pausing system calls that write to a file while some
+of its mapped pages are marked prevents \autoref{attk:writebuffers}. Finally,
+\autoref{attk:devicefiles} can be prevented by stopping the adversary from
+mapping devices through \emph{Discretionary Access Control (DAC)}.
 
-% A really high level overview of how the system worls
-The protection relies on the interface for \emph{reading} (\texttt{read\_in})
-from the user-space and on the page-tables to protect the marked pages. The
+% A really high level overview of how the system works
+The protection relies on a well-defined interface for \emph{reading} (\texttt{read\_in})
+from user-space and on the page-tables to protect the marked pages. The
 threads that attempt a write to a marked page are stopped in the
 \emph{page-fault handler}. They continue their execution after the page is
 unmarked. The kernel interface for \emph{writing} (\texttt{write\_out}) to
 user-space is extended to execute all writes to marked pages at the end of the
-call. This prevents the system calls from writing to the pages they have marked
-and deadlocking.
+call. This prevents the system calls from writing to the pages they have marked.
 
 % Overview of the limitations
-A small subset of system calls (e.g. \texttt{pollfd}, \texttt{futex})
-depend on the writes from user-space or double-fetches for the correct behavior.
-Similarly, system calls that read memory and potentially take a long time to
-execute will keep those pages marked during their execution. For such calls
-protection must be disabled and they should be manually inspected for
-double-fetch bugs.
+A small subset of system calls (e.g. \texttt{pollfd}, \texttt{futex}) depend on
+the writes from user-space or double-fetches for the correct behavior.
+Similarly, certain system calls take a long time to execute
+(\texttt{sys\_nanosleep}). They keep their arguments marked for the duration of
+the call, hurting performance. These groups of system calls should have the
+protection disabled and be manually inspected for double-fetch bugs.
 
 
 % Introduce TikTok
@@ -178,7 +169,7 @@ We present \sysname{} --- a memory marking extension to the Linux kernel.
 been read for the first time. \sysname{} also groups all the writes that could
 modify protected memory and executes them at the end of the call. By mitigating
 double-fetches, \sysname{} provides protection even against the double-fetch
-bugs in the code that cannot be modified.. Furthermore, \sysname{} renders
+bugs in the code that cannot be modified. Furthermore, \sysname{} renders
 previously unavoidable double-fetches (such as a TOCTTOU in system-call
 wrappers) completely benign. \sysname{} works on modern Linux distributions
 (Ubuntu Server 18.04 LTS) and does not require any modifications to the user
@@ -188,12 +179,12 @@ page-tables and a well defined API to communicate with the user space
 
 % Sneak-peek into the results
 
-Benchmarking \sysname{} showed that multithreaded programs with lots of marking
-system calls, such as Apache and NginX, suffer an \roughevaloverheadbad{} drop
-in performance with \sysname{} protecting all possible system-calls. By reducing
-the number of protected calls, the overhead drops to \roughevaloverheadbetter{}.
-CPU-bound programs showed almost no performance drop when using \sysname{}, even
-when they used multiple threads (OMP~\cite{dagum1998openmp}) or multi-process
+Benchmarking \sysname{} showes that system call heavy multithreaded programs,
+such as Apache and NginX, suffer an \roughevaloverheadbad{} drop in performance
+with \sysname{} protecting all possible system-calls. By removing the
+most frequent calls, the overhead drops to \roughevaloverheadbetter{}. CPU-bound
+programs showed almost no performance drop when using \sysname{}, even when they
+used multiple threads (OMP~\cite{dagum1998openmp}) or multi-process
 message-passing (MPI~\cite{snir1998mpi}).
 
 
@@ -202,10 +193,12 @@ message-passing (MPI~\cite{snir1998mpi}).
 The main contributions of this paper are:
 
 \begin{itemize}
-\item A technique how to temporarily prevent the change of memory by safely
-      postponing both user-space and kernel writes
+
+% Atri's comment: Why is the attack a separate contribution? Ans: It is an interesting attack vector
 \item A \emph{confused deputy attack} on memory-marking systems that mark the pages with a \emph{superuser} bit (\autoref{attk:systemcall})
 \item A solution to the problem of protecting the arguments of system calls that write to their arguments
+\item A comprehensive technique for temporarily preventing memory from being changed, by safely
+      postponing updates from both user-space and kernel
 \item \sysname{} --- a mitigation for the double-fetch and TOCTTOU attacks on system
       call arguments in the Linux kernel
 \end{itemize}
@@ -233,11 +226,10 @@ execute correctly.
 \autoref{subsec:ipc} introduces two different ways of communication between
 processes - \emph{shared memory} and \emph{message-passing}. \sysname{} affects
 both of these methods because the arguments of the message-passing system calls
-are stored in (potentially shared) memory. If \sysname{} marks message-passing
-system-call arguments, it introduces additional synchronization points (waits)
-when writing to them. The new waits can interact with already present
-synchronization primitives to cause deadlocks. In \autoref{subsubsec:deadlocks} we
-explain why they do not appear in practice.
+are stored in (potentially shared) memory. The waits caused by writing to marked
+pages can interact with already present synchronization primitives and cause
+deadlocks. In~\autoref{subsubsec:deadlocks} we explain why they do not appear in
+practice.
 
 \autoref{subsec:vm} covers the organization of \emph{virtual memory},
 \emph{page-tables} and the interface the Linux kernel uses to access the
@@ -251,25 +243,22 @@ is mitigating. It explains its cause and the different types of double-fetch bug
 \subsection{Interprocess Communication}
 \label{subsec:ipc}
 
-The two main types of communication between processes are \emph{shared memory} 
+The two methods of inter-process communication are  \emph{shared memory} 
 and \emph{message passing}~\cite{silberschatz2018operating}.
 
 % Intro to shared-memory
-Shared memory relies on two processes having a section of memory that both can 
-access. Data transfer is fast, but the synchronization is problematic. 
-Processes must monitor shared memory for changes, leading to unnecessary
-polling.
-
 % Intro to message-passing
+Shared memory relies on two processes having a section of memory that both can 
+access. Processes communicate by reading and writing to the shared memory.
 Message passing consists of one process calling \texttt{send}, and another one
 calling \texttt{receive} to fetch the message. Synchronous message passing
 blocks execution until the calls have finished.
 
 % The state of the modern OSs and concurrent programs
 Modern operating systems support both of these approaches. \sysname{} interferes
-with message-passing system calls by linking them to shared memory. Marking the
-arguments adds additional synchronization points that can interact with the
-blocking semantics of some system calls.
+with message-passing system calls by linking them to shared memory. Storing
+arguments for blocking message-passing system calls in shared memory can cause
+deadlocks if those arguments are written to. This is discussed in~\autoref{subsubsec:deadlocks}.
 
 \subsection{Linux Memory Subsystem}
 \label{subsec:vm}
@@ -279,26 +268,9 @@ Linux implements \emph{paged virtual memory} and uses \emph{virtual addresses}
 which map to \emph{physical addresses} in RAM. The mapping function is defined
 for each process by a multi-level \emph{page-table}.
 
-\begin{figure}[]
-  \centering
-  \includegraphics[width = .35 \textwidth]{img/pagetable.pdf}
-  \caption{Page Table Structure on x86. Only relevant data has been included.}
-  \label{fig:pagetable}
-\end{figure}
-x86-64 architecture~\cite{intel64and} officially supports paged virtual memory model with a 5 
-level page table (\autoref{fig:pagetable}):
-\begin{LaTeXdescription}
-    \item[PGD] Page Global Directory
-    \item[P4D] Page Fourth-level Directory
-    \item[PUD] Page Upper Directory
-    \item[PMD] Page Middle Directory
-    \item[PTE] Page Table Entry
-\end{LaTeXdescription}
-
 % The flags are needed to discuss marking
-Every level corresponds to eight bits in the virtual address, with the remaining twelve
-bits identifying the offset in the actual page frame. A page table entry
-includes the following information:
+The leaves of the page-table store the access information about the
+corresponding page:
 \begin{LaTeXdescription}
     \item[Present bit (\textbf{P})] is set if the page is present in memory
     \item[Read/Write bit (\textbf{R/W})] denotes if the page is writable or just
@@ -315,10 +287,8 @@ includes the following information:
 Considering that the page-table traversal is frequent, it is implemented in
 hardware by the \emph{memory management unit} (MMU). Reading the page-table from
 memory is slow, so a small cache --- \emph{translation-lookaside buffer} (TLB)
---- is added to the MMU to store frequently accessed page entries. On modern
-processors, a TLB consists of several levels, and can even be backed by another
-MMU cache. Kernel developers can \emph{flush} (clear) certain TLB ranges in
-software.
+--- is added to the MMU to store frequently accessed page entries. Kernel
+developers can \emph{flush} (clear) certain TLB ranges in software.
 
 % Explain what a page fault is, as well as COW (mentioned later as an optimization)
 On an invalid access (e.g., wrong permissions, page not present) the MMU will
@@ -330,37 +300,37 @@ handler for protection, so the user-space page-fault handling must be disabled.
 
 % Different memory types used later to explain certain attacks
 Memory in Linux can be either \emph{file-backed} or \emph{anonymous}.
-File-backed pages have a map to the corresponding file. Anonymous pages do not
-have a backing file (e.g., stack and heap).
+File-backed pages have a backing file where their data is stored. Anonymous
+pages do not have a backing file (e.g., stack and heap) and the data on them
+disappears when they are unmapped.
 
-Another classification is based on privacy: \emph{private} and \emph{shared}. 
-Private memory is part of only one virtual memory space. This memory space can 
-be accessed by multiple threads in a process, but no threads outside the process
-have access. Shared memory can be accessed by different processes.
+Another classification is based on privacy: \emph{private} and \emph{shared}.
+Private memory is part of only one virtual memory space. This memory space can
+be accessed by multiple threads in a process, but not by other processes. Shared
+memory can be accessed by different processes.
 
 % This is the most important paragraph and a basis for one of the attacks. The
 % previous two paragraphs are just the introduction
-Unlike private memory and shared anonymous memory, shared file-backed memory can
-be \emph{mapped and unmapped at will}. Its content is backed by a file, so the
-data is \emph{preserved} between (un)mappings.
+Shared file-backed pages are of interest because their content does not
+disappear when they are unmapped, and they can be mapped by multiple
+processes at different times. This makes them suitable for mounting elaborate
+attacks on memory-marking systems.
 
 \subsection{Copy-from-User and Copy-to-User}
 \label{subsec:copy}
-
 % The interface for communicating with the user-space and why it exists
-Linux user a well-defined interface to communicate with the user-space:
+Linux differentiates between accesses to user-space and kernel memory and
+therefore uses a well-defined interface when accessing user-space memory.
+User-space memory can be written the disk and evicted from the main memory.
+Accessing absent pages triggers a page-fault handler, where they are read back
+to memory. Kernel memory pages are always present and triggering a page-fault
+handler in kernel is considered a serious error. Kernel uses a well-defined
+interface that handles the possible page-faults when accessing user-space:
 \texttt{(\_\_)copy\_(from/to)\_user}, \texttt{(\_\_)(get/put)\_user},
 \texttt{user\_str(cpy/len)}. When the actual implementation is not important,
-this API is refered to \texttt{read\_in} and \texttt{write\_out}.
-
-The abstraction is needed due to different handling of page-faults in user-space
-and in the kernel. User-space memory can be \emph{paged-out} to the disk and
-trigger a page-fault on access. However, kernel memory is never paged-out and
-does not cause page-faults. All the user-space pointers in the kernel are
-processed by this limited set of functions that know how to handle page-faults.
-
-\sysname{} extends this interface to perform additional checks and the bookkeeping
-of marked pages.
+this API is refered to \texttt{read\_in} and \texttt{write\_out}. \sysname{}
+extends this interface to perform additional checks and the bookkeeping of
+marked pages.
 
 \subsection{Double Fetch Bugs}
 \label{subsec:doublefetch}
@@ -371,6 +341,9 @@ of marked pages.
   \caption{Diagram of a double-fetch bug}
   \label{fig:doublefetch}
 \end{figure}
+
+\begin{minipage}{\linewidth}
+  
 
 \begin{lstlisting}[language=C, caption=Abridged CVE-2018-12633 Double Fetch in Linux,
                   label=code:cvedoublefetch,  breaklines=true
@@ -408,13 +381,13 @@ static long vbg_misc_device_ioctl(
   ...
 }
 \end{lstlisting}
-
+\end{minipage}
 % The idea behind double-fetch bugs
 \emph{Double-fetch} bugs occur when a privileged environment (such as the
-kernel) reads untrusted memory two or more times and the read values aren't
-identical. (\autoref{fig:doublefetch}) In between those two reads, memory could
+kernel) reads untrusted memory two or more times and the read values are not
+identical (\autoref{fig:doublefetch}). In between those two reads, memory could
 have been changed by an unprivileged adversary. Considering that the bug relies
-on carefully timed accesses for two different threads, it is a variant of a race
+on carefully timed accesses for two different threads, it is a race
 condition. The situation where the first fetch validates the value of the
 fetched variable, but the computation is only performed on the second fetch, is
 called a \emph{time-of-check to time-of-use} (TOCTTOU) bug. TOCTTOU bugs have
@@ -455,14 +428,15 @@ copies the header into \texttt{buf}, while the second fetch skips the header.
 
 % Double-fetches are actually so big that people have actualy spent time
 % to study them
-Wang et al. explain in \cite{wang2018survey} that double-fetches appear not only
+Wang et al. explain in~\cite{wang2018survey} that double-fetches appear not only
 in kernels, but wherever there is a trust boundary to cross (e.g., kernel ---
 hypervisor~\cite{wilhelm2016xenpwn} and hardware --- kernel
 boundaries~\cite{lu2018untrusted}). Double-fetches have been responsible for many
 vulnerabilities in different kernels~\cite{jurczyk2013bochspwn, wang2018survey}.
 
 
-\section{Threat Model}
+\section{Design}
+\subsection{Threat Model}
 \label{sec:threatmodel}
 
 % Nothing fancy -- the adversary is just trying to hack the system
@@ -477,18 +451,27 @@ mitigates any unintended corruption that arises through double-fetch bugs.
 Hardware attacks such as Rowhammer~\cite{mutlu2019rowhammer} or
 side-channels~\cite{kocher2019spectre} are out of scope.
 
-\section{TOCTTOU Attacks}
+\subsection{TOCTTOU Attacks}
 
-\pra{This is too short to merit a section for itself. Section 3, 4, 5 can be merged
-together and presented under a unified heading}
+%\pra{This is too short to merit a section for itself. Section 3, 4, 5 can be merged
+%together and presented under a unified heading}
 
 % List five attacks and explain them quickly
-\sysname{} needs to protect the arguments from different types of attacks and ways of
-bypassing the protections\pra{Aren't 'attacks' and 'ways of bypassing protections' equivalent? I suggest
-just using one term}. The following attacks are possible:
-\pra{Before presenting attack vectors, you should reintroduce the attack itself again as you do in the intro. Something
-along the lines of:`double-fetch bugs provide opportunities for performing TOCTTOU attacks. These attacks can be mounted 
-in the following ways....`}
+\sysname{} needs to protect the arguments from different ways of altering the
+guarded memory. Writes from user-space and the kernel are an obvious way to
+alter the content of protected pages. There are also subtle ways to evade the
+protection of a memory-marking system. They include different ways of altering
+memory via multiple mappings, or writing to a file via a system call to alter
+its mapped pages. While many of the attacks would be prevented if the
+file-mapping was forbidden, such a measure would render the software unusable.
+Linux relies on multiple and file mappings to provide shared-libraries and load
+programs into memory.
+%\pra{Aren't 'attacks' and 'ways of bypassing protections' equivalent? I suggest
+%just using one term}.
+The following attacks are possible:
+%\pra{Before presenting attack vectors, you should reintroduce the attack itself again as you do in the intro. Something
+%along the lines of:`double-fetch bugs provide opportunities for performing TOCTTOU attacks. These attacks can be mounted 
+%in the following ways....`}
 \begin{enumerate}
   \item \label{first} \emph{Writes from user-space} consist of the malicious user trying to directly
   write to the argument stored in memory, while the system-call is being executed
@@ -509,14 +492,14 @@ in the following ways....`}
   independently of writes. Storing arguments on such pages can result in reading
   different values from them, even if no writes occur in-between the reads.
 \end{enumerate}
-\pra{As a general comment for this sec: I feel like you jump into explaining how the attacks are mounted without a lead that
-explains \emph{why} these attacks can be mounted in the first place. This problem is not as
-evident in the first two attacks because they are straightforward but there are a host of questions
-that pop up as my reading the remaining attack vectors. For eg., when explaining the file-backed pages
-vector as I am reading the questions which pop up: Why was the malicious user allowed to remap the page
-as writable? What are these \emph{other mappings} that he is talking about? Why do multiple mappings exist?
-These why's would go away IMO if you present me the system design flaw first before you explain how its
-leveraged for malicious attack.}
+%\pra{As a general comment for this sec: I feel like you jump into explaining how the attacks are mounted without a lead that
+%explains \emph{why} these attacks can be mounted in the first place. This problem is not as
+%evident in the first two attacks because they are straightforward but there are a host of questions
+%that pop up as my reading the remaining attack vectors. For eg., when explaining the file-backed pages
+%vector as I am reading the questions which pop up: Why was the malicious user allowed to remap the page
+%as writable? What are these \emph{other mappings} that he is talking about? Why do multiple mappings exist?
+%These why's would go away IMO if you present me the system design flaw first before you explain how its
+%leveraged for malicious attack.}
 
 % Thank you Dr Watson
 Watson~\cite{watson2007exploiting} in his analysis of CerbNG mentions attacks
@@ -525,20 +508,28 @@ Watson~\cite{watson2007exploiting} in his analysis of CerbNG mentions attacks
 \section{\sysname{} Design}
 \label{sec:design}
 
-\pra{Use non-breaking spaces with refs and cites like so (unless they are free standing text) e.g.,
-'main design principles in~\autoref{subsec:designprinciples}. https://github.com/HexHive/HexDump/wiki/WritingTips\#iii-latex-dos-and-donts}
-We break the design of \sysname{} into three parts.
-\autoref{subsec:mainmechanism} introduces key ideas that are subsequently
-illustrated in \autoref{subsec:simplistic}. The design presented in
-\autoref{subsec:simplistic} fails to provide adequate protection, so we present
-the main design principles in \autoref{subsec:designprinciples}: \emph{Temporary
-Immutability} (\autoref{subsec:tempimmut}), \emph{Correctness}
-(\autoref{subsec:correctness}) and \emph{Soundness} (\autoref{subsec:soundness}).
+%\pra{Use non-breaking spaces with refs and cites like so (unless they are free standing text) e.g.,
+%'main design principles in~\autoref{subsec:designprinciples}. https://github.com/HexHive/HexDump/wiki/WritingTips\#iii-latex-dos-and-donts}
+We break the design of \sysname{} into three parts. \autoref{subsec:simplistic}
+introduces a simple design that fails to provide the necessary protection.
+In~\autoref{subsec:designprinciples} we analyze the problems
+in~\autoref{subsec:simplistic} and formulate the principles behind
+memory-marking systems. These principles are further discussed in
+\autoref{subsec:tempimmut} (\emph{Temporary Immutability}),
+\autoref{subsec:correctness} (\emph{Correctness}) and \autoref{subsec:soundness}
+(\emph{Soundness}).
 
-% A brief overview of the main mechanism so the simplistic example is easier
-% to follow
-\subsection{The Main Protection Mechanism}
-\label{subsec:mainmechanism}
+
+
+%\pra{IMO the current flow between these subsections is very disjointed and all over the place.
+%You introduce the strawman approach first, show problems with it, then directly jump into design principles.
+%The optimal flow IMO for the design section would be as follows: (i) Motivate each of the design principles
+%using the root causes behind the attack vectors and existing primitives, (ii) formally present each of the design principles
+%and (iii) explain each of the design principles in detail. You already do (iii), the simplistic design section can be incorporated
+%into (i)}
+% Two memory marking systems that backfire.
+\subsection{Simplistic Design}
+\label{subsec:simplistic}
 
 \sysname{} leverages virtual memory protections to
 prevent changes to arguments during the execution of system calls.
@@ -557,45 +548,33 @@ could alter the argument from a different process. At the end of the call, the
 guarded pages are set to the previous state if there are no other calls storing
 arguments on them. The process of protecting a page by setting the appropriate
 flags is called \emph{marking a page}. \emph{Unmarking} is the opposite process
-when the permissions are reset to original values.
+when the permissions are reset to the original values.
 
-If the adversary tries to write to the marked page, they will trigger a
+If the adversary tries to write to a marked page, they will trigger a
 page-fault exception. The page-fault handler will detect that the page is marked
 by \sysname{} and force the thread to \emph{wait} until it is unmarked. The
 offending write is then repeated. 
 
-\pra{IMO the current flow between these subsections is very disjointed and all over the place.
-You introduce the strawman approach first, show problems with it, then directly jump into design principles.
-The optimal flow IMO for the design section would be as follows: (i) Motivate each of the design principles
-using the root causes behind the attack vectors and existing primitives, (ii) formally present each of the design principles
-and (iii) explain each of the design principles in detail. You already do (iii), the simplistic design section can be incorporated
-into (i)}
-% Two memory marking systems that backfire.
-\subsection{Simplistic Design}
-\label{subsec:simplistic}
- The easiest way to implement the
-protection from \autoref{subsec:mainmechanism} is to mark user-space pages as
-accessible only from the kernel.  On modern architectures this is accomplished
-by setting the \emph{superuser} flag in the page-table. User-space writes to
-marked pages trigger a page-fault, where they wait for the system call to end.
+One possible way to implement marking is to make user-space pages accessible
+only from the kernel.  On modern architectures this is accomplished by setting
+the \emph{superuser} flag in the page-table. User-space writes to marked pages
+trigger a page-fault, where they wait for the system call to end.
 
-Even though a system like this provides the protection from user-space
+Even though this system provides protection against user-space
 writes to anonymous pages, it can easily be bypassed by calling a \texttt{read}
 system call. \texttt{read} executes in the kernel context and has access to 
 the pages marked with the \emph{superuser} flag. The attacker can provide the
 address of the marked argument as a destination of a \texttt{read} call and 
-change the data. This attack vector on the superuser-flag memory-marking system
-is one of the contributions of the paper\pra{This flow is awkward. Don't just explicitly call finding this vector
-a contribution. Instead, weave it in more smoothly by saying something along the lines of `We discovered....'}.
+change the data. We discovered this vector after testing the early prototypes of
+\sysname{}.
+%\pra{This flow is awkward. Don't just explicitly call finding this vector
+%a contribution. Instead, weave it in more smoothly by saying something along the lines of `We discovered....'}.
 
 The solution is to mark pages as \emph{read-only} instead of \emph{superuser}.
 In that case no system call can change marked memory. Unfortunately, some system
 calls (e.g., \texttt{rt\_sigaction}) write to the arguments they read. Such
 \emph{self-writing} calls will deadlock. After trying to write to the marked
 page, they will wait for themselves to unmark it.
-Watson~\cite{watson2007exploiting} mentions self-writing calls as a big problem
-for memory-marking systems. A more complex solution is required to address this
-problem, and it is another major contribution.
 %\mat{Introduce the idea of marking/unmarking first.}
 
 % Here we go. We need to guarantee that the pages cannot be changes, the system
@@ -603,6 +582,17 @@ problem, and it is another major contribution.
 % things "kinda" hold and the reviewers will give me hell for them.
 \subsection{Design Principles}
 \label{subsec:designprinciples}
+
+The simplistic design~\autoref{subsec:simplistic} fails in several aspects. Data
+can still be changed because the design does not provide any real-time
+protection against arbitrary memory mapping. Users can bypass the protection by
+mapping guarded pages as writable in another process (\autoref{attk:remapping}).
+Self-writing calls do not execute correctly --- they deadlock when writing to
+their arguments. Watson~\cite{watson2007exploiting} mentions self-writing calls
+as a big problem for memory-marking system. Finally, a malicious user can map a
+device whose memory-mapped registers are independent of writes, making the
+system useless (\autoref{attk:devicefiles}).
+
 \sysname{} needs to enforce several policies to protect against double-fetches:
 
 \begin{itemize}
@@ -615,6 +605,8 @@ problem, and it is another major contribution.
   protected pages is by writing to them
 \end{itemize}
 
+
+
 If these three principles hold, the system will mitigate double-fetch bugs and
 the protected programs will execute correctly.
 
@@ -625,7 +617,7 @@ the protected programs will execute correctly.
 \emph{Temporary Immutability} of the pages storing the arguments guarantees that
 fetch of the arguments will return the same data as the first one.
 
-As described in \autoref{subsec:mainmechanism} \sysname{} relies on the
+As described in \autoref{subsec:simplistic} \sysname{} relies on the
 page-table and the page-fault handler to provide immutability. The interface for
 reading from the user-space (\texttt{read\_in}) is extended to change the
 permissions of the pages being read to \emph{read-only}. The pages need to be
@@ -647,9 +639,9 @@ Self-writing system calls are problematic for memory-marking systems, as noticed
 by Watson~\cite{watson2007exploiting} and illustrated in
 \autoref{subsec:simplistic}. Some system calls rely on double-fetches and
 user-space writes to the arguments to execute correctly. \sysname{} also
-introduces additional synchronization points to user-space programs, introducing
-a possibility of deadlocks. \sysname{} preserves the correct execution of
-these system calls and user-space programs.
+introduces additional synchronization points to user-space programs, making
+deadlocks possible. \sysname{} preserves the correct execution of these system
+calls and user-space programs.
 
 % The solution to the problem of a system call marking A and writing to it.
 % Nobody has done this before.
@@ -658,13 +650,11 @@ these system calls and user-space programs.
 \emph{Self-writing system calls} are addressed by preventing them from writing
 to marked pages and triggering a page-fault. When a page is marked, it is also
 added to a data structure containing marked memory memory ranges for each VM
-space. We will refer to this data structure as the interval-tree\pra{As a general rule, save
-implementation details such as types of data structures used for the implementation section}, considering
-that interval-trees store ranges efficiently. The interface for writing to
-user-space (\texttt{write\_out}) is changed to check if it is writing to a
-marked page. Writes to marked pages are saved, and executed at the end of the
-call, after unmarking the arguments. This guarantees that system calls will not
-wait for themselves to unmark the pages. Considering that
+space. The interface
+for writing to user-space (\texttt{write\_out}) is changed to check if it is
+writing to a marked page. Writes to marked pages are saved, and executed at the
+end of the call, after unmarking the arguments. This guarantees that system
+calls will not wait for themselves to unmark the pages. Considering that
 Watson~\cite{watson2007exploiting} stressed that no system call wrappers had
 successfully addressed this problem, we consider it \emph{a key contribution of
 this paper}.
@@ -933,7 +923,8 @@ The implementation of \sysname{} requires many data structures to be shared
 among multiple threads (pages, completions, page-tables, interval-trees \ldots).
 To prevent deadlocks all locks are taken in the same order in all places they
 are used. The only two locks taken in the opposite order are the
-\emph{page-table lock} and the \emph{interval-tree lock}.
+\emph{page-table lock} and the \emph{interval-tree lock}, which protects the marked
+memory ranges.
 
 % Locks are taken in opposite orders
 In \texttt{copy\_to\_user}~\autoref{fig:copytouser} the interval-tree lock must
@@ -962,18 +953,18 @@ thread is waiting for the unmarking, preventing it from executing
 
 % When a marked page is mapped in a different VM space it is marked
 % We also need to preallocate memory outside the atomic context
-As described in \autoref{sec:design}, file-backed pages need to be marked as
+As described in~\autoref{sec:design}, file-backed pages need to be marked as
 they are loaded to memory. On-demand paging takes place in the page-fault
 handler, but invokes the functions of the file-system storing the file. \sysname{}
 extends the functionality of \texttt{set\_alloc\_pte} to mark the page. The
 needed structures are preallocated, and passed into the \emph{atomic context} where 
 \texttt{set\_alloc\_pte} is called.
 
-When a marked page is loaded, its data is also added to the interval-tree.
-\sysname{} takes the lock before entering the atomic context, even though the
-loaded page may not be marked. The version number of the interval-tree is
-incremented after adding the page, informing all other threads that it has
-changed.
+When a marked page is loaded, its data is also added to the interval-tree
+storing the marked memory ranges. \sysname{} takes the lock before entering the
+atomic context, even though the loaded page may not be marked. The version
+number of the interval-tree is incremented after adding the page, informing all
+other threads that it has changed.
 
 \subsection{Tracking Marked Ranges}
 
