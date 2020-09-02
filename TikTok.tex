@@ -79,6 +79,7 @@ them incredibly hard to find. Even worse, the bug may be in unchangeable code
 We propose \sysname{} to mitigate double-fetch bugs.  \sysname{} leverages
 on-the-fly page-table hardening to prevent changes to the system-call arguments,
 while the system-call executes.
+\mat{System call (no hyphen) is the standard writing.}
 
 \sysname{} shows no noticeable drop in performance when evaluated on CPU-bound
 workloads. On extremely system-call heavy workloads, \sysname{} shows
@@ -119,10 +120,10 @@ as a reason for the insecurity of \emph{system-call wrappers}.
 % Enumerate the attack vectors
 This state of affairs calls for a system that \emph{mitigates} double-fetches in
 system-calls to protect the kernel.
-To mitigate double-fetch bugs, a system needs to prevent any changes from
+To mitigate double-fetch bugs, a system must prohibit changes from
 concurrent threads to memory accessed by the system-call.
 The comprehensive system that protects against the modification of arguments
-must take into consideration all the way the user can change the arguments.
+must consider all possible approaches to change the arguments.
 The possible attack vectors are:
 \begin{enumerate*}[label=(\roman*)]
 \item \label{attk:direct} direct writes from user-space
@@ -131,12 +132,12 @@ The possible attack vectors are:
 \item \label{attk:writebuffers}\texttt{write} calls to a file that alter mapped file pages
 \item \label{attk:devicefiles} storing arguments on device-backed pages
 \end{enumerate*}.
-Simple prevention of direct writes is not enough to stop all attacks. The
+Simply preventing direct writes from user-space is not sufficient to stop all attacks. The
 all-encompassing system that monitors redundant mappings, system-calls, and write
-calls to files is necessary.
+calls to files is required.
 
 % Explain how we protect against the attacks briefly
-\emph{Marking} the pages \emph{read-only} when system-call arguments are read
+\emph{Marking} pages \emph{read-only} when system-call arguments are read
 the first time prevents \autoref{attk:direct} and \autoref{attk:systemcall}. As
 the page is loaded into the memory space, it is checked if it is already marked.
 The permissions of the mapping are adjusted if necessary. This defends against
@@ -148,7 +149,7 @@ mapping devices through \emph{Discretionary Access Control (DAC)}.
 % A really high level overview of how the system works
 The protection relies on a well-defined interface for \emph{reading} (\texttt{read\_in})
 from user-space and on the page-tables to protect the marked pages. The
-threads that attempt a write to a marked page are stopped in the
+threads that attempt a write to a marked page are paused in the
 \emph{page-fault handler}. They continue their execution after the page is
 unmarked. The kernel interface for \emph{writing} (\texttt{write\_out}) to
 user-space is extended to execute all writes to marked pages at the end of the
@@ -160,7 +161,8 @@ the writes from user-space or double-fetches for the correct behavior.
 Similarly, certain system-calls take a long time to execute
 (\texttt{sys\_nanosleep}). They keep their arguments marked for the duration of
 the call, hurting performance. These groups of system-calls should have the
-protection disabled and be manually inspected for double-fetch bugs.
+protection disabled and be manually inspected (or better formally verified) to
+ensure absence of double-fetch bugs.
 
 
 % Introduce TikTok
@@ -260,8 +262,7 @@ blocks execution until the calls have finished.
 Modern operating systems support both of these approaches. \sysname{} interferes
 with message-passing system-calls by linking them to shared memory. Storing
 arguments for blocking message-passing system-calls in shared memory can cause
-deadlocks if those arguments are written to. This is discussed
-in~\autoref{subsubsec:deadlocks}.
+deadlocks if those arguments are written to (see~\autoref{subsubsec:deadlocks}).
 
 \subsection{Linux Memory Subsystem}
 \label{subsec:vm}
