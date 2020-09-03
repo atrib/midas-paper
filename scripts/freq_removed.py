@@ -75,7 +75,7 @@ df = pandas.DataFrame({
     'Benchmark': ['Apache Benchmark \nv2.4.29', 'NGINX Benchmark \nv1.9.9'],
     'TikTok Off': tiktok_off_percent,
     'No Calls': tiktok_nocalls_percent,
-    'Frequent Removed': tiktok_freq_removed_percent,
+    'Frequent Whitelisted': tiktok_freq_removed_percent,
     'No Writes': tiktok_part_percent,
     'TikTok On': tiktok_on_percent
 })
