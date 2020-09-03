@@ -654,7 +654,8 @@ must be manually inspected for bugs. Whitelisting them does not diminish the pro
 of other calls. Whitelisted calls still stop before writing to marked pages.
 
 \mat{Is this the complete set?}
-\uros{No, there are multiple variants of these calls and rt\_sigtimedwait which is the same as futex I think}
+\uros{No, there are multiple variants of these calls and rt\_sigtimedwait which is the same as futex I think. execve is whitelisted
+because it releases all memory and blocks if it has some pages marked. It also creates a new VM space, so any marked pages would get discarded.}
 The best representatives are \texttt{pollfd} and \texttt{futex}. \texttt{pollfd}
 checks if any of the file-descriptors in the array passed as an argument are
 ready to perform I/O. The user can write \texttt{-1} to memory to indicate that
