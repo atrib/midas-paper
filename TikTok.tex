@@ -527,8 +527,10 @@ Watson~\cite{watson2007exploiting} in his analysis of CerbNG introduces
 We extend the discussion of known attacks and introduce
 \autoref{attk:systemcall} and \autoref{attk:devicefiles}.
 
-\section{\sysname{} Design}
-\label{sec:design}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{\sysname{} Design} \label{sec:design}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Designing a memory-marking system is prone to pitfalls. A naive design would
 instrument \texttt{read\_in} to \emph{mark} the pages it accesses with a
@@ -540,31 +542,8 @@ spaces renders it unwritable by all user processes. However, calling
 calls execute with superuser privileges and are allowed to write to protected
 pages.
 
-Our security review of naive designs (\autoref{subsec:designprinciples}) lead
-to our three design principles behind memory-marking systems:
-\emph{Temporary Immutability} (\autoref{subsec:tempimmut}),
-\emph{Exactness} (\autoref{subsec:exactness}), and
-\emph{Correctness}, (\autoref{subsec:correctness}).
-%
-\sysname{} marks guarded pages as \emph{read-only}.  While read-only pages will
-prohibit privileged code from writing to it, some system calls (e.g.,
-\texttt{rt\_sigaction}) write to the arguments they read and will deadlock.
-\sysname{} accommodates these special system calls.
-
-\subsection{Design Principles}
-\label{subsec:designprinciples}
-
-The naive design fails in several aspects. Data can still be changed because it
-does not protect against arbitrary memory mapping. Users can bypass the
-protection by mapping guarded pages as writable in another process
-(\autoref{attk:remapping}). Self-writing calls do not execute correctly---they
-deadlock when writing to their arguments. Watson~\cite{watson2007exploiting}
-mentions self-writing calls as a big problem for memory-marking systems.
-Finally, the naive design prevents writes from updating the memory. Memory
-locations that can change independently, such as memory mapped device registers,
-invalidate the protection (\autoref{attk:devicefiles}).
-
-\sysname{} enforces several policies to mitigate double-fetches:
+Based on our study of memory marking systems, we introduce the following design
+principles to mitigate double-fetches:
 
 \begin{itemize}
   \item \label{policy:immutability} \emph{Temporary Immutability:} Pages storing
@@ -576,14 +555,33 @@ invalidate the protection (\autoref{attk:devicefiles}).
 \end{itemize}
 
 By enforcing these three principles, the system mitigates double-fetch bugs and
-protected programs will execute correctly.
+protected programs execute correctly.
+
+The naive design violates several of our design principles. Data can still be
+changed because it does not protect against arbitrary memory mapping. Users can
+bypass the protection by mapping guarded pages as writable in another process
+(\autoref{attk:remapping}). Self-writing calls do not execute correctly---they
+deadlock when writing to their arguments. Watson~\cite{watson2007exploiting}
+mentions self-writing calls as a fundamental problem for memory-marking systems.
+Finally, the naive design prevents writes from updating the memory. Memory
+locations that can change independently, such as memory mapped device registers,
+invalidate the protection (\autoref{attk:devicefiles}).
+
+\sysname{} marks guarded pages as \emph{read-only}. While read-only pages will
+prohibit privileged code from writing to it, some system calls (e.g.,
+\texttt{rt\_sigaction}) write to the arguments they read and will deadlock.
+\sysname{} accommodates these special system calls following the introduced
+design principles.
+
+
 
 % Nobody can change the marked pages. We mark them when the arguments are read
 % and when the pages are mapped
-\subsection{Temporary Immutability}
-\label{subsec:tempimmut}
+\subsection{Temporary Immutability} \label{subsec:tempimmut}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 Temporary Immutability of argument pages guarantees that repeatedly reading from
-the same location will return the same data.
+the same location returns the same data.
 
 \sysname{} relies on the
 page-table and the page-fault handler to provide immutability. The interface for
@@ -600,40 +598,40 @@ marking should happen when the page is accessed and loaded by the process.
 Temporary immutability prevents \autoref{attk:direct}, \autoref{attk:systemcall}
 and \autoref{attk:remapping}.
 
+
 % This is the most problematic section. Programs need to execute correctly.
-\subsection{Exactness}
-\label{subsec:exactness}
-Self-writing system calls are problematic for memory-marking
-systems~\cite{watson2007exploiting}, see
-\autoref{sec:design}. Some system calls rely on double-fetches and
-user-space writes to the arguments to execute correctly. \sysname{} also
-introduces additional synchronization points to user-space programs, making
-deadlocks possible. \sysname{} preserves the equivalent execution of these
-system calls and user-space programs. 
-\mat{Runaway sentence?}
-% The exe
+\subsection{Exactness} \label{subsec:exactness}
+%%%%%%%%%%%%%%%%%%%%%%
+
+Self-writing system calls are problematic for memory-marking systems. Some
+system calls rely on double-fetches and user-space writes to the arguments to
+execute correctly. \sysname{} also introduces additional synchronization points
+to user-space programs, requiring a deadlock prevention strategy. \sysname{}
+preserves the equivalent execution of these system calls and user-space
+programs. 
 
 % The solution to the problem of a system call marking A and writing to it.
 % Nobody has done this before.
 \emph{Self-writing system calls} are addressed by preventing them from writing
 to marked pages and triggering a page-fault. When a page is marked, it is also
 added to a data structure containing marked memory memory ranges for each VM
-space. The interface for writing to user-space (\texttt{write\_out}) is changed
-to check if it is writing to a marked page. Writes to marked pages are saved,
-and executed at the end of the call, after unmarking the arguments. This
-guarantees that system calls will not wait for themselves to unmark the pages.
-Watson~\cite{watson2007exploiting} stressed that no system call
-wrappers had successfully addressed this problem.
+space. We change the interface for writing to user-space (\texttt{write\_out})
+to check if it is writing to a marked page. Our added data structure records the
+Writes to marked pages, and executes them at the end of the call, after
+unmarking the arguments. This guarantees that system calls will not wait for
+themselves to unmark the pages.  Watson~\cite{watson2007exploiting} stressed
+that no system call wrappers had successfully addressed this problem.
 
 % Some calls do not like TikTok. They want to read data multiple times. They are
 % ignored
 \emph{System calls that depend on double-fetches} cannot be protected by
-\sysname{}, so they must be \emph{whitelisted}---they do not mark pages~\autoref[table:whitelist]{Table I}. They
+\sysname{}, so they must be \emph{whitelisted} so that they do not mark
+pages. \autoref{table:whitelist} provides a list of these system calls and a
+reason why each system call needs whitelisting.. They
 must be manually inspected for bugs. Whitelisting them does not diminish the protection
 of other calls. Whitelisted calls still stop before writing to marked pages.
 
 \begin{table}[]
-  \label{table:whitelist}
   \begin{tabular}{|l|l|}
   \hline
   Whitelisted System Call & Reason                                 \\ \hline
@@ -646,7 +644,8 @@ of other calls. Whitelisted calls still stop before writing to marked pages.
   \texttt{execve}                  & Remaps memory                          \\ \hline
   \texttt{nanosleep}               & Keeps pages marked while it sleeps \\ \hline
   \end{tabular}
-  \caption{Whitelisted system calls}
+  \caption{Whitelisted system calls.}
+  \label{table:whitelist}
   \end{table}
 
 The best representatives are \texttt{pollfd}, \texttt{futex}, and
@@ -691,10 +690,7 @@ by the first call to complete the cycle. This situation is impossible in
 the call, when the pages are unmarked.
 
 % Explain what it takes to deadlock when interacting with the rest of the system
-If a system call interacts with \sysname{} to cause a deadlock, such a call can
-be \emph{added to the whitelist}. However, such calls are extremely rare.
-During our evaluation we have not encountered them. The deadlocking pattern
-\autoref{fig:deadlock} requires three ingredients:
+The deadlocking pattern requires three ingredients:
 
 \begin{itemize}
   \item A synchronized marking call \texttt{S}
@@ -738,13 +734,12 @@ for \texttt{S} to finish (\textbf{2}). All the deadlocking patterns need to
 exhibit a similar combination of paired blocking calls (\texttt{S},
 \texttt{unblock\_S}) with arguments in the shared memory (page \texttt{A}).
 
-The only candidates for \texttt{S} that we have
-encountered are blocking message-passing calls. They are synchronous and thus
-provide the necessary waits-for dependency, and they read buffers from
-user-space memory, marking pages. However, the deadlock would imply that data on
-the page \texttt{A} is shared both by message-passing and shared-memory. We
-have not encountered such a pattern and there are a few reasons why it does not
-occur in practice:
+The only candidates for \texttt{S} that we have encountered are blocking
+message-passing calls. They are synchronous and thus provide the necessary
+waits-for dependency, and they read buffers from user-space memory, marking
+pages. However, the deadlock would imply that data on the page \texttt{A} is
+shared both by message-passing and shared-memory. We have not encountered such a
+pattern and there are a few reasons why it will not occur in practice:
 
 \begin{itemize}
   \item Most programs use only one IPC method (either message-passing or
@@ -759,17 +754,20 @@ occur in practice:
 
 % Another problem: If you map a file F to the page P, and then call write(F, data(P)),
 % you will deadlock. Why would someone do that, I do not know.
-\sysname{} adds another synchronization point to the kernel
-(\autoref{subsec:correctness})---it prevents write calls to files having marked
-mapped pages. While it is possible to deadlock a thread by mapping a file, and
-then passing the mapped pages as the arguments of \texttt{write} to the same
-file, we have not encountered such a case in practice. There is no reason to use
-\texttt{write} to update the file. It is already mapped an can be edited
-directly by updating the mapped memory.
+\sysname{} adds a synchronization point to the kernel to prevent write calls to
+files from having marked mapped pages. While it is possible to deadlock a thread
+by mapping a file, and then passing the mapped pages as the arguments of
+\texttt{write} to the same file, we have not encountered such a case in
+practice. There is no reason to use \texttt{write} to update the file. It is
+already mapped an can be edited directly by updating the mapped memory.
 
-\subsection{Correctness}
-\label{subsec:correctness}
+In any case, if a system call interacts with \sysname{} to cause a deadlock,
+such a call can be \emph{added to the whitelist}. During our extensive
+evaluation and testing we have not encountered any deadlock.
 
+
+\subsection{Correctness} \label{subsec:correctness}
+%%%%%%%%%%%%%%%%%%%%%%%%
 
 % We cannot change the marked pages in any other way than writes
 \sysname{} stops all writes to marked pages to prevent changes to the arguments.
@@ -795,8 +793,9 @@ These two design principles prevent \autoref{attk:writebuffers} and
 \autoref{attk:devicefiles}.
 
 
-\section{Implementation}
-\label{sec:implementation}
+%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Implementation} \label{sec:implementation}
+%%%%%%%%%%%%%%%%%%%%%%%%
 
 % TikTok can work almost anywhere
 \sysname{} prototype has been implemented on Linux x86-64. However, \sysname{}
