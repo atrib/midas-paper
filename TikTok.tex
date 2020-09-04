@@ -30,7 +30,7 @@
 \newcommand{\evalfull}[1]{20}
 \newcommand{\evalnocalls}[1]{3}
 \newcommand{\sysname}{TikTok}
-\newcommand{\roughevaloverheadbad}{18\%}
+\newcommand{\roughevaloverheadbad}{17\%}
 \newcommand{\roughevaloverheadbetter}{2-6\%}
 
 
@@ -126,12 +126,12 @@ The comprehensive system that protects against the modification of arguments
 must consider all possible approaches to change the arguments.
 Possible attack vectors are:
 \begin{enumerate*}[label=(\roman*)]
-\item \label{attk:direct} direct writes from user-space,
-\item \label{attk:systemcall} kernel writes from system calls,
-\item \label{attk:remapping} remapping the pages with different permissions,
-\item \label{attk:writebuffers}\texttt{write} calls to a file that alter mapped
+\item  direct writes from user-space,
+\item  kernel writes from system calls,
+\item  remapping the pages with different permissions,
+\item \texttt{write} calls to a file that alter mapped
 file pages, or
-\item \label{attk:devicefiles} storing arguments on device-backed pages
+\item  storing arguments on device-backed pages
 \end{enumerate*}.
 Simply preventing direct writes from user-space is insufficient to stop these attacks.
 A mitigation must monitor redundant mappings, system calls, and write
@@ -249,7 +249,7 @@ processes - \emph{shared memory} and \emph{message-passing}. \sysname{} affects
 both of these methods because the arguments of the message-passing system calls
 are stored in (potentially shared) memory. The waits caused by writing to marked
 pages can interact with already present synchronization primitives and cause
-deadlocks. In~\autoref{subsubsec:deadlocks} we explain why they do not appear in
+deadlocks. In~\autoref{subsec:deadlocks} we explain why they do not appear in
 practice.
 
 \autoref{subsec:vm} covers the organization of \emph{virtual memory},
@@ -279,7 +279,7 @@ blocks execution until the calls have finished.
 Modern operating systems support both of these approaches. \sysname{} interferes
 with message-passing system calls by linking them to shared memory. Storing
 arguments for blocking message-passing system calls in shared memory can cause
-deadlocks if those arguments are written to (see~\autoref{subsubsec:deadlocks}).
+deadlocks if those arguments are written to (see~\autoref{subsec:deadlocks}).
 
 \subsection{Linux Memory Subsystem}
 \label{subsec:vm}
@@ -497,34 +497,34 @@ Linux relies on multiple page mappings and file mappings to provide shared-libra
 programs into memory.
 The following attacks are possible:
 \begin{enumerate}
-  \item \label{first} \emph{Direct double fetch} consist of a malicious
+  \item \label{attk:direct} \emph{Direct double fetch} consist of a malicious
   user trying to directly write to the argument stored in memory, while the
   system call is executed in another thread. 
 
-  \item \label{second} \emph{Privileged double fetch} are indirectly triggered.
+  \item \label{attk:systemcall} \emph{Privileged double fetch} are indirectly triggered.
   The user performs a \texttt{read} system call with the target address as the
   destination. The data is then written to this location by the \texttt{read}
   system call from the kernel.
 
-  \item \label{third} \emph{Reflected double fetch} is accomplished by
+  \item \label{attk:remapping} \emph{Reflected double fetch} is accomplished by
   mapping marked pages in another process. The malicious user stores the
   arguments on a file-backed page and maps the file again as writable, while the
   system call is executing. The user is then free to write to the new mapping,
   even though \emph{other mappings} are read-only. 
 
-  \item \label{fourth} \emph{Inception double fetch}
+  \item \label{attk:writebuffers} \emph{Inception double fetch}
   bypasses the protections present in user-space mappings by directly changing
   the data present in the files.
 
-  \item \label{fifth} \emph{Device double fetch} can change
+  \item \label{attk:devicefiles} \emph{Device double fetch} can change
   independently of writes. Storing arguments on such pages can result in reading
   different values from them, even if no writes occur in-between the reads.
 
 \end{enumerate}
 
 Watson~\cite{watson2007exploiting} in his analysis of CerbNG introduces attacks
-\ref{first}, \ref{third} and \ref{fourth}. We extend the discussion of known
-attacks and introduce attack \ref{second} and \ref{fifth}.
+\ref{attk:direct}, \ref{attk:remapping} and \ref{attk:writebuffers}. We extend the discussion of known
+attacks and introduce attack \ref{attk:systemcall} and \ref{attk:devicefiles}.
 
 \section{\sysname{} Design}
 \label{sec:design}
@@ -533,8 +533,8 @@ We introduce the \sysname{} design in three steps.  By discussing a naive
 design (\autoref{subsec:naive}) we highlight potential flaws
 (\autoref{subsec:designprinciples}), leading to our design principles behind
 memory-marking systems (\autoref{subsec:tempimmut} for \emph{Temporary
-Immutability}), \autoref{subsec:correctness} for \emph{Correctness}, and
-\autoref{subsec:soundness} for \emph{Soundness}).
+Immutability}), \autoref{subsec:exactness} for \emph{Exactness}, and
+\autoref{subsec:correctness} for \emph{Correct}).
 
 % Two memory marking systems that backfire.
 \subsection{Naive Design}
@@ -599,23 +599,19 @@ mentions self-writing calls as a big problem for memory-marking systems.
 Finally, the naive design prevents writes from updating the memory. Memory locations
 that can change independently, such as memory mapped device registers,
 invalidate the protection (\autoref{attk:devicefiles}).
-\mat{You have defined each attack twice, once in the intro and once in the
-threats section, now you have floating attacks 1...5 and i..v around. Unify so
-that each attack is only defined once. You can mention them in the intro but not
-define them there. This is very confusing for a reader...}
 
 \sysname{} enforces several policies to mitigate double-fetches:
 
 \begin{itemize}
   \item \label{policy:immutability} \emph{Temporary Immutability:} Pages storing
   system call arguments become immutable after being read;
-  \item \label{policy:correctness} \emph{Correctness:} Writes to protected pages
-  do not affect the correct execution of threads performing them; and
-  \item \label{policy:soundness} \emph{Soundness:} The only way to change the
+  \item \label{policy:exactness} \emph{Exactness}: Writes to protected pages
+  do not affect the execution of the threads performing them; and
+  \item \label{policy:correctness} \emph{Correctness:} The only way to change the
   protected pages is by writing to them.
 \end{itemize}
 
-By enforcing these three principles hold, the system mitigates double-fetch bugs and
+By enforcing these three principles, the system mitigates double-fetch bugs and
 protected programs will execute correctly.
 
 % Nobody can change the marked pages. We mark them when the arguments are read
@@ -641,15 +637,15 @@ Temporary immutability prevents \autoref{attk:direct}, \autoref{attk:systemcall}
 and \autoref{attk:remapping}.
 
 % This is the most problematic section. Programs need to execute correctly.
-\subsection{Correctness}
-\label{subsec:correctness}
+\subsection{Exactness}
+\label{subsec:exactness}
 Self-writing system calls are problematic for memory-marking
 systems~\cite{watson2007exploiting}, see
 \autoref{subsec:naive}. Some system calls rely on double-fetches and
 user-space writes to the arguments to execute correctly. \sysname{} also
 introduces additional synchronization points to user-space programs, making
-deadlocks possible. \sysname{} preserves the correct execution of these
-system calls and user-space programs.
+deadlocks possible. \sysname{} preserves the equivalent execution of these
+system calls and user-space programs. The exe
 
 % The solution to the problem of a system call marking A and writing to it.
 % Nobody has done this before.
@@ -666,35 +662,51 @@ wrappers had successfully addressed this problem.
 % Some calls do not like TikTok. They want to read data multiple times. They are
 % ignored
 \emph{System calls that depend on double-fetches} cannot be protected by
-\sysname{}, so they must be \emph{whitelisted}---they do not mark pages. They
+\sysname{}, so they must be \emph{whitelisted}---they do not mark pages~\hyperref[table:whitelist]{Table I}. They
 must be manually inspected for bugs. Whitelisting them does not diminish the protection
 of other calls. Whitelisted calls still stop before writing to marked pages.
 
-\mat{Is this the complete set?}
-\uros{No, there are multiple variants of these calls and rt\_sigtimedwait which is the same as futex I think. execve is whitelisted
-because it releases all memory and blocks if it has some pages marked. It also creates a new VM space, so any marked pages would get discarded.}
-\mat{Give a full set of whitelisted system calls, potentially in a table with a
-reason why they are whitelisted. Discussing execve is also good.}
-The best representatives are \texttt{pollfd} and \texttt{futex}. \texttt{pollfd}
-checks if any of the file-descriptors in the array passed as an argument are
-ready to perform I/O. The user can write \texttt{-1} to memory to indicate that
-the loop in the call needs to skip the descriptor. \texttt{futex} is a mostly
-user-space lock. Most of \texttt{futex} synchronization depends on atomic
-user-space writes, with the system call being performed only to awake or make
-threads wait. If \texttt{futex} marks a user-space address as read-only, other
-user-space threads will be incapable of unlocking the \texttt{futex} by writing
-to that address. Even though they execute correctly under \sysname{},
-long-lasting calls (such as \texttt{sys\_nanosleep}) should be included in this
-group. Otherwise, they could keep the pages marked for long periods, sometimes
-preventing the program from executing in reasonable time.
+\begin{table}[]
+  \label{table:whitelist}
+  \begin{tabular}{|l|l|}
+  \hline
+  Whitelisted System Call & Reason                                 \\ \hline
+  \texttt{futex}                   & Relies on outside writes               \\ \hline
+  \texttt{poll}                    & Relies on outside writes               \\ \hline
+  \texttt{ppoll}                   & Relies on outside writes               \\ \hline
+  \texttt{select}                  & Relies on outside writes               \\ \hline
+  \texttt{pselect6}                & Relies on outside writes               \\ \hline
+  \texttt{rt\_sigtimedwait}        & Relies on outside writes               \\ \hline
+  \texttt{execve}                  & Remaps memory                          \\ \hline
+  \texttt{nanosleep}               & Keeps the pages marked while it sleeps \\ \hline
+  \end{tabular}
+  \caption{Whitelisted system calls}
+  \end{table}
+
+The best representatives are \texttt{pollfd}, \texttt{futex}, and
+\texttt{execve}. \texttt{pollfd} checks if any of the file-descriptors in the
+array passed as an argument are ready to perform I/O. The user can write
+\texttt{-1} to memory to indicate that the loop in the call needs to skip the
+descriptor. \texttt{futex} is a mostly user-space lock. Most of \texttt{futex}
+synchronization depends on atomic user-space writes, with the system call being
+performed only to awake or make threads wait. If \texttt{futex} marks a
+user-space address as read-only, other user-space threads will be incapable of
+unlocking the \texttt{futex} by writing to that address. \texttt{execve}
+detaches the VM space and creates a new one. Adding it to the whitelist
+simplifies the detaching and destruction of VM spaces in \sysname{}.
+
+Even though they execute correctly under \sysname{}, long-lasting calls (such as
+\texttt{sys\_nanosleep}) should be included in this group. Otherwise, they could
+keep the pages marked for long periods, sometimes preventing the program from
+executing in reasonable time.
 
 Finally---if a system call can be verified not to have double-fetches, it can
 be whitelisted to improve performance. This is especially important in case of
 system calls with large arguments such as \texttt{write}.
 
 % The big problem. Deadlocks can occur if you are insane.
-\subsubsection{Preventing Deadlocks}
-\label{subsubsec:deadlocks}
+\subsection{Preventing Deadlocks}
+\label{subsec:deadlocks}
 
 % Introduce the problem
 \sysname{} provides its guarantees by introducing additional synchronization
@@ -765,9 +777,8 @@ encountered are blocking message-passing calls. They are synchronous and thus
 provide the necessary waits-for dependency, and they read buffers from
 user-space memory, marking pages. However, the deadlock would imply that data on
 the page \texttt{A} is shared both by message-passing and shared-memory. We
-haven't encountered such a pattern and there are a few reasons why it does not
+have not encountered such a pattern and there are a few reasons why it does not
 occur in practice:
-\mat{Again.... no abbreviations. Please search and replace!!!}
 
 \begin{itemize}
   \item Most programs use only one IPC method (either message-passing or
@@ -783,23 +794,21 @@ occur in practice:
 % Another problem: If you map a file F to the page P, and then call write(F, data(P)),
 % you will deadlock. Why would someone do that, I do not know.
 \sysname{} adds another synchronization point to the kernel
-(\autoref{subsec:soundness})---it prevents write calls to files having marked
+(\autoref{subsec:correctness})---it prevents write calls to files having marked
 mapped pages. While it is possible to deadlock a thread by mapping a file, and
 then passing the mapped pages as the arguments of \texttt{write} to the same
 file, we have not encountered such a case in practice. There is no reason to use
 \texttt{write} to update the file. It is already mapped an can be edited
 directly by updating the mapped memory.
 
-\subsection{Soundness}
-\label{subsec:soundness}
-\mat{What's the difference between soundness and correctness above? IMO
-correctness above should be renamed to something else and this section should be
-called correctness.}
+\subsection{Correctness}
+\label{subsec:correctness}
+
 
 % We cannot change the marked pages in any other way than writes
 \sysname{} stops all writes to marked pages to prevent changes to the arguments.
 It is necessary to close off all other ways of changing data on marked pages to
-show \sysname{} is \emph{sound}. We identify and disable two other ways of
+show \sysname{} is \emph{correct}. We identify and disable two other ways of
 changing pages---write system calls and device-backed pages.
 
 % Close-off the write calls briefly mentioned in the previous subsection
@@ -900,9 +909,9 @@ in \autoref{sec:evaluation}.
 \begin{figure}[]
   \centering
   \includegraphics[width=\linewidth]{img/book-keeping.pdf}
-  \caption{The most important marking information on x86. 
-\mat{Better caption needed: what do we see here? Highlight what you changed}
-}
+  \caption{\sysname{} bookkeeping information. New data structures are in bold. The page frame and marking information are fetched based on the
+  page frame number. The marking information is allocated on demand and stored
+  in a hashmap to preserve memory.}
   \label{fig:bookkeeping}
 \end{figure}
 
@@ -910,11 +919,18 @@ in \autoref{sec:evaluation}.
 
 \begin{figure}[]
   \centering
-  \includegraphics[width = 0.8\linewidth]{img/copy_from_user.png}
-  \caption{\texttt{copy\_from\_user} page marking.
-\mat{Highlight what was original and what is yours.}
+  \includegraphics[width = 0.8\linewidth]{img/copy_from_user.pdf}
+  \caption{\texttt{copy\_from\_user} page marking. New steps are in bold. Read pages are marked in all VM spaces, as well as their backing files.
 }
   \label{fig:copyfromuser}
+\end{figure}
+
+\begin{figure}[]
+  \centering
+  \includegraphics[width = 0.8\linewidth]{img/unmark_pages.pdf}
+  \caption{Page unmarking at the end of the system call.
+}
+  \label{fig:unmarking}
 \end{figure}
 
 \sysname{} extends Linux's interface for reading and writing to user-space. The
@@ -928,11 +944,11 @@ page frame as marked, and incrementing the number of page owners. \sysname{} the
 uses the reverse mapping information to mark the page in all the VM spaces
 mapping it.
 
-Unmarking follows a similar procedure. The appropriate locks are taken, and the
-number of owners is decremented. Only if no owners are marking the page
-anymore, it is unmarked in all VM spaces. If threads are waiting on the
-page, they are woken up. The last guest to wake up will deallocate the marking
-data for the page.
+Unmarking follows a similar procedure~\autoref{fig:unmarking}. The appropriate
+locks are taken, and the number of owners is decremented. Only if no owners are
+marking the page anymore, it is unmarked in all VM spaces. If threads are
+waiting on the page, they are woken up. The last guest to wake up will
+deallocate the marking data for the page.
 
 % Deadlock prevention when accessing shared data structures
 \subsection{Deadlock Prevention}
@@ -992,18 +1008,20 @@ other threads that it has changed.
 \label{subsec:kernelland}
 \begin{figure}[]
   \centering
-  \includegraphics[width = 0.8\linewidth]{img/copy_to_user.png}
-  \caption{\texttt{copy\_to\_user} write handling.
-\mat{What is yours? What is important here?}
+  \includegraphics[width = 0.8\linewidth]{img/copy_to_user.pdf}
+  \caption{\texttt{copy\_to\_user} write handling. New steps are in bold.
+  The write destination is checked for marked ranges. Unmarked ranges are written to, while
+  the writes destined for marked ranges are deferred until the end of the system call. Deadlocking
+  in the page-fault handler is prevented by releasing the interval-tree lock.
 }
   \label{fig:copytouser}
 \end{figure}
 
 \begin{figure}[]
   \centering
-  \includegraphics[width = 0.8\linewidth]{img/pagefault.png}
-  \caption{\sysname's handling of the writes in the page-fault handler.
-\mat{What is different from the default? What do we see here?}
+  \includegraphics[width = 0.8\linewidth]{img/pagefault.pdf}
+  \caption{\sysname's handling of the writes in the page-fault handler. New steps are in bold. Interval-tree lock
+  is released at the start of the handler to prevent deadlocks.
 }
   \label{fig:pagefault}
 \end{figure}
@@ -1069,7 +1087,7 @@ Three main \sysname{} profiles have been compared:
 \begin{LaTeXdescription}
   \item[\sysname{} On] protects as many system calls as possible,
   \item[\sysname{} Partial] does not protect the arguments of the \texttt{write}
-system call and \texttt{write} variants, and
+system call and \texttt{write} variants\footnote{~\texttt{pwrite}, \texttt{pwrite64}, \texttt{pwritev}}, and
   \item[\sysname{} Off] is the Linux kernel compiled without \sysname{}  
 \end{LaTeXdescription}
 
@@ -1088,16 +1106,15 @@ A.
 
 \begin{figure}[]
   \centering
-  \includegraphics[width=\linewidth]{graphs/omp.png}
+  \includegraphics[width=\linewidth]{img/omp_graph.pdf}
   \caption{\sysname{} evaluated on NPB with OMP.
-\mat{Use vector graphics, no PNGs! End figure captions with a stop.}
 }
   \label{fig:npbomp}
 \end{figure}
 
 \begin{figure}[]
   \centering
-  \includegraphics[width=\linewidth]{graphs/mpi.png}
+  \includegraphics[width=\linewidth]{img/mpi_graph.pdf}
   \caption{\sysname{} evaluated on NPB with MPI.}
   \label{fig:npbmpi}
 \end{figure}
@@ -1114,23 +1131,22 @@ benchmarks, \sysname{} was evaluated with 16 processes.
 
 % We interpret the results
 The benchmarks have been run with \sysname{} protecting almost all calls, with
-\texttt{write} disabled and without \sysname{} at all (\autoref{fig:npbomp} and
-\autoref{fig:npbmpi}). Both benchmarks show no significant difference between
-different setups. MPI has wider standard-error margins, probably introduced by
-the heavier startup and communication. Shorter benchmarks magnify relative
-differences (explaining the artifacts for \texttt{is} and \texttt{ep}).
-\sysname{} does not incur a noticeable performance penalty for CPU-bound
-workloads, even when they involve multiple threads/processes.
+\texttt{write} variants disabled and without \sysname{} at all
+(\autoref{fig:npbomp} and \autoref{fig:npbmpi}). Both benchmarks show no
+significant difference between different setups. MPI has wider standard-error
+margins, probably introduced by the heavier startup and communication. Shorter
+benchmarks magnify relative differences (explaining the artifacts for
+\texttt{is} and \texttt{ep}). \sysname{} does not incur a noticeable performance
+penalty for CPU-bound workloads, even when they involve multiple
+threads/processes.
 
 \subsection{Phoronix Test Suite}
 \label{subsec:phoronix}
 
 \begin{figure*}[]
   \centering
-  \includegraphics[width=\linewidth]{graphs/phoronix.png}
+  \includegraphics[width=\linewidth]{img/eval.pdf}
   \caption{\sysname{} evaluation on Phoronix Test Suite.
-\mat{Why does partial have almost the same overhead as full? There's little to
-no difference.}
 }
   \label{fig:phoronix}
 \end{figure*}
@@ -1158,7 +1174,8 @@ However, the two web servers (Apache and NginX) show a significant drop in
 performance (Apache -- 16.87\% and NginX -- 16.38\%) with \sysname{} protecting
 all calls. Whitelisting write calls improves the situation slightly (Apache --
 15.64\% and NginX -- 13.41\%). \sysname{} affects parallel and applications with
-numerous system calls the most because of the marking overhead.
+numerous system calls the most because of the marking overhead. The impact of 
+whitelisting is not greater due to the low frequency of write calls.
 
 The IPC TCP benchmark consists two system calls that transfer the data between
 two threads. Compared to other benchmarks, IPC benchmark has fewer threads than
@@ -1167,7 +1184,7 @@ it in-between two groups with respect to the performance penalty.
 
 \begin{figure}[]
   \centering
-  \includegraphics[width=\linewidth]{graphs/apache-nginx-5.png}
+  \includegraphics[width=\linewidth]{img/freq_removed.pdf}
   \caption{Detailed comparison of Apache and NginX performance}
   \label{fig:phoronix-apache-nginx}
 \end{figure}
@@ -1178,8 +1195,16 @@ profiles to judge more accurately the effect of system calls on performance
 (\autoref{fig:phoronix-apache-nginx}):
 
 \begin{LaTeXdescription}
-  \item[Frequent system calls whitelisted] whitelists 20 most frequent calls executed in the benchmarks, as well as \texttt{write} variants.
-\mat{Which ones are whitelisted and why are you sure they are safe?}
+  \item[Frequent system calls whitelisted] whitelists the most frequent calls
+  executed in the benchmarks \footnote{~\texttt{epoll\_ctl}, \texttt{close},
+  \texttt{read}, \texttt{fcntl}, \texttt{connect}, \texttt{recvfrom},
+  \texttt{epoll\_wait}, \texttt{accept4}, \texttt{openat}, \texttt{socket},
+  \texttt{shutdown}, \texttt{fstat}, \texttt{sendfile}, \texttt{stat},
+  \texttt{mmap}, \texttt{munmap}, \texttt{getsockname}, \texttt{times}}, as well
+  as \texttt{write} and its variants. The code of standard system calls has been
+  checked for double-fetches in previous work~\cite{wang2017double,
+  xu2018precise}
+
   \item[All system calls whitelisted] does not protect any system calls.
 \end{LaTeXdescription}
 
@@ -1213,7 +1238,7 @@ traced with \texttt{perf}. The traces serve as ground truth
 does not incur any marking overhead, while Apache still marks pages.
 
 % How to read the table. TLB data is already included in marking and unmarking
-\hyperref[perftable]{Table I} shows how much time the programs spend in
+\hyperref[perftable]{Table II} shows how much time the programs spend in
 \sysname{} functions. Percentages of individual segments have been measured by
 \texttt{perf}, while the total overhead is calculated from the results of the
 benchmarks. TLB is flushed both during the marking and unmarking of
@@ -1372,8 +1397,8 @@ available. It can be ported to any architecture that uses page-tables, and any
 kernel that has a well-defined interface to access user-space memory. \sysname{}
 is tested in practice on a modern system (Ubuntu Server 18.04 LTS) with complex
 programs running (\texttt{systemd}, \texttt{gcc}, \texttt{Apache}). When
-protecting rare system calls it shows an overhead of 2-4\%, which raises to
-~20\% when protecting almost all calls in multithreaded, system call intensive
+protecting rare system calls it shows an overhead of \roughevaloverheadbetter, which raises to
+\roughevaloverheadbad when protecting almost all calls in multithreaded, system call intensive
 programs. CPU-bound programs do not have a significant overhead, even if they
 use multiple threads.
 %-------------------------------------------------------------------------------

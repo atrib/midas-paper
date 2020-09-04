@@ -54,7 +54,7 @@ df = pandas.DataFrame({
     'TikTok Full': tiktok_on_percent
 })
 seaborn.set_palette('muted')
-fig, ax1 = pyplot.subplots(figsize=(27, 10))
+fig, ax1 = pyplot.subplots(figsize=(8, 4))
 tidy = df.melt(id_vars='Benchmark').rename(columns=str.title)
 tidy["Errors"] = ERRORS_OFF + ERRORS_PART + ERRORS_FULL
 print(tidy)
@@ -66,10 +66,10 @@ seaborn.set_style("whitegrid", {'grid.linestyle': '--'})
 
 ax1.yaxis.set_major_locator(MultipleLocator(10))
 ax1.grid(True, axis='y')
-ax1.tick_params(labelsize=18)
-ax1.set_ylabel('TikTok OFF Results [%]',fontsize=18)
+ax1.tick_params(labelsize=5)
+ax1.set_ylabel('TikTok OFF Results [%]')#,fontsize=18)
 ax1.set_xlabel('')
 pyplot.setp(ax1.get_xticklabels(),  wrap=True)
-pyplot.legend(title='', fontsize=18, loc="right")
-#pyplot.savefig("../img/eval.pdf",bbox_inches='tight')
+pyplot.legend(title='', loc="right")
+pyplot.savefig("../img/eval.pdf",bbox_inches='tight')
 pyplot.show()

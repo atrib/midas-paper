@@ -79,8 +79,8 @@ df = pandas.DataFrame({
     'No Writes': tiktok_part_percent,
     'TikTok On': tiktok_on_percent
 })
-seaborn.set(font_scale=5)
-fig, ax1 = pyplot.subplots(figsize=(27, 10))
+seaborn.set(font_scale=1)
+fig, ax1 = pyplot.subplots(figsize=(4, 2))
 tidy = df.melt(id_vars='Benchmark').rename(columns=str.title)
 
 tidy["Errors"] = errors
@@ -89,7 +89,7 @@ ax1 = barplot_err(x="Benchmark", y="Value", hue="Variable", data=tidy, ax=ax1, y
 #seaborn.barplot(x='Benchmark', y='Value', hue='Variable', data=tidy, ax=ax1)
 seaborn.despine(fig)
 seaborn.set_style("whitegrid", {'grid.linestyle': '--'})
-#seaborn.set_context("paper")
+seaborn.set_context("paper")
 
 
 
@@ -100,5 +100,5 @@ ax1.set_ylabel('TikTok OFF Performance [%]')
 ax1.set_xlabel('')
 pyplot.setp(ax1.get_xticklabels(),  wrap=True)
 pyplot.legend(title='')
-#pyplot.savefig("../img/eval.pdf",bbox_inches='tight')
+pyplot.savefig("../img/freq_removed.pdf",bbox_inches='tight')
 pyplot.show()
