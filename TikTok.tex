@@ -532,23 +532,23 @@ attacks and introduce attack \ref{attk:systemcall} and \ref{attk:devicefiles}.
 Designing a memory-marking system is prone to pitfalls. A naive design would
 instrument \texttt{read\_in} to \emph{mark} the pages it accesses with a
 \emph{superuser} flag in the page-table and force the writers to \emph{wait} in
-the page-fault handler. At the end of the call marked pages are \emph{unmarked},
-and waiting writers are woken-up. Marking the page in all VM spaces renders it
-unwritable by all user processes. However, a simple way to bypass such
-protection is to call \texttt{read} with the page as the destination. System
-calls execute with the superuser privileges and are allowed to write to
-protected pages.
+the page-fault handler. When returning from the system call marked pages are
+\emph{unmarked}, and waiting writers are woken-up. Marking the page in all VM
+spaces renders it unwritable by all user processes. However, calling
+\texttt{read} with the page as the destination will bypass such a system. System
+calls execute with superuser privileges and are allowed to write to protected
+pages.
 
-\sysname{} marks guarded pages as \emph{read-only}. Read-only marking solves the
-previous problem, but introduces another one. Some system calls (e.g.,
+Our security review of naive designs (\autoref{subsec:designprinciples}) lead
+to our three design principles behind memory-marking systems:
+\emph{Temporary Immutability} (\autoref{subsec:tempimmut}),
+\emph{Exactness} (\autoref{subsec:exactness}), and
+\emph{Correctness}, (\autoref{subsec:correctness}).
+%
+\sysname{} marks guarded pages as \emph{read-only}.  While read-only pages will
+prohibit privileged code from writing to it, some system calls (e.g.,
 \texttt{rt\_sigaction}) write to the arguments they read and will deadlock.
-A more complex solution is therefore required to design a memory-marking scheme.
-
-Further problems that we encounter when analysing the naive design
-(\autoref{subsec:designprinciples}) lead to our design principles behind
-memory-marking systems (\autoref{subsec:tempimmut} for \emph{Temporary
-Immutability}), \autoref{subsec:exactness} for \emph{Exactness}, and
-\autoref{subsec:correctness} for \emph{Correctness}).
+\sysname{} accommodates these special system calls.
 
 \subsection{Design Principles}
 \label{subsec:designprinciples}
@@ -608,7 +608,9 @@ systems~\cite{watson2007exploiting}, see
 user-space writes to the arguments to execute correctly. \sysname{} also
 introduces additional synchronization points to user-space programs, making
 deadlocks possible. \sysname{} preserves the equivalent execution of these
-system calls and user-space programs. The exe
+system calls and user-space programs. 
+\mat{Runaway sentence?}
+% The exe
 
 % The solution to the problem of a system call marking A and writing to it.
 % Nobody has done this before.
@@ -625,7 +627,7 @@ wrappers had successfully addressed this problem.
 % Some calls do not like TikTok. They want to read data multiple times. They are
 % ignored
 \emph{System calls that depend on double-fetches} cannot be protected by
-\sysname{}, so they must be \emph{whitelisted}---they do not mark pages~\hyperref[table:whitelist]{Table I}. They
+\sysname{}, so they must be \emph{whitelisted}---they do not mark pages~\autoref[table:whitelist]{Table I}. They
 must be manually inspected for bugs. Whitelisting them does not diminish the protection
 of other calls. Whitelisted calls still stop before writing to marked pages.
 
@@ -641,7 +643,7 @@ of other calls. Whitelisted calls still stop before writing to marked pages.
   \texttt{pselect6}                & Relies on outside writes               \\ \hline
   \texttt{rt\_sigtimedwait}        & Relies on outside writes               \\ \hline
   \texttt{execve}                  & Remaps memory                          \\ \hline
-  \texttt{nanosleep}               & Keeps the pages marked while it sleeps \\ \hline
+  \texttt{nanosleep}               & Keeps pages marked while it sleeps \\ \hline
   \end{tabular}
   \caption{Whitelisted system calls}
   \end{table}
@@ -655,7 +657,7 @@ synchronization depends on atomic user-space writes, with the system call being
 performed only to awake or make threads wait. If \texttt{futex} marks a
 user-space address as read-only, other user-space threads will be incapable of
 unlocking the \texttt{futex} by writing to that address. \texttt{execve}
-detaches the VM space and creates a new one. Adding it to the whitelist
+detaches the VM space and creates a new one. Whitlisting it
 simplifies the detaching and destruction of VM spaces in \sysname{}.
 
 Even though they execute correctly under \sysname{}, long-lasting calls (such as
@@ -1138,7 +1140,7 @@ performance (Apache -- 16.87\% and NginX -- 16.38\%) with \sysname{} protecting
 all calls. Whitelisting write calls improves the situation slightly (Apache --
 15.64\% and NginX -- 13.41\%). \sysname{} affects parallel and applications with
 numerous system calls the most because of the marking overhead. The impact of 
-whitelisting is not greater due to the low frequency of write calls.
+whitelisting write calls is small due to the low frequency of calls.
 
 The IPC TCP benchmark consists two system calls that transfer the data between
 two threads. Compared to other benchmarks, IPC benchmark has fewer threads than
@@ -1159,14 +1161,15 @@ profiles to judge more accurately the effect of system calls on performance
 
 \begin{LaTeXdescription}
   \item[Frequent system calls whitelisted] whitelists the most frequent calls
-  executed in the benchmarks \footnote{~\texttt{epoll\_ctl}, \texttt{close},
+  executed in the benchmarks (\texttt{epoll\_ctl}, \texttt{close},
   \texttt{read}, \texttt{fcntl}, \texttt{connect}, \texttt{recvfrom},
   \texttt{epoll\_wait}, \texttt{accept4}, \texttt{openat}, \texttt{socket},
   \texttt{shutdown}, \texttt{fstat}, \texttt{sendfile}, \texttt{stat},
-  \texttt{mmap}, \texttt{munmap}, \texttt{getsockname}, \texttt{times}}, as well
+  \texttt{mmap}, \texttt{munmap}, \texttt{getsockname}, \texttt{times}), as well
   as \texttt{write} and its variants. The code of standard system calls has been
   checked for double-fetches in previous work~\cite{wang2017double,
   xu2018precise}
+\mat{Is whitelisting mmap safe?}
 
   \item[All system calls whitelisted] does not protect any system calls.
 \end{LaTeXdescription}
