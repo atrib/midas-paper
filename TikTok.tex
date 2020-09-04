@@ -118,7 +118,7 @@ Furthermore, Watson~\cite{watson2007exploiting} blames an unfixable TOCTTOU bug
 as a reason for the insecurity of \emph{system call wrappers}.  
 
 % Enumerate the attack vectors
-This state of affairs calls for a system that \emph{mitigates} double-fetches in
+This state of affairs calls for a solution that \emph{mitigates} double-fetches in
 system calls to protect the kernel.
 To mitigate double-fetch bugs, a system must prohibit changes from
 concurrent threads to memory accessed by the system call.
@@ -317,7 +317,7 @@ trigger a page-fault. The page-fault handler executes in the kernel context of
 the faulting thread and performs the appropriate action (e.g. load a page, kill
 the thread). With the advent of cloud computing, \emph{user-space page-fault
 handling} has been added to the Linux kernel. \sysname{} relies on the page-fault
-handler for protection, so the user-space page-fault handling must be disabled.
+handler for protection, so user-space page-fault handling must be disabled.
 
 % Different memory types used later to explain certain attacks
 Memory in Linux can be either \emph{file-backed} or \emph{anonymous}.
@@ -425,7 +425,7 @@ value is then used (line 27).
 
 % The bug and the fix
 Note that the header is fetched twice---on lines 10 and 21. This gives the
-opportunity for the attacker to change the values in it. Considering
+opportunity for the attacker to change the values. Considering
 that the header is not verified the second time, the attacker can
 leave the kernel in an inconsistent state. The fix for this bug
 (\autoref{code:cvedoublefetchfix}) does not fetch the header the second time. It
@@ -529,63 +529,26 @@ attacks and introduce attack \ref{attk:systemcall} and \ref{attk:devicefiles}.
 \section{\sysname{} Design}
 \label{sec:design}
 
-We introduce the \sysname{} design in three steps.  By discussing a naive
-design (\autoref{subsec:naive}) we highlight potential flaws
-(\autoref{subsec:designprinciples}), leading to our design principles behind
+Designing a memory-marking system is prone to pitfalls. A naive design would
+instrument \texttt{read\_in} to \emph{mark} the pages it accesses with a
+\emph{superuser} flag in the page-table and force the writers to \emph{wait} in
+the page-fault handler. At the end of the call marked pages are \emph{unmarked},
+and waiting writers are woken-up. Marking the page in all VM spaces renders it
+unwritable by all user processes. However, a simple way to bypass such
+protection is to call \texttt{read} with the page as the destination. System
+calls execute with the superuser privileges and are allowed to write to
+protected pages.
+
+\sysname{} marks guarded pages as \emph{read-only}. Read-only marking solves the
+previous problem, but introduces another one. Some system calls (e.g.,
+\texttt{rt\_sigaction}) write to the arguments they read and will deadlock.
+A more complex solution is therefore required to design a memory-marking scheme.
+
+Further problems that we encounter when analysing the naive design
+(\autoref{subsec:designprinciples}) lead to our design principles behind
 memory-marking systems (\autoref{subsec:tempimmut} for \emph{Temporary
 Immutability}), \autoref{subsec:exactness} for \emph{Exactness}, and
-\autoref{subsec:correctness} for \emph{Correct}).
-
-% Two memory marking systems that backfire.
-\subsection{Naive Design}
-\label{subsec:naive}
-\mat{The naive design reads very clunkily; we should integrate the discussion of
-such a simple/naive approach in the main heading and then start with design
-principles and the actual defense. Reading the naive design again does not add
-much and should be streamlined.}
-
-\sysname{} leverages virtual memory protections to
-prevent changes to arguments during the execution of system calls.
-\sysname{} hardens the following three parts of the kernel:
-
-\begin{itemize}
-\item The page-table
-\item The page-fault handler
-\item The kernel interface for reading from user-space (\texttt{read\_in})
-\end{itemize}
-
-The \texttt{read\_in} function reads an argument from the user-space memory and
-protects it during the execution of the call. \texttt{read\_in} must protect the
-pages in \emph{all} memory spaces mapping the page. Otherwise, an adversary
-could alter the argument from a different process. At the end of the call, the
-guarded pages are set to the previous state if there are no other calls storing
-arguments on them. The process of protecting a page by setting the appropriate
-flags is called \emph{marking a page}. \emph{Unmarking} is the opposite process
-when the permissions are reset to the original values.
-
-If the adversary tries to write to a marked page, they will trigger a
-page-fault exception. The page-fault handler will detect that the page is marked
-by \sysname{} and force the thread to \emph{wait} until it is unmarked. The
-offending write is then repeated. 
-
-One possible way to implement marking is to make user-space pages accessible
-only from the kernel, e.g., by setting
-the \emph{superuser} flag in the page-table. User-space writes to marked pages
-trigger a page-fault, where they wait for the system call to end.
-
-Even though this system provides protection against user-space
-writes to anonymous pages, it is bypassed by calling a \texttt{read}
-system call. \texttt{read} executes in the kernel context and has access to 
-the pages marked with the \emph{superuser} flag. The attacker can provide the
-address of the marked argument as a destination of a \texttt{read} call and 
-change the data. We discovered this vector after testing an early prototype of
-\sysname{}.
-
-One mitigation is to mark pages as \emph{read-only} instead of \emph{superuser}
-to prohibit both super and user code to change marked memory.  Unfortunately,
-some system calls (e.g., \texttt{rt\_sigaction}) write to the arguments they
-read and will deadlock.  After trying to write to the marked page, they will
-wait for themselves to unmark it.
+\autoref{subsec:correctness} for \emph{Correctness}).
 
 \subsection{Design Principles}
 \label{subsec:designprinciples}
@@ -596,8 +559,8 @@ protection by mapping guarded pages as writable in another process
 (\autoref{attk:remapping}). Self-writing calls do not execute correctly---they
 deadlock when writing to their arguments. Watson~\cite{watson2007exploiting}
 mentions self-writing calls as a big problem for memory-marking systems.
-Finally, the naive design prevents writes from updating the memory. Memory locations
-that can change independently, such as memory mapped device registers,
+Finally, the naive design prevents writes from updating the memory. Memory
+locations that can change independently, such as memory mapped device registers,
 invalidate the protection (\autoref{attk:devicefiles}).
 
 \sysname{} enforces several policies to mitigate double-fetches:
@@ -641,7 +604,7 @@ and \autoref{attk:remapping}.
 \label{subsec:exactness}
 Self-writing system calls are problematic for memory-marking
 systems~\cite{watson2007exploiting}, see
-\autoref{subsec:naive}. Some system calls rely on double-fetches and
+\autoref{sec:design}. Some system calls rely on double-fetches and
 user-space writes to the arguments to execute correctly. \sysname{} also
 introduces additional synchronization points to user-space programs, making
 deadlocks possible. \sysname{} preserves the equivalent execution of these
@@ -944,7 +907,7 @@ page frame as marked, and incrementing the number of page owners. \sysname{} the
 uses the reverse mapping information to mark the page in all the VM spaces
 mapping it.
 
-Unmarking follows a similar procedure~\autoref{fig:unmarking}. The appropriate
+Unmarking follows a similar procedure (\autoref{fig:unmarking}). The appropriate
 locks are taken, and the number of owners is decremented. Only if no owners are
 marking the page anymore, it is unmarked in all VM spaces. If threads are
 waiting on the page, they are woken up. The last guest to wake up will
