@@ -798,15 +798,13 @@ These two design principles prevent \autoref{attk:writebuffers} and
 %%%%%%%%%%%%%%%%%%%%%%%%
 
 % TikTok can work almost anywhere
-\sysname{} prototype has been implemented on Linux x86-64. However, \sysname{}
-can be ported to any operating system that use a defined interface for reads and
+The \sysname{} prototype targets Linux x86-64. However, \sysname{}
+can be ported to any operating system that uses a defined interface for reads and
 writes to the user-space (\texttt{read\_in} and \texttt{write\_out}), and any
 architecture that has page-tables encoding access control information. Depending
-on the available resources (e.g. the number of free bits in the PTE) information
+on the available resources (e.g., the number of free bits in the PTE) information
 can be stored in different places (e.g., PTE or global structures).
 
-% Describe the data structures we need for basic operation
-\subsection{Basic Book-keeping}
 \autoref{fig:bookkeeping} illustrates some of the most important data structures
 used in the prototype---the PTE with the permissions, the marked page metadata
 (number of threads marking the page frame, number of threads waiting for the
@@ -816,8 +814,8 @@ unmarking, the reverse mapping information).
 some of the limitations due to the need to keep \texttt{struct page} as small as
 possible. Considering that one \texttt{struct page} exists for every page frame
 on the system, increasing its size would drastically increase the memory
-overhead.  The data stored in the page table (permissions, free bits and page
-frame number) is explained in more detail in \autoref{subsec:pageinfo}.
+overhead.  \autoref{subsec:pageinfo} explains the data stored in the page table
+(permissions, free bits and page frame number).
 
 % Describe how we use the page frames and use RAM efficiently
 \subsection{Storing the Page Frame Information}
@@ -826,35 +824,37 @@ Linux divides physical memory into page frames. Each page frame is represented
 by a \texttt{struct page}. This structure is replicated millions of times and
 every additional field has a tremendous impact on memory consumption.
 
-To keep the memory consumption low, \sysname{} uses a single bit in \texttt{struct
-page} to mark page frames. x86-64 has enough bits in the flag
-field, so we have decided to use one of the flag bits for this purpose.
-Architectures that have fewer flag bits (such as x86) can instead use some of
-the bits used by other features (e.g., Kernel Shared Memory or NUMA domains). On
-\autoref{fig:bookkeeping} this field is denoted by \emph{Page Marked Flag}.
-\texttt{struct page} also stores a pointer to the \emph{reverse mapping}
-information. The reverse mapping is used to find all PTEs \sysname{} needs to
-(un)mark.
+To keep the memory consumption low, \sysname{} uses a single, so far unused, bit
+in \texttt{struct page} to mark page frames. On x86-64 we repurpose one of
+several unused bis in the flag field for this purpose.
+Architectures that have fewer flag bits (such as x86) can instead use some other
+bit (e.g., Kernel Shared Memory, or NUMA domains). 
+\autoref{fig:bookkeeping} denotes this field as the \emph{Page Marked Flag}.
+The \texttt{struct page} stores a pointer to the \emph{reverse mapping}
+information. The reverse mapping enables \sysname{} to find all PTEs that
+require (un)marking.
 
 The marking metadata is stored in a hashmap based on the \emph{page frame
-number}. This enables us to store only the information on the pages which are
-currently marked and keep the memory consumption low. The access to these entries
-is protected by separate mutexes to improve the scalability of the system. The
-metadata consists of the page frame number, the count of threads marking the page
-(\emph{owners}), the number of threads waiting for the page to get unmarked
-(\emph{guests}), and a \emph{completion} they are waiting on. 
+number}, allowing us to store only the information on the pages which are
+currently marked and reduce memory impact. \sysname{} protects access to these
+entries by separate mutexes to improve its scalability. The metadata consists of
+the page frame number, the count of threads marking the page (\emph{owners}),
+the number of threads waiting for the page to get unmarked (\emph{guests}), and
+a \emph{completion} they are waiting on. 
+
 
 % The information stored in page-tables
-\subsection{PTE Information}
-\label{subsec:pageinfo}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{PTE Information} \label{subsec:pageinfo}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-When a page is marked, \sysname{} changes some of the flags in the PTEs mapping it
-(\autoref{fig:bookkeeping}):
+When a page is marked, \sysname{} changes some of the flags in the PTEs to mark
+it:
 
 \begin{LaTeXdescription}
   \item[R/W] gets set to \emph{read-only} to prevent writes to the page
   \item[SW2] gets the old value of \textbf{R/W}
-  \item[SW3] gets set to 1 
+  \item[SW3] gets set to 1
 \end{LaTeXdescription}
 
 \textbf{SW2} is used by the Software Dirty Pages
@@ -868,8 +868,8 @@ the process requesting the marking. Writes from other processes will trigger a
 copy-on-write mechanism, preventing them from changing the data.
 
 \sysname{} does a partial flush of the TLB and updates the MMU cache to make these
-changes visible immediately. The performance impact of this is analyzed further
-in \autoref{sec:evaluation}.
+changes visible immediately. \autoref{sec:evaluation} evaluates the performance
+impact of this flush.
 
 \begin{figure}[]
   \centering
@@ -915,16 +915,17 @@ marking the page anymore, it is unmarked in all VM spaces. If threads are
 waiting on the page, they are woken up. The last guest to wake up will
 deallocate the marking data for the page.
 
+
 % Deadlock prevention when accessing shared data structures
-\subsection{Deadlock Prevention}
-\label{subsec:deadlockprevention}
-Our implementation of shares several data structures
-among multiple threads (marking information, pages, completions, page-tables, or
-interval-trees).
-To prevent deadlocks, locks are always taken in increasing order.
-The only two locks taken in two different orders are the
-\emph{page-table lock} and the \emph{interval-tree lock}, which protects the marked
-memory ranges. \sysname{} features a deadlock prevention mechanism for these locks.
+\subsection{Deadlock Prevention} \label{subsec:deadlockprevention}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Our implementation shares several data structures among multiple threads
+(marking information, pages, completions, page-tables, or interval-trees).  To
+prevent deadlocks, locks are always taken in increasing order.  The only two
+locks taken in two different orders are the \emph{page-table lock} and the
+\emph{interval-tree lock}, which protect the marked memory ranges. \sysname{}
+features a deadlock prevention mechanism for these locks.
 
 
 % Locks are taken in opposite orders
@@ -939,7 +940,8 @@ interval-tree lock is already taken, it gets released.
 % page. However, if it is waiting it cannot do the exact same thing as the second
 % thread and cause a deadlock. There are no waits-for cycle, only chains
 The prevention mechanism leads to a way for system calls to write and block
-on marked pages. Ultimately, it cannot cause a deadlock because a thread would
+on marked pages. Ultimately, it cannot cause a deadlock because a 
+\mat{user or kernel?} thread would
 need to read and write to user-space at the same time. 
 
 The first thread executes \texttt{copy\_to\_user}~\autoref{fig:copytouser} and
@@ -955,7 +957,7 @@ as the first thread is waiting due to its attempted write.
 
 % When a marked page is mapped in a different VM space it is marked
 % We also need to preallocate memory outside the atomic context
-As described in~\autoref{sec:design}, file-backed pages need to be marked as
+Following our proposed design, file-backed pages need to be marked as
 they are loaded to memory. On-demand paging takes place in the page-fault
 handler, but invokes the functions of the file-system storing the file. \sysname{}
 extends the functionality of \texttt{set\_alloc\_pte} to mark the page. The
@@ -969,7 +971,9 @@ number of the interval-tree is incremented after adding the page, informing all
 other threads that it has changed.
 
 
-\subsection{Protecting System Call Arguments from Writes by the Kernel}
+\subsection{Protecting System Call Arguments from Kernel Writes}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \label{subsec:kernelland}
 \begin{figure}[]
   \centering
@@ -993,18 +997,18 @@ other threads that it has changed.
 
 % Before writing to user-space the kernel checks if the page is marked
 \sysname{} stores the marked memory ranges for every VM space
-(\texttt{mm\_struct}) in an interval tree. Before writing to the user-space,
-\texttt{copy\_to\_user} (\autoref{fig:copytouser}) the lock for the marked
-memory ranges tree and checks for the intersections with the destination buffer.
-Writes to marked pages are stored to freshly allocated memory, along with the
-destination address, and written at the end of the call.
+(\texttt{mm\_struct}) in an interval tree. Before writing to user-space,
+\texttt{copy\_to\_user} (\autoref{fig:copytouser}) acquires the lock for the
+marked memory ranges tree and checks for the intersections with the destination
+buffer.  Writes to marked pages are stored to freshly allocated memory, along
+with the destination address, and written at the end of the call.
 
 % Explain what happens when the target page is not present
 Writes to unmarked pages proceed as normal, unless the page is not present. Then
 a page-fault exception happens (\autoref{fig:copytouser}). The page-fault
 handler takes the page-table lock, loads the page, and restarts the write. If the
 page-fault handler detects a potential deadlock, it will release the
-interval-tree lock. Page-table read-lock is not exclusive, so it does not need
+interval-tree lock. The page-table read-lock is not exclusive, so it does not need
 to be released (\autoref{fig:pagefault}).
 
 % What happens after the fault?
@@ -1018,13 +1022,15 @@ lock, checks if the interval tree has changed, and restarts the write if so.
 % Explain why we restart the write. Doesn't that slow the system down?
 The restart of the write is necessary because any change to the interval-tree
 invalidates the iterator. \sysname{} is optimized for the case of rare markings,
-making \texttt{copy\_to\_user} calls that do not encounter marked pages fast
---- only one, large write occurs. The alternative is to check and write to every
+making \texttt{copy\_to\_user} calls that do not encounter marked pages fast as
+only a single, large write occurs. The alternative is to check and write to every
 page individually. Such implementation does not need to restart the write but
 incurs the overhead of individually writing to pages.
 
-\section{Evaluation}
-\label{sec:evaluation}
+
+%%%%%%%%%%%%%%%%%%%%
+\section{Evaluation} \label{sec:evaluation}
+%%%%%%%%%%%%%%%%%%%%
 
 % We want to test TikTok on programs with many threads and/or processes, and on
 % programs that use many system calls. That is where we expect to lose performance
