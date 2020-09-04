@@ -941,7 +941,7 @@ interval-tree lock is already taken, it gets released.
 % thread and cause a deadlock. There are no waits-for cycle, only chains
 The prevention mechanism leads to a way for system calls to write and block
 on marked pages. Ultimately, it cannot cause a deadlock because a 
-\mat{user or kernel?} thread would
+user thread executing in kernel context would
 need to read and write to user-space at the same time. 
 
 The first thread executes \texttt{copy\_to\_user}~\autoref{fig:copytouser} and
