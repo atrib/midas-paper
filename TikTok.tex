@@ -359,15 +359,15 @@ marked pages.
 \begin{figure}[]
   \centering
   \includegraphics[width=.85\linewidth]{img/doublefetch.pdf}
-  \caption{Diagram of a double-fetch bug}
+  \caption{Diagram of a double-fetch bug.}
   \label{fig:doublefetch}
 \end{figure}
 
 \begin{minipage}{\linewidth}
   
 
-\begin{lstlisting}[language=C, caption=Abridged CVE-2018-12633 Double Fetch in Linux,
-                  label=code:cvedoublefetch,  breaklines=true
+\begin{lstlisting}[language=C, caption={Abridged CVE-2018-12633 Double Fetch.},
+                  label=code:cvedoublefetch,  breaklines=true, captionpos=b,
                   postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
                   numbers=left,basicstyle=\scriptsize, xleftmargin=5.0ex]
 static long vbg_misc_device_ioctl(
@@ -432,7 +432,7 @@ leave the kernel in an inconsistent state. The fix for this bug
 copies the header into \texttt{buf} and the second fetch skips it.
 
 \begin{lstlisting}[language=C, caption=CVE-2018-12633 Double Fetch Fix~\cite{cve201812633fix},
-  label=code:cvedoublefetchfix,  breaklines=true
+  label=code:cvedoublefetchfix,  breaklines=true, captionpos=b,
   postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
   numbers=left,basicstyle=\scriptsize, firstnumber=18, xleftmargin=5.0ex]
 ...
@@ -617,7 +617,7 @@ to marked pages and triggering a page-fault. When a page is marked, it is also
 added to a data structure containing marked memory memory ranges for each VM
 space. We change the interface for writing to user-space (\texttt{write\_out})
 to check if it is writing to a marked page. Our added data structure records the
-Writes to marked pages, and executes them at the end of the call, after
+writes to marked pages, and executes them at the end of the call, after
 unmarking the arguments. This guarantees that system calls will not wait for
 themselves to unmark the pages.  Watson~\cite{watson2007exploiting} stressed
 that no system call wrappers had successfully addressed this problem.
@@ -720,7 +720,7 @@ The deadlocking pattern requires three ingredients:
   \end{minipage}
   \caption{Thread 2}
   \end{subfigure}
-  \caption{Executing instructions in the specified order causes a deadlock with \sysname}
+  \caption{Executing instructions in the specified order causes a deadlock with \sysname.}
   \label{fig:deadlock}
 \end{figure}
 
@@ -763,7 +763,7 @@ already mapped an can be edited directly by updating the mapped memory.
 
 In any case, if a system call interacts with \sysname{} to cause a deadlock,
 such a call can be \emph{added to the whitelist}. During our extensive
-evaluation and testing we have not encountered any deadlock.
+evaluation and testing we have not encountered any deadlocks.
 
 
 \subsection{Correctness} \label{subsec:correctness}
@@ -789,7 +789,7 @@ independent of user actions, and even the kernel, making any form of preventing
 data changes impossible. We do not consider this a flaw in \sysname{} because
 users usually are not allowed to access devices directly.
 
-These two design principles prevent \autoref{attk:writebuffers} and
+This design principle prevents \autoref{attk:writebuffers} and
 \autoref{attk:devicefiles}.
 
 
@@ -1150,7 +1150,7 @@ it in-between two groups with respect to the performance penalty.
 \begin{figure}[]
   \centering
   \includegraphics[width=\linewidth]{img/freq_removed.pdf}
-  \caption{Detailed comparison of Apache and NginX performance}
+  \caption{Detailed comparison of Apache and NginX performance.}
   \label{fig:phoronix-apache-nginx}
 \end{figure}
 
@@ -1194,7 +1194,7 @@ remains even when \sysname is not protecting any calls because
   \texttt{copy\_to\_user} Protection & 0\%    & 1.93\%          & 0\% & 1.28\%      \\ \hline
   Measured Overhead                  & 0\%    & 18.56\%         & 0\% & 4.72\%      \\ \hline
   \end{tabular}
-  \caption{Perf Analysis of the Benchmarks. The percentages are normalized to \sysname{} Off execution times}
+  \caption{Perf Analysis of the Benchmarks. The percentages are normalized to \sysname{} Off execution times.}
 \end{table*}
 
 % I have picked two benchmarks with different behaviors and a high TikTok overhead
