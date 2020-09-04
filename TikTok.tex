@@ -1035,6 +1035,11 @@ incurs the overhead of individually writing to pages.
 % We want to test TikTok on programs with many threads and/or processes, and on
 % programs that use many system calls. That is where we expect to lose performance
 
+To fully evaluate the impact of our memory marking system, we need to carefully
+consider a variety of different usage scenarios both in user-centric (desktop)
+environments as well as server environments. We build on the large body of
+existing systems benchmarks to demonstrate performance impact of our system.
+
 \sysname{} has most impact when marking and unmarking pages during
 system calls. This overhead is proportional to the number of VM spaces
 (processes) that have the pages mapped. Benchmarks must measure the \sysname{}
@@ -1042,28 +1047,32 @@ overhead for the multithreaded and multiprocessed workloads, as well as the
 workloads with many marking system calls.
 
 % Based on the previous section we have picked these benchmarks
-We evaluate \sysname{} using two different benchmark suites---NAS Parallel
-Benchmark (NPB)~\cite{npb} and Phoronix Test Suite (PTS)~\cite{pts}. NPB tests
-\sysname{} on multithreaded or multiprocessed CPU-bound workloads. NPB is a
-suitable benchmark to measure a drop of performance due to multithreading and
+We evaluate \sysname{} using two different benchmark suites: the NAS Parallel
+Benchmark (NPB)~\cite{npb} and the Phoronix Test Suite (PTS)~\cite{pts}. NPB
+tests \sysname{} on multithreaded or multiprocessed CPU-bound workloads. NPB is
+a suitable benchmark to measure a drop of performance due to multithreading and
 multiprocessing. PTS evaluates \sysname{} on several real-world applications.
 They complement NPB in that they consist of system call heavy applications, with
-varying degrees of parallelism.
+varying degrees of parallelism. In this evaluation we do not include results of
+SPEC CPU2006 or SPEC CPU2017 as that benchmark is heavily CPU bound and
+optimized to have minimal interaction with the operating system, i.e., the
+number of system calls is extremely low resulting in negligible overhead.
 
 % My office desktop machine and the kernel I cloned a year ago
 All benchmarks have been performed on Ubuntu Server 18.04 LTS (Linux 5.4.0-rc3)
 with Intel i7-9700 and 16 GB of RAM.
-
-Three main \sysname{} profiles have been compared:
+%
+We compare three main \sysname{} configurations:
 \begin{LaTeXdescription}
-  \item[\sysname{} On] protects as many system calls as possible,
-  \item[\sysname{} Partial] does not protect the arguments of the \texttt{write}
-system call and \texttt{write} variants\footnote{~\texttt{pwrite}, \texttt{pwrite64}, \texttt{pwritev}}, and
-  \item[\sysname{} Off] is the Linux kernel compiled without \sysname{}  
+  \item[\sysname{} On] full protection of system calls,
+  \item[\sysname{} Partial] whitelists the \texttt{write}
+system call and variants (\texttt{pwrite}, \texttt{pwrite64}, \texttt{pwritev}), and
+  \item[\sysname{} Off] is the Linux kernel compiled without \sysname{}. 
 \end{LaTeXdescription}
 
-\subsection{NAS Parallel Benchmark}
-\label{subsec:npb}
+
+\subsection{NAS Parallel Benchmark} \label{subsec:npb}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % A bit more about the benchmark
 \emph{NAS Parallel Benchmarks (NPB)}~\cite{npb} is a benchmark introduced by
@@ -1111,8 +1120,9 @@ benchmarks magnify relative differences (explaining the artifacts for
 penalty for CPU-bound workloads, even when they involve multiple
 threads/processes.
 
-\subsection{Phoronix Test Suite}
-\label{subsec:phoronix}
+
+\subsection{Phoronix Test Suite} \label{subsec:phoronix}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure*}[]
   \centering
@@ -1124,7 +1134,7 @@ threads/processes.
 
 % Explain why we used it in a bit more detail
 \emph{Phoronix Test Suites (PTS)}~\cite{pts} evaluates systems on real-world
-software. PTS tested \sysname{} on a range of programs complementing NPB ---
+software. PTS tested \sysname{} on a range of programs complementing NPB:
 from single-threaded, CPU-bound applications (OpenSSL) to multi-threaded,
 multi-processed, programs with frequent system calls (Apache).
 
@@ -1142,13 +1152,14 @@ generate independent, non-communicating processes.
 
 % Three benchmarks which slow down
 However, the two web servers (Apache and NginX) show a significant drop in
-performance (Apache -- 16.87\% and NginX -- 16.38\%) with \sysname{} protecting
-all calls. Whitelisting write calls improves the situation slightly (Apache --
-15.64\% and NginX -- 13.41\%). \sysname{} affects parallel and applications with
-numerous system calls the most because of the marking overhead. The impact of 
-whitelisting write calls is small due to the low frequency of calls.
+performance (16.87\% for Apache and 16.38\% for NginX) with \sysname{}
+protecting all calls. Whitelisting write calls improves the situation slightly
+(15.64\% for Apache and 13.41\% for NginX). \sysname{} affects parallel and
+applications with numerous system calls the most because of the marking
+overhead. The impact of whitelisting write calls is small due to the low
+frequency of calls.
 
-The IPC TCP benchmark consists two system calls that transfer the data between
+The IPC TCP benchmark consists of two system calls that transfer data between
 two threads. Compared to other benchmarks, IPC benchmark has fewer threads than
 web-servers, but also executes a significant number of system calls. This places
 it in-between two groups with respect to the performance penalty.
@@ -1160,10 +1171,14 @@ it in-between two groups with respect to the performance penalty.
   \label{fig:phoronix-apache-nginx}
 \end{figure}
 
+
 % More detailed results
-Apache and NginX benchmarks have been executed under two more \sysname{}
-profiles to judge more accurately the effect of system calls on performance
-(\autoref{fig:phoronix-apache-nginx}):
+\subsection{Apache and NginX Overhead breakdown}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+We evaluated the Apache and NginX benchmarks under two additional \sysname{}
+configurations to more accurately assess the effect of system calls on
+performance (\autoref{fig:phoronix-apache-nginx}):
 
 \begin{LaTeXdescription}
   \item[Frequent system calls whitelisted] whitelists the most frequent calls
@@ -1205,16 +1220,16 @@ remains even when \sysname is not protecting any calls because
 
 % I have picked two benchmarks with different behaviors and a high TikTok overhead
 % They were tested on the TikTok configuration that should make the differences evident
-To contrast the overhead between two different workloads Apache and IPC were
-traced with \texttt{perf}. The traces serve as ground truth
-(\sysname{} Off) and \sysname{} with writes whitelisted. Here the IPC benchmark
+To contrast the overhead between two different workloads, we traced Apache and IPC
+with \texttt{perf}. The traces serve as ground truth
+(\sysname{} Off) and \sysname{} with writes whitelisted. Here, the IPC benchmark
 does not incur any marking overhead, while Apache still marks pages.
 
 % How to read the table. TLB data is already included in marking and unmarking
-\hyperref[perftable]{Table II} shows how much time the programs spend in
-\sysname{} functions. Percentages of individual segments have been measured by
-\texttt{perf}, while the total overhead is calculated from the results of the
-benchmarks. TLB is flushed both during the marking and unmarking of
+\autoref{perftable} shows how much time the programs spend in
+\sysname{} functions. We measure percentages of individual segments with
+\texttt{perf}, while calculating the total overhead from the results of the
+benchmarks. While the TLB is flushed both during the marking and unmarking of
 pages, but is included in the table as an important performance parameter.
 
 % Explain the differences
