@@ -456,11 +456,11 @@ boundaries~\cite{lu2018untrusted}). Double-fetches have been responsible for man
 vulnerabilities in different kernels~\cite{jurczyk2013bochspwn, wang2018survey}.
 
 
-\section{Threats}
+\section{Threats and Attacks}
 
-The capabilities of the attacker are described in~\autoref{sec:threatmodel}.
-\autoref{sec:attacks} details the attacks that can be mounted to change the
-data in memory, to exploit a double-fetch bug.
+We now describe the threat model and attacker capabilities along with the
+attacks that can be mounted to change the data in memory, to exploit a
+double-fetch bug.
 
 
 \subsection{Threat Model}
@@ -481,7 +481,7 @@ or side-channels~\cite{kocher2019spectre}, and file-system TOCTTOU
 attacks~\cite{payer2012protecting, pu2006methodical, wei2010modeling,
 tsafrir2008portably} are out of scope.
 
-\subsection{TOCTTOU Attacks}
+\subsection{Attacks Classification}
 \label{sec:attacks}
 
 % List five attacks and explain them quickly
@@ -522,9 +522,10 @@ The following attacks are possible:
 
 \end{enumerate}
 
-Watson~\cite{watson2007exploiting} in his analysis of CerbNG introduces attacks
-\ref{attk:direct}, \ref{attk:remapping} and \ref{attk:writebuffers}. We extend the discussion of known
-attacks and introduce attack \ref{attk:systemcall} and \ref{attk:devicefiles}.
+Watson~\cite{watson2007exploiting} in his analysis of CerbNG introduces
+\autoref{attk:direct}, \autoref{attk:remapping} and \autoref{attk:writebuffers}.
+We extend the discussion of known attacks and introduce
+\autoref{attk:systemcall} and \autoref{attk:devicefiles}.
 
 \section{\sysname{} Design}
 \label{sec:design}
