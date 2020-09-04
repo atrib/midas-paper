@@ -1253,140 +1253,167 @@ However, \texttt{copy\_to\_user} checks are still active, causing a noticeable
 locking overhead.
 
 
-\section{Related Work}
-\label{sec:relatedwork}
+%%%%%%%%%%%%%%%%%%%%%%
+\section{Related Work} \label{sec:relatedwork}
+%%%%%%%%%%%%%%%%%%%%%%
 
 % Static and dynamic solutions for DFs
 The literature related to double-fetches can be broadly divided into two groups.
-In the first group are the static solutions (\autoref{subsec:dfstatic}) that use
-techniques such as source or binary analysis to detect double-fetch bugs. The
-second group (\autoref{subsec:dfdynamic}) uses run-time information to detect
-and (rarely) prevent double-fetches.
+Static solutions are in the first group. These systems use techniques such as
+source or binary analysis to detect double-fetch bugs. The second group of
+systems uses run-time information to detect and (rarely) prevent double-fetches.
 
-The most important work related to \sysname{} is the paper by
-Watson~\cite{watson2007exploiting} criticizing the security of system call
-wrappers (\autoref{subsec:watson}).
+The most inspiring work related to \sysname{} is the paper by
+Watson~\cite{watson2007exploiting}, criticizing the security of system call
+wrappers.
+
 
 % Go over Watson's paper. Tell everyone he found lots of problems and that we
 % fixed all of them
-\subsection{Watson's Critique of System Call Wrappers}
-\label{subsec:watson}
+\subsection{Watson's Critique of System Call Wrappers} \label{subsec:watson}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 Watson's paper~\cite{watson2007exploiting} scrutinized the security of many
-system call wrappers. Not only did he find that all of them were insecure,
-Watson also described the different types of TOCTTOU bugs that compromised them
-and discussed potential fixes. In a short paragraph, he mentions that Pawel
-Dawidek, the creator of CerbNG~\cite{zak_frasunek_dawidek}, has experimented
-with marking arguments read-only. CerbNG was an early system call filtering
-system for BSD that used copy-on-read-and-write to a new memory page.
+system call wrappers. Not only did he discover that all existing system call
+wrappers were fundamentally insecure, Watson also described the different types
+of TOCTTOU bugs that compromised them and discussed potential fixes. In a short
+paragraph, he mentions that Pawel Dawidek, the creator of
+CerbNG~\cite{zak_frasunek_dawidek}, has experimented with marking arguments
+read-only. CerbNG was an early system call filtering system for BSD that used
+copy-on-read-and-write to a new memory page.  Our very first design sketch
+followed a similar idea but we quickly discovered the potential drawbacks that
+remained.
 
 Afterward, Watson briefly discusses problems such memory marking systems
-need to solve: 
+must solve: 
 \begin{itemize}
-    \item unnecessary page-faults
-    \item bypassing memory marking using IO system calls
-    \item mapping shared memory with different permissions
-    \item handling system calls that both read and write to the same memory
+    \item unnecessary page-faults,
+    \item bypassing memory marking using IO system calls,
+    \item mapping shared memory with different permissions, and
+    \item handling system calls that both read and write to the same memory.
 \end{itemize}
 
 According to Watson, no memory-marking system (including CerbNG) addressed all
-of these problems. \sysname{} does exactly that. Unnecessary page-faults are
-rare and they are used to make the offending threads wait for unmarking. After
-the page has been unmarked, the write proceeds without any consequences. Write
-system call does not proceed until there are no marked pages of the file.Pages
-are marked when they are mapped if needed. \sysname{} postpones all writes to
-marked pages coming from the kernel while allowing the system calls to execute
-correctly.
+of these pervasive problems. \sysname{} does exactly that and even includes
+protection against new attacks that Watson was not aware of. Unnecessary
+page-faults are rare and they are used to make the offending threads wait for
+unmarking. After the page has been unmarked, the write proceeds without any
+consequences. Write system calls do not proceed until there are no marked pages
+of the file. Pages are marked when they are mapped and only if needed.
+\sysname{} postpones all writes to marked pages coming from the kernel while
+allowing the system calls to execute correctly.
+
 
 % Static analysis---Good at finding bugs, you do not need to run the code.
 % It does not find DFs in binaries and it does not fix bugs
-\subsection{Static Analysis Work}
-\label{subsec:dfstatic}
+\subsection{Static Analysis Work} \label{subsec:dfstatic}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 Static analysis techniques analyze the source code to find double-fetch bugs.
 Wang et al.~\cite{wang2017double} used pattern matching to find potential
 double-fetches. They implemented a tool that patches certain double-fetches
 automatically. However, their method in the general case produces false
-positives that need to be inspected manually. Xu et al.~\cite{xu2018precise}
-improved on this work by proposing Deadline. Deadline does not use the pattern 
-analysis on the source files to detect double-fetches, but a compiler's
-intermediate representation and constraint solving to eliminate false positives.
+positives that must be manually inspected. Xu et al.~\cite{xu2018precise}
+improved on this work by proposing \emph{Deadline}. Deadline does not use the
+pattern analysis on the source files to detect double-fetches, but a compiler's
+intermediate representation and constraint solving to reduce false positives.
 
-Static analysis techniques such as these have the benefit of being able to find
-bugs in the code that cannot be run (e.g., missing hardware to test the
-drivers). However, they are meant for bug detection, not mitigation. Even though
-the tools can fix some bugs automatically, this is not always possible. The
-TOCTTOU bug is in the system call wrappers by design. Double-fetches not visible
-in the source, nor in the intermediate representation are another problem.
-Compilers can introduce such invisible double-fetches when allocating registers
-to variables. \sysname{} works even in such cases.
+Static analysis techniques such as these have the benefit of discovering
+bugs in the code that cannot be run (e.g., mitigating the need for specific
+hardware to test a particular driver). However, they are meant for bug
+detection, not mitigation. Even though the tools can discover some bugs
+automatically, this is not always possible. System call wrappers have, by
+design, an inherent TOCTTOU bug.
+
+Double-fetches introduced by the compiler are another challenge. While the
+source code and even the intermediate representation may be bug free, the
+compiler can introduce such ``invisible'' double-fetches when allocating
+registers to variables. \sysname{} protects the system against all kinds of
+double fetches.
+
 
 % Dynamic analysis---You are limited to the code you can run. You can find
 % DFs introduced by compilers. Schwartz and al. have an amazing idea to mitigate
 % DFs using TSX. Unfortunately, TSX limits the protected code quite a bit
-\subsection{Dynamic Analysis Work}
-\label{subsec:dfdynamic}
+\subsection{Dynamic Analysis Work} \label{subsec:dfdynamic}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 Google Project Zero's Bochspwn~\cite{jurczyk2013bochspwn} uses an emulator to
 detect double-fetches. It found a large number of bugs in the Windows kernel.
-Bochspwn works on binaries. It does not require access to the source code and it
+Bochspwn works on binaries (i.e., it needs no source code access) and
 detects bugs introduced by compilers. DFTracker~\cite{wang2019dftracker} is
-another dynamic analysis technique work with a lower overhead, that relies on
-taint tracking. However, these dynamic techniques are limited to the detection
-of double-fetches. Similar to work presented in \autoref{subsec:dfstatic},
-developers need to manually fix the bugs. However, with dynamic analysis a
-double-fetch must also be executed, limiting this technique to the core kernel
+another dynamic analysis technique, with a lower overhead, that relies on
+taint tracking. However, these dynamic techniques are limited in their detection
+of double-fetches. First, similar to work presented in \autoref{subsec:dfstatic},
+developers need to manually fix all discovered bugs. Second, in contrast to
+static techniques, with dynamic analysis the double-fetch must also be executed
+by some concrete code and input, limiting this technique to the core kernel
 and to the drivers with the available hardware.
 
 A big leap in dynamic analysis techniques has been presented by Schwartz et
-al.~\cite{schwarz2018automated}. The first part of the paper introduces DECAF
---- a framework that uses side-channel attacks to create a fuzzing oracle for
+al.~\cite{schwarz2018automated}. The first part of the paper introduces DECAF,
+a framework that uses side-channel attacks to create a fuzzing oracle for
 double-fetch bugs. While Bochspwn relies on emulation, slowing the execution
 significantly, DECAF runs natively. It also eliminates false positives by
 automatically exploiting found bugs.
 
-Schwartz et al. then discuss a real-time mitigation technique for double fetches
---- DropIt. DropIt uses Intel's \emph{Transactional Synchronization Extensions}
+Schwartz et al. then discuss DropIt, a real-time mitigation technique for double
+fetches. DropIt uses Intel's \emph{Transactional Synchronization Extensions}
 (TSX)~\cite{intel64and} in a creative way to prevent double-fetch bugs. By
 encapsulating the code in a TSX transaction, writes from other threads will
 result in the transaction being aborted. However, the code executing inside a
 TSX transaction is severely limited. All reads must fit in the L3 cache, and all
-writes in L1. Some instructions are also forbidden. \sysname{} has none of those
+writes in L1. Some instructions are also forbidden. \sysname{} faces none of those
 limitations. It works on non-Intel processors and relies on page tables for
-protection---a technique that has been present for several decades.
+protection, a technique that has been present for several decades.
+
 
 % We can port TikTok to other systems and arches, use it to protect filters,
 % maybe even optimize it a bit
-\section{Discussion}
-\label{sec:discussion}
-\sysname{} can be ported to any kernel that accesses the user-space through a
+%%%%%%%%%%%%%%%%%%%%
+\section{Discussion} \label{sec:discussion}
+%%%%%%%%%%%%%%%%%%%%
+
+\sysname{} can be ported to any kernel that accesses user-space memory through a
 well-defined interface, and any computer architecture that features page-tables.
-Android devices frequently have binary-only drivers and porting \sysname{} to 
-ARM would provide additional safety guarantees.
+Android devices frequently have binary-only drivers and porting \sysname{} to
+ARM would provide additional safety guarantees to the Android ecosystem.
 
-Current system call filters~\cite{landlock,krsi} solve the TOCTTOU bug by
-implementing as Linux Security Module (LSM)~\cite{morris2002linux} hooks. For
-the filters to work, LSM hooks need to be present in drivers. Even then the
-undesired behavior may manifest before a hook is encountered. Integration of
-\sysname{} with an existing system call wrapper would solve the TOCTTOU bug.
-SecComp~\cite{seccomp} and eBPF~\cite{ebpf} are the obvious candidates that
-would benefit from such an extension. \sysname{} performance would also be
-improved by marking only the pages that are read by the filter in the system
-call wrapper.
+Current system call filters~\cite{landlock,krsi} prohibit TOCTTOU races by
+implementing filters as Linux Security Module (LSM)~\cite{morris2002linux}
+hooks. For the filters to work, LSM hooks need to be present in drivers. Even
+then, the undesired behavior may manifest before a hook is encountered.
+Integration of \sysname{} with an existing system call wrapper would solve these
+TOCTTOU races.  SecComp~\cite{seccomp} and eBPF~\cite{ebpf} are the obvious
+candidates that would benefit from such an extension. \sysname{} performance
+could be improved by marking only the pages that are read by the filter in
+the system call wrapper.
 
-The performance of \sysname{} for multithreaded, system call heavy applications
-is low due to the marking overhead. A possibility of batching TLB
-flushes for multiple pages should be explored as a possible optimization.
+The performance overhead of \sysname{} for multithreaded, system call heavy
+applications is low but not negligible due to the marking overhead. A
+possibility of batching TLB flushes for multiple pages should be explored as a
+possible optimization.
 
+
+%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
+%%%%%%%%%%%%%%%%%%%%
+
 % Abstract Ctrl+C Ctrl+V
 \sysname{} mitigates double-fetch bugs in system calls by using page-tables. It
 works both on the core kernel, and drivers, even when their source code is not
 available. It can be ported to any architecture that uses page-tables, and any
-kernel that has a well-defined interface to access user-space memory. \sysname{}
-is tested in practice on a modern system (Ubuntu Server 18.04 LTS) with complex
-programs running (\texttt{systemd}, \texttt{gcc}, \texttt{Apache}). When
-protecting rare system calls it shows an overhead of \roughevaloverheadbetter{},
-which raises to \roughevaloverheadbad{} when protecting almost all calls in
+kernel that has a well-defined interface to access user-space memory. 
+
+Our prototype implementation of \sysname{} for x86-64 protects modern systems
+(e.g., Ubuntu Server 18.04 LTS) with complex programs running (\texttt{systemd},
+\texttt{gcc}, \texttt{Apache}). When protecting rare system calls our mitigation
+incurs a negligible overhead of \roughevaloverheadbetter{}, which raises to a
+low overhead of \roughevaloverheadbad{} when protecting almost all calls in
 multithreaded, system call intensive programs. CPU-bound programs do not have a
 significant overhead, even if they use multiple threads.
+
+
 %-------------------------------------------------------------------------------
 %\section*{Acknowledgments}
 %-------------------------------------------------------------------------------
