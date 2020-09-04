@@ -1360,10 +1360,10 @@ available. It can be ported to any architecture that uses page-tables, and any
 kernel that has a well-defined interface to access user-space memory. \sysname{}
 is tested in practice on a modern system (Ubuntu Server 18.04 LTS) with complex
 programs running (\texttt{systemd}, \texttt{gcc}, \texttt{Apache}). When
-protecting rare system calls it shows an overhead of \roughevaloverheadbetter, which raises to
-\roughevaloverheadbad when protecting almost all calls in multithreaded, system call intensive
-programs. CPU-bound programs do not have a significant overhead, even if they
-use multiple threads.
+protecting rare system calls it shows an overhead of \roughevaloverheadbetter{},
+which raises to \roughevaloverheadbad{} when protecting almost all calls in
+multithreaded, system call intensive programs. CPU-bound programs do not have a
+significant overhead, even if they use multiple threads.
 %-------------------------------------------------------------------------------
 %\section*{Acknowledgments}
 %-------------------------------------------------------------------------------
