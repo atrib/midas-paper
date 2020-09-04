@@ -608,10 +608,9 @@ systems~\cite{watson2007exploiting}, see
 \autoref{sec:design}. Some system calls rely on double-fetches and
 user-space writes to the arguments to execute correctly. \sysname{} also
 introduces additional synchronization points to user-space programs, making
-deadlocks possible. \sysname{} preserves the equivalent execution of these
-system calls and user-space programs. 
-\mat{Runaway sentence?}
-% The exe
+deadlocks possible. However, the exactness of execution is preserved, as explained
+in~\autoref{subsec:exactness} and ~\autoref{subsec:deadlocks}. 
+
 
 % The solution to the problem of a system call marking A and writing to it.
 % Nobody has done this before.
@@ -658,7 +657,7 @@ synchronization depends on atomic user-space writes, with the system call being
 performed only to awake or make threads wait. If \texttt{futex} marks a
 user-space address as read-only, other user-space threads will be incapable of
 unlocking the \texttt{futex} by writing to that address. \texttt{execve}
-detaches the VM space and creates a new one. Whitlisting it
+detaches the VM space and creates a new one. Whitelisting it
 simplifies the detaching and destruction of VM spaces in \sysname{}.
 
 Even though they execute correctly under \sysname{}, long-lasting calls (such as
@@ -1169,8 +1168,9 @@ profiles to judge more accurately the effect of system calls on performance
   \texttt{mmap}, \texttt{munmap}, \texttt{getsockname}, \texttt{times}), as well
   as \texttt{write} and its variants. The code of standard system calls has been
   checked for double-fetches in previous work~\cite{wang2017double,
-  xu2018precise}
-\mat{Is whitelisting mmap safe?}
+  xu2018precise}. \texttt{mmap} and \texttt{munmap} do not read memory and mark
+  pages. Therefore they are safe to whitelist.
+
 
   \item[All system calls whitelisted] does not protect any system calls.
 \end{LaTeXdescription}
