@@ -941,7 +941,7 @@ interval-tree lock is already taken, it gets released.
 % thread and cause a deadlock. There are no waits-for cycle, only chains
 The prevention mechanism leads to a way for system calls to write and block
 on marked pages. Ultimately, it cannot cause a deadlock because a 
-user thread executing in kernel context would
+user-thread executing in kernel context would
 need to read and write to user-space at the same time. 
 
 The first thread executes \texttt{copy\_to\_user}~\autoref{fig:copytouser} and
@@ -1190,7 +1190,7 @@ performance (\autoref{fig:phoronix-apache-nginx}):
   as \texttt{write} and its variants. The code of standard system calls has been
   checked for double-fetches in previous work~\cite{wang2017double,
   xu2018precise}. \texttt{mmap} and \texttt{munmap} do not read memory and mark
-  pages. Therefore they are safe to whitelist.
+  pages. Therefore, they are safe to whitelist.
 
 
   \item[All system calls whitelisted] does not protect any system calls.
