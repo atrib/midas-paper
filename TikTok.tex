@@ -1,4 +1,4 @@
-\documentclass[letterpaper,twocolumn,10pt]{article}
+\documentclass[letterpaper,twocolumn,10pt, anonymous]{article}
 \usepackage{usenix2019_v3}
 
 % to be able to draw some self-contained figs
@@ -9,44 +9,23 @@
 \usepackage{filecontents}
 
 %-------------------------------------------------------------------------------
-\begin{filecontents}{\jobname.bib}
-%-------------------------------------------------------------------------------
-@Book{arpachiDusseau18:osbook,
-  author =       {Arpaci-Dusseau, Remzi H. and Arpaci-Dusseau Andrea C.},
-  title =        {Operating Systems: Three Easy Pieces},
-  publisher =    {Arpaci-Dusseau Books, LLC},
-  year =         2015,
-  edition =      {1.00},
-  note =         {\url{http://pages.cs.wisc.edu/~remzi/OSTEP/}}
-}
-@InProceedings{waldspurger02,
-  author =       {Waldspurger, Carl A.},
-  title =        {Memory resource management in {VMware ESX} server},
-  booktitle =    {USENIX Symposium on Operating System Design and
-                  Implementation (OSDI)},
-  year =         2002,
-  pages =        {181--194},
-  note =         {\url{https://www.usenix.org/legacy/event/osdi02/tech/waldspurger/waldspurger.pdf}}}
-\end{filecontents}
-
-%-------------------------------------------------------------------------------
 \begin{document}
 %-------------------------------------------------------------------------------
+
+
+\newcommand\tocttou[0]{ToCtToU}
+\newcommand\tiktok[0]{TikTok}
 
 %don't want date printed
 \date{}
 
 % make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{\Large \bf Formatting Submissions for a USENIX Conference:\\
-  An (Incomplete) Example}
+\title{\Large \bf Kernel TOCTTOU Protection}
 
 %for single author (just remove % characters)
 \author{
-{\rm Your N.\ Here}\\
+{\rm Anonymous}\\
 Your Institution
-\and
-{\rm Second Name}\\
-Second Institution
 % copy the following lines to add more authors
 % \and
 % {\rm Name}\\
@@ -62,147 +41,102 @@ Your abstract text goes here. Just a few facts. Whet our appetites.
 Not more than 200 words, if possible, and preferably closer to 150.
 \end{abstract}
 
+\section{Design}
 
-%-------------------------------------------------------------------------------
-\section{Introduction}
-%-------------------------------------------------------------------------------
+\tiktok is designed to maintain a single invariant: 
+\emph{User data read by a system call will not change throughout the syscall's lifetime}.
+By construction, the invariant guarantees that double-fetches in syscall
+code will return the same data, eliminating \tocttou bugs. 
+\tiktok maintains the invariant by tracking versions when the data is first accessed,
+making copies when the data is concurrently written and 
+accessing the correct copy in subsequent reads.
+Initially, user data has a single copy, and versions access this copy. 
+Copies are made for versions lazily, only when the user data recieves a concurrent write.
 
-A paragraph of text goes here. Lots of text. Plenty of interesting
-text. Text text text text text text text text text text text text text
-text text text text text text text text text text text text text text
-text text text text text text text text text text text text text text
-text text text text text text text.
-More fascinating text. Features galore, plethora of promises.
+\tiktok's implementation leverages the protection mechanisms provided by existing 
+virtual memory abstractions. 
+On modern platforms, operating systems set up page-tables which provide protection
+efficiently at a page-granularity. 
+Therefore, \tiktok implements its invariant at a page-granularity, not object 
+granularity: when a syscall reads from userspace, every page touched by that 
+read are covered by the invariant, not merely the bytes read.
+As a side-effect of this implementation, \tiktok cannot differentiate between
+accesses to different parts of a page, and incurs overhead on false sharing.
 
-%-------------------------------------------------------------------------------
-\section{Footnotes, Verbatim, and Citations}
-%-------------------------------------------------------------------------------
+\tiktok allows syscalls and userspace to concurrently access pages.
+To ensure that writes to pages do violate the invariant, \tiktok
+must maintain multiple copies of a page.
+Particularly, for each syscall which has accessed a page, \tiktok
+must maintain a snapshot of its contents from when the page was first 
+touched by the syscall.
+If a page is not written to between being touched by separate syscalls,
+the corresponding snapshots of this page for both syscalls will be identical. 
 
-Footnotes should be places after punctuation characters, without any
-spaces between said characters and footnotes, like so.%
-\footnote{Remember that USENIX format stopped using endnotes and is
-  now using regular footnotes.} And some embedded literal code may
-look as follows.
+\subsection{Page state machine}
 
-\begin{verbatim}
-int main(int argc, char *argv[]) 
-{
-    return 0;
-}
-\end{verbatim}
+\tiktok implicitly maintains a state machine for every single page mapped in
+userspace. 
+The state machine tracks running syscalls, the pages read by the syscalls,
+and copies of the page necessary for providing the correct snapshot of the
+page for subsequent reads by these syscalls.
 
-Now we're going to cite somebody. Watch for the cite tag. Here it
-comes. Arpachi-Dusseau and Arpachi-Dusseau co-authored an excellent OS
-book, which is also really funny~\cite{arpachiDusseau18:osbook}, and
-Waldspurger got into the SIGOPS hall-of-fame due to his seminal paper
-about resource management in the ESX hypervisor~\cite{waldspurger02}.
+\autoref{fig:tiktok_states} shows the state machine for a single page.
+At every state, the page has two associated sets:
+The copies set $C = {C_U, C_0, ..}$ holds multiple copies of the page over time. 
+The snapshots set $S = {U, S_0, S_1, ...}$ tracks logical versions of the page, 
+and each version points to a particular copy. 
+The userspace copy ($C_U$) is that mapped in process' address spaces, and 
+will be modified on writes from user/kernel code.
+All other copies are read-only, and are used for providing snapshots to syscalls.
+Each snapshot maps to a copy.
 
-The tilde character (\~{}) in the tex source means a non-breaking
-space. This way, your reference will always be attached to the word
-that preceded it, instead of going to the next line.
+\paragraph{State 0}
+A page starts as (unmarked, unduplicated). 
+At this stage, there is a single writable copy $C_U$ and a single snapshot $U$. 
+All processes where this page is mapped have unrestricted read and write access
+to it.
 
-And the 'cite' package sorts your citations by their numerical order
-of the corresponding references at the end of the paper, ridding you
-from the need to notice that, e.g, ``Waldspurger'' appears after
-``Arpachi-Dusseau'' when sorting references
-alphabetically~\cite{waldspurger02,arpachiDusseau18:osbook}. 
+\paragraph{State 1}
+The page transistions to (marked, unduplicated) state as soon as a syscall 
+reads from it. 
+A new snapshot, $S_0$ is allocated for this page for this syscall.
+Both snaphots $S_0$ and $U$ refer to the same copy $C_U$.
+When in a marked state, the page's mapped copy $C_U$ becomes read-only,
+allowing both user/kernel code to read freely from it, but not modify it.
+Other syscalls which read the page now also get their own snapshots 
+(e.g. $S_1$) all pointing to the single copy $C_U$.
+The page's read-only status causes the hardware to fault on a write,
+notifying \tiktok to transistion the page to the next state.
 
-It'd be nice and thoughtful of you to include a suitable link in each
-and every bibtex entry that you use in your submission, to allow
-reviewers (and other readers) to easily get to the cited work, as is
-done in all entries found in the References section of this document.
+\paragraph{State 2}
+A marked page transistions to (unmarked, duplicated) on any write.
+Here, a new copy is created (say $C_0$) from the userspace
+copy ($C_U$), duplicating its contents.
+\tiktok moves all snapshots ($S_0$ and $S_1$) previously 
+pointing to $C_U$ to now point to the new copy $C_0$. 
+Thereafter, the userspace copy $C_U$ is made writable, and the 
+triggering write is retried. 
+Note how, at this state, any access the snapshot $S_0$ reads from
+the unmodified copy $C_0$.
 
-Now we're going take a look at Section~\ref{sec:figs}, but not before
-observing that refs to sections and citations and such are colored and
-clickable in the PDF because of the packages we've included.
-
-%-------------------------------------------------------------------------------
-\section{Floating Figures and Lists}
-\label{sec:figs}
-%-------------------------------------------------------------------------------
-
-
-%---------------------------
-\begin{figure}
-\begin{center}
-\begin{tikzpicture}
-  \draw[thin,gray!40] (-2,-2) grid (2,2);
-  \draw[<->] (-2,0)--(2,0) node[right]{$x$};
-  \draw[<->] (0,-2)--(0,2) node[above]{$y$};
-  \draw[line width=2pt,blue,-stealth](0,0)--(1,1)
-        node[anchor=south west]{$\boldsymbol{u}$};
-  \draw[line width=2pt,red,-stealth](0,0)--(-1,-1)
-        node[anchor=north east]{$\boldsymbol{-u}$};
-\end{tikzpicture}
-\end{center}
-\caption{\label{fig:vectors} Text size inside figure should be as big as
-  caption's text. Text size inside figure should be as big as
-  caption's text. Text size inside figure should be as big as
-  caption's text. Text size inside figure should be as big as
-  caption's text. Text size inside figure should be as big as
-  caption's text. }
-\end{figure}
-%% %---------------------------
-
-
-Here's a typical reference to a floating figure:
-Figure~\ref{fig:vectors}. Floats should usually be placed where latex
-wants then. Figure\ref{fig:vectors} is centered, and has a caption
-that instructs you to make sure that the size of the text within the
-figures that you use is as big as (or bigger than) the size of the
-text in the caption of the figures. Please do. Really.
-
-In our case, we've explicitly drawn the figure inlined in latex, to
-allow this tex file to cleanly compile. But usually, your figures will
-reside in some file.pdf, and you'd include them in your document
-with, say, \textbackslash{}includegraphics.
-
-Lists are sometimes quite handy. If you want to itemize things, feel
-free:
-
-\begin{description}
-  
-\item[fread] a function that reads from a \texttt{stream} into the
-  array \texttt{ptr} at most \texttt{nobj} objects of size
-  \texttt{size}, returning returns the number of objects read.
-
-\item[Fred] a person's name, e.g., there once was a dude named Fred
-  who separated usenix.sty from this file to allow for easy
-  inclusion.
-\end{description}
-
-\noindent
-The noindent at the start of this paragraph in its tex version makes
-it clear that it's a continuation of the preceding paragraph, as
-opposed to a new paragraph in its own right.
+\paragraph{State 3}
+A separate syscall subsequently reading the page transistions 
+it to (marked, duplicated) state. 
+The new snapshot, $S_2$, points to the userspace copy $C_U$ 
+until a write to the copy.
+On a write, the page will be duplicated and this snapshot 
+will point to the new copy (similar to that in state 2).
 
 
-\subsection{LaTeX-ing Your TeX File}
-%-----------------------------------
 
-People often use \texttt{pdflatex} these days for creating pdf-s from
-tex files via the shell. And \texttt{bibtex}, of course. Works for us.
 
-%-------------------------------------------------------------------------------
-\section*{Acknowledgments}
-%-------------------------------------------------------------------------------
 
-The USENIX latex style is old and very tired, which is why
-there's no \textbackslash{}acks command for you to use when
-acknowledging. Sorry.
+\tiktok assumes that syscalls do not both read and write to the same user data. 
+There are particular syscalls, however, which rely on such behaviour, and 
+are not instrumented.
 
-%-------------------------------------------------------------------------------
-\section*{Availability}
-%-------------------------------------------------------------------------------
-
-USENIX program committees give extra points to submissions that are
-backed by artifacts that are publicly available. If you made your code
-or data available, it's worth mentioning this fact in a dedicated
-section.
-
-%-------------------------------------------------------------------------------
 \bibliographystyle{plain}
-\bibliography{\jobname}
+\bibliography{TikTok}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \end{document}
