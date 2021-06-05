@@ -20,11 +20,37 @@
 \usepackage{prettyref}
 \usepackage{verbatim}
 \usepackage{balance}
+\usepackage{tabularx}
 
 %-------------------------------------------------------------------------------
 \begin{document}
 %-------------------------------------------------------------------------------
 
+
+\lstdefinestyle{cstyle}{
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\color{black!85}\bfseries,
+  keywordstyle=[2]\color{black!85}\bfseries\emph,
+  showstringspaces=false,
+  language={C},
+  breaklines=false,
+  mathescape=true,
+  escapechar={@}
+}
+\lstdefinestyle{inline}{
+  style=cstyle,
+  mathescape=false,
+  breaklines=true,
+  keywordstyle=,           
+  keywordstyle=[2],
+  extendedchars=true,
+  basicstyle=\ttfamily\small
+}
+\newcommand{\Code}[1]{\lstinline[style=inline,breaklines=false]@#1@}
+\let\realparagraph\paragraph
+\let\paragraph\relax
+\newcommand{\paragraph}[1]{\textbf{#1.}}
+\newcolumntype{Q}{>{\centering\arraybackslash}X}
 
 \newcommand\tocttou[0]{ToCtToU\xspace}
 \newcommand\tiktok[0]{TikTok\xspace}
@@ -152,19 +178,19 @@ copy, which is mapped in process' address spaces.
 \TODO{Should I formally define this mapping?}
 All other copies are read-only, and are used for providing snapshots to syscalls.
 In the following paragraphs, we describe how the state machine for a single page 
-transistions between its states, what triggers each transistion, and what 
-changes are made to the copies and snapshot sets on a transistion.
+transitions between its states, what triggers each transition, and what 
+changes are made to the copies and snapshot sets on a transition.
 
 \paragraph{State 0}
 A page starts as (writable, unduplicated). 
 At this stage, there is a single writable copy $C_L$ and a single snapshot $L$. 
 All processes where this page is mapped have unrestricted userspace read and write 
 access, and unrestricted kernel write access.
-The remaining operation, a read from kernel code, triggers a transistion to 
+The remaining operation, a read from kernel code, triggers a transition to 
 the next state.
 
 \paragraph{State 1}
-The page transistions to (read-only, unduplicated) state as soon as a syscall 
+The page transitions to (read-only, unduplicated) state as soon as a syscall 
 reads from it. 
 \tiktok first marks the page's latest copy $C_L$ read-only in all processes, 
 restricting writes to it but allowing concurrent reads to continue.
@@ -175,10 +201,10 @@ blue cross-thatch in \autoref{fig:tiktok_states}).
 Prior to any writes to this page, any other syscalls which also read the page  
 get their own snapshots (e.g. $S_1$) all pointing to the single copy $C_L$.
 The page's read-only status causes the hardware to fault on any write,
-notifying \tiktok to transistion the page to the next state.
+notifying \tiktok to transition the page to the next state.
 
 \paragraph{State 2}
-A page in State 1 transistions to (unmarked, duplicated) on any write.
+A page in State 1 transitions to (unmarked, duplicated) on any write.
 \tiktok duplicates the latest copy $C_L$, creating a new copy $C_0$ holding
 the pre-write contents of the page.
 \tiktok moves all snapshots ($S_0$ and $S_1$) previously pointing to 
@@ -188,9 +214,13 @@ Thereafter, the latest copy $C_L$ is made writable, and the triggering write
 is retried. 
 Note how, at this state, any reads using the snapshots $S_0$ or $S_1$ reads 
 from the unmodified copy $C_0$ while writes directly affect $C_L$.
+Certain syscalls such as \Code{rt_sigaction} both read and write from 
+the same user page. 
+A write by \Code{rt_sigaction} to the page it has previously read will update
+the page's latest copy $C_L$, but not the duplicate copy $C_0$.
 
 \paragraph{State 3}
-A separate syscall subsequently reading the page in State 2 transistions 
+A separate syscall subsequently reading the page in State 2 transitions 
 it to (read-only, duplicated) state. 
 The new snapshot, $S_2$, points to the latest copy $C_L$.
 On a write, the page will be duplicated and this snapshot 
@@ -212,10 +242,74 @@ so \tiktok changes the page to state 0.
 If the page was in state 3, $C_L$ was read-only and mapped by some other
 snapshot, so \tiktok moves the page to state 1.
 
+
+\subsection{Discussion}
+
+\begin{table}
+\begin{center}
+\begin{tabularx}{\columnwidth} { | l | X |}
+\hline
+System Call & Exemption reason \\
+\hline
+\hline
+\Code{futex} & Relies on concurrent write \\ \cline{1-2}
+\Code{poll} & Relies on concurrent write \\ \cline{1-2}
+\Code{ppoll} & Relies on concurrent write \\ \cline{1-2}
+\Code{select} & Relies on concurrent write \\ \cline{1-2}
+\Code{pselect6} & Relies on concurrent write \\ \cline{1-2}
+\Code{rt\_sigtimedwait} & Relies on concurrent write \\ \cline{1-2}
+\Code{execve} & Remaps address space \\ \cline{1-2}
+\end{tabularx}
+\end{center}
+\caption{System calls uninstrumented by \tiktok}
+\label{tab:except_syscall}
+\end{table}
+\paragraph{Exceptions}
+Certain syscalls such as \Code{futex} rely on user data changing between 
+double fetches to implement their functionality and cannot be protected by
+\tiktok.
+Such syscalls are listed in \autoref{tab:except_syscall}.
+The \Code{futex} syscall implements a fast synchronization mechanism
+for userspace and relies on atomic writes from concurrent userspace
+thread to update a condition the syscall is waiting for. 
+Subjecting a \Code{futex} syscall to \tiktok's invariant will prevent
+it from ever waking up the waiting thread.
+Such syscalls cannot be protected by \tiktok, and we implement an 
+exception list to prevent transitions in the state machines of pages read 
+by these syscalls.
+The code for these syscalls must be manually inspected for double-fetch 
+vulnerabilities.
+Crucially, exempting these syscalls from \tiktok's protection does not 
+affect the security of other syscalls. 
+Any writes from these syscalls are subject to the same rules described
+in the state machine, and cannot break \tiktok's invariant.
+
+\paragraph{Preventing deadlocks in design}
+\tiktok's design is free of deadlocks, and exempts syscalls which 
+require violation of its invariant from triggering particular 
+state-machine transitions.
+Userspace reads always succeed, using the latest copy $C_L$ of the
+accessed page.
+Writes from userspace and kernel code succeed directly if the 
+page is in states 0 or 2, and trigger a fault otherwise.
+Handling these faults involves creating a new copy of the page and
+setting the page writable. 
+Reading from kernel code involves creating a new snapshot and 
+setting the page read-only.
+None of the aforementioned operations relies on other operations 
+on the same page to complete and all are finite-time.
+None of the operations on a page rely on operations on other pages.
+A single, per-page lock can serialize operations on that page
+and assure forward progress.
+
+
 \TODO{Discuss how Midgard would help}
 \tiktok assumes that syscalls do not both read and write to the same user data. 
 There are particular syscalls, however, which rely on such behaviour, and 
 are not instrumented.
+
+\TODO{In implementation, discuss how IOMMU's can be used to prevent devide writes,
+but is currently unsupported.}
 
 Fake citation for compilation~\cite{silberschatz2018operating}.
 
