@@ -94,22 +94,27 @@ Not more than 200 words, if possible, and preferably closer to 150.
 
 \section{Design}
 
-\tiktok is designed to maintain a single invariant: 
-\emph{Every read to a userspace object by a syscall throughout its lifetime 
-will read the same value}.
+\tiktok maintains \emph{a single core invariant}:
+\textbf{\emph{Through a syscall's lifetime, every read to a userspace object 
+will return the same value}}.
 By construction, the invariant guarantees that double-fetches in syscall
-code will read the same data, eliminating \tocttou bugs. 
+code will read the same data, \emph{eliminating \tocttou bugs}.
 \tiktok maintains the invariant by tracking \emph{snaphots} of the data
 when first accessed, lazily making \emph{copies} when the data is concurrently 
 written and accessing the correct copy on subsequent reads.
 Copies are only maintained during the syscall's lifetime, and are released as 
 soon as no syscall needs it.
-Consequently, each page has a single copy while no syscalls are running.
+%Consequently, each page has a single copy while no syscalls are running.
+\mat{Ambiguous: one single version? 'One copy' could mean there are two pages.
+Also, you're introducing page granularity here.}
+Consequently, each userspace object exists only once when no syscalls are
+running.
 
-\tiktok's implementation leverages the protection mechanisms provided by 
-existing virtual memory implementations. 
+\tiktok's implementation builds on the protection mechanisms provided by 
+existing virtual memory implementations.
 On modern platforms, virtual memory protection is set up by the OS at
-page-granularity by setting bits in page-table entries.
+page-granularity by setting bits in pagetable entries.
+\mat{I'd call it pagetable, not page-table.}
 These permission bits are checked by the hardware on memory access, 
 efficiently enforcing that the permissions are respected, or raising 
 a fault when they are not.
@@ -119,25 +124,30 @@ read are covered by the invariant, not merely the bytes read.
 As a side-effect of this implementation, \tiktok cannot differentiate between
 accesses to different parts of a page, and incurs overhead on false sharing
 within a page.
+\mat{Argue that this results only in performance overhead but not in loss of
+correctness or completeness.}
 
 For an object spanning multiple pages, \tiktok's design sequentially 
 protects each page before reading from it, and does not introduce 
-new vulnerabilities. 
+new vulnerabilities.
 The leading pages containing the object are protected before the
 later pages, allowing an attacker to potentially modify the later 
 pages before the syscall first reads them.
-However, the attacker is prevented from modifying any of these pages
+However, the attacker is prevented from modifying any of these earlier pages
 after the syscall's first read, ensuring that double-fetches respect
 the invariant.
+\mat{Argue that this is a 'wavefront' style of mitigation.}
 If the syscall code contains a \tocttou bug, the modification will
 be visible to the first fetch itself (which is used for checking for 
 validity of the data) and will lead to the data being rejected 
 straightaway.
 
-A major design goal for \tiktok is to allow concurrently access to pages
+\mat{Argue that this is performance only, otherwise you could simply stop all
+other threads whenever a syscall is handled.}
+A major performance goal for \tiktok is to allow concurrent access to pages
 by user/kernel code running concurrently to a syscall which reads from 
 the same pages.
-To ensure that writes to pages do violate the invariant, \tiktok
+To ensure that writes to pages do not violate the invariant, \tiktok
 must maintain multiple copies of a page.
 Particularly, for each syscall which has accessed a page, \tiktok
 must maintain a snapshot of its contents from when the page was first 
@@ -159,8 +169,7 @@ single copy.
 
 To track multiple versions of the contents of a page when being concurrently 
 accessed by numerous threads, from userspace or during a syscall,
-\tiktok implicitly maintains a per-page state machine for every single 
-user page.
+\tiktok implicitly maintains a per-page state machine.
 For each page, its corresponding state machine tracks snapshots for currently 
 executing syscalls which have read it, copies of the page, and the mapping 
 between the two necessary for providing the correct contents to subsequent reads 
@@ -172,62 +181,67 @@ At every state, the page has two associated sets:
   \item the copies set $C = \{C_L, C_0, \dots\}$ holds multiple copies of the page over time, and
   \item the snapshots set $S = \{L, S_0, S_1, \dots\}$ tracks logical versions of the page, each corresponding to one executing syscall and mapping to a copy. 
 \end{inparaenum}
+\mat{Why do we need snapshots and copies? One should suffice.}
 Reads from kernel code in a syscall use the copy corresponding to its snapshot.
 Writes from user/kernel code and reads from userspace access the latest 
 copy, which is mapped in process' address spaces.
 \TODO{Should I formally define this mapping?}
-All other copies are read-only, and are used for providing snapshots to syscalls.
+All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 In the following paragraphs, we describe how the state machine for a single page 
 transitions between its states, what triggers each transition, and what 
 changes are made to the copies and snapshot sets on a transition.
 
 \paragraph{State 0}
-A page starts as (writable, unduplicated). 
-At this stage, there is a single writable copy $C_L$ and a single snapshot $L$. 
+\mat{Todo: come up with better name for states.}
+A page starts as \texttt{(writable, unduplicated)}.
+At this stage, there is a single writable \mat{not necessarily writable but a
+page with original permissions?} copy $C_L$ and a single snapshot $L$. 
 All processes where this page is mapped have unrestricted userspace read and write 
 access, and unrestricted kernel write access.
 The remaining operation, a read from kernel code, triggers a transition to 
 the next state.
 
 \paragraph{State 1}
-The page transitions to (read-only, unduplicated) state as soon as a syscall 
-reads from it. 
+The page in State 0 transitions to the \texttt{(read-only, unduplicated)} state as soon as a syscall 
+reads from it.
 \tiktok first marks the page's latest copy $C_L$ read-only in all processes, 
-restricting writes to it but allowing concurrent reads to continue.
+restricting \mat{trapping?} writes to it but allowing concurrent reads to continue.
 A new snapshot, $S_0$ linked to this syscall is allocated for this page.
 For the rest of its lifetime, this syscall will only read from this snapshot.
 Both snaphots $S_0$ and $L$ refer to the same copy $C_L$ (shown by the 
 blue cross-thatch in \autoref{fig:tiktok_states}).
 Prior to any writes to this page, any other syscalls which also read the page  
-get their own snapshots (e.g. $S_1$) all pointing to the single copy $C_L$.
+get their own snapshots (e.g., $S_1$) all pointing to the single copy $C_L$.
 The page's read-only status causes the hardware to fault on any write,
 notifying \tiktok to transition the page to the next state.
 
 \paragraph{State 2}
-A page in State 1 transitions to (unmarked, duplicated) on any write.
+A page in State 1 transitions to \texttt{(unmarked, duplicated)} on any write.
 \tiktok duplicates the latest copy $C_L$, creating a new copy $C_0$ holding
 the pre-write contents of the page.
 \tiktok moves all snapshots ($S_0$ and $S_1$) previously pointing to 
-$C_L$ to now point to the new copy $C_0$ (shown by green hachure in 
+$C_L$ to now point to the new copy $C_0$ (shown by green shading in 
 \autoref{fig:tiktok_states}). 
-Thereafter, the latest copy $C_L$ is made writable, and the triggering write 
-is retried. 
+Thereafter, the latest copy $C_L$ is made writable, and the triggering write
+executes. 
 Note how, at this state, any reads using the snapshots $S_0$ or $S_1$ reads 
 from the unmodified copy $C_0$ while writes directly affect $C_L$.
 Certain syscalls such as \Code{rt_sigaction} both read and write from 
 the same user page. 
 A write by \Code{rt_sigaction} to the page it has previously read will update
 the page's latest copy $C_L$, but not the duplicate copy $C_0$.
+\mat{What happens if a later syscall writes to $S_1$ that has already been split
+off? I.e., how are conflicts resolved? Also, is there a total order of pages?}
 
 \paragraph{State 3}
 A separate syscall subsequently reading the page in State 2 transitions 
-it to (read-only, duplicated) state. 
+it to \texttt{(read-only, duplicated)} state. 
 The new snapshot, $S_2$, points to the latest copy $C_L$.
 On a write, the page will be duplicated and this snapshot 
 will point to the new copy (similar to that in state 2).
 
 \paragraph{Releasing snapshots}
-\tiktok uses snaphots to enable a syscall to read the same data from a page 
+\tiktok uses snapshots to enable a syscall to read the same data from a page 
 during its lifetime and releases snapshots when syscalls complete. 
 When a snapshot is released, \tiktok may also release its mapped copy.
 For a snapshot mapped to the latest copy $C_L$, \tiktok cannot free the copy
@@ -242,6 +256,8 @@ so \tiktok changes the page to state 0.
 If the page was in state 3, $C_L$ was read-only and mapped by some other
 snapshot, so \tiktok moves the page to state 1.
 
+\mat{What about concurrent writes from different syscalls to pages in different
+states? What about conflict resolution?}
 
 \subsection{Discussion}
 
@@ -284,7 +300,7 @@ affect the security of other syscalls.
 Any writes from these syscalls are subject to the same rules described
 in the state machine, and cannot break \tiktok's invariant.
 
-\paragraph{Preventing deadlocks in design}
+\paragraph{Preventing deadlocks by design}
 \tiktok's design is free of deadlocks, and exempts syscalls which 
 require violation of its invariant from triggering particular 
 state-machine transitions.
