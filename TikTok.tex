@@ -65,6 +65,8 @@
 \newrefformat{pat}{\hyperref[#1]{Patch~\ref*{#1}}}
 \newrefformat{alg}{\hyperref[#1]{Algorithm~\ref*{#1}}}
 
+\renewcommand\itemautorefname{Attack}
+
 \newcommand\mat[1]{\noindent{\color{blue} {\bf \fbox{Mat}} {\it#1}}}
 \newcommand\atri[1]{\noindent{\color{red} {\bf \fbox{AB}} {\it#1}}}
 
@@ -93,6 +95,8 @@ Your abstract text goes here. Just a few facts. Whet our appetites.
 Not more than 200 words, if possible, and preferably closer to 150.
 \end{abstract}
 
+
+\section{Background}
 \begin{figure}[]
   \centering
   \includegraphics[width=.85\linewidth]{img/doublefetch.pdf}
@@ -100,7 +104,97 @@ Not more than 200 words, if possible, and preferably closer to 150.
   \label{fig:doublefetch}
 \end{figure}
 
-\section{Design}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Attack vectors}
+\label{sec:threats}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+In this section, we describe the threat model for exploiting double-fetch
+bugs in the kernel and classify the possible attacks based on how the 
+data is modified between the vulnerable double-fetches.
+
+\subsection{Threat Model}
+\label{sec:threatmodel}
+
+% Nothing fancy -- the adversary is just trying to hack the system
+% No black magic allowed
+The adversary has access to a user account on the target machine. They can
+execute arbitrary userspace code, including system calls. Some of the system 
+calls have double-fetch vulnerabilities, and the adversary wants to exploit them,
+e.g., for privilege escalation.
+The attacker may execute on multiple CPU cores and may execute an arbitrary 
+sequence of system calls. 
+
+\tiktok mitigates any unintended corruption or information leakage \emph{in the kernel}
+or \emph{in other user processes} that arises through double-fetch bugs. 
+Hardware attacks such as Rowhammer~\cite{mutlu2019rowhammer}
+or side-channels~\cite{kocher2019spectre}, and file-system TOCTTOU
+attacks~\cite{payer2012protecting, pu2006methodical, wei2010modeling,
+tsafrir2008portably} are out of scope.
+
+\subsection{Attacks Classification}
+\label{sec:attacks}
+
+% List five attacks and explain them quickly
+\tiktok guards data passed into the kernel against modification by 
+different means. 
+In the following classification, we denote the data fetched twice
+by code containing a \tocttou bug as vulnerable data.
+\begin{enumerate}
+  \item \label{attk:direct} \emph{Direct double fetch}: The adversary runs
+  concurrently with a system call in a different thread in the same address space
+  and uses userspace store instructions to modify the vulnerable data.
+
+  \item \label{attk:systemcall} \emph{Privileged double fetch}: The adversary
+  executes a \Code{read} syscall to run concurrently as the target syscall in 
+  the same address space. 
+  The adversary provides the address of the vulnerable data as the buffer 
+  into which the \Code{read} syscall will write.
+  In an example of a confused-deputy attack, the kernel thread executing the
+  \Code{read} on the adversary's behalf modifies the vulnerable data.
+
+  \item \label{attk:remapping} \emph{Reflected double fetch}: The target
+  syscall should be reading the vulnerable data from a file-backed page.
+  The adversary running in another address space maps the same file-backed page
+  as writable and modifies the vulnerable data using the new mappings.
+  This approach attempts to bypass any protections set up by the kernel
+  when first reading the vulnerable data by adding a new mapping to it later.
+
+  \item \label{attk:writebuffers} \emph{Inception double fetch}: The 
+  target syscall should be reading the vulnerable data from a file-backed 
+  page. The adversary opens the file and issues a \Code{write} syscall.
+  The kernel modifies the vulnerable data while executing the filesystem's
+  write code for the file.
+
+  \item \label{attk:devicefiles} \emph{Device double fetch}: The target 
+  syscall is reading a page available for direct-memory access (DMA) by 
+  an I/O device. The device can initiate a DMA write, modifying the 
+  vulnerable data. This avenue does not use store instructions in any 
+  CPU core.
+
+\end{enumerate}
+
+
+Watson~\cite{watson2007exploiting} in his analysis of CerbNG introduces
+\autoref{attk:direct}, \autoref{attk:remapping} and \autoref{attk:writebuffers}.
+We extend the discussion of known attacks and introduce
+\autoref{attk:systemcall} and \autoref{attk:devicefiles}.
+
+A comprehensive protection against \tocttou bugs must protect against 
+all of these attack vectors. 
+The protection mechanism necessarily manages access control for pages
+mapped across multiple address spaces and also via file-system drivers.
+As shown above, an adversary can use its own mappings to try to modify the
+vulnerable data, or coerce the kernel to do so using particular syscalls.
+The next sections describe \tiktok, our protection mechanism which 
+protects against the first four vectors, and can be extended to protect 
+against the final vector too.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{\tiktok Design} 
+\label{sec:design}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \tiktok maintains a single core \emph{invariant}:
 \textbf{\emph{Through a syscall's lifetime, every read to a userspace object 
@@ -240,7 +334,7 @@ At every state, the page has two associated sets:
 Reads from kernel code in a syscall use the copy corresponding to its snapshot.
 Writes from user/kernel code and reads from userspace access the latest 
 copy, which is mapped in process' address spaces.
-\TODO{Should I formally define this mapping?}
+\todo{Should I formally define this mapping?}
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
