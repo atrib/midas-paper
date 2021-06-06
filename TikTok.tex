@@ -235,6 +235,7 @@ writable user page transitions between its states, what triggers each transition
 and what changes are made to the copies and snapshot sets on a transition.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
+The latest copy $C_L$ of read-only pages remains read-only in both states.
 
 \paragraph{State 0}
 A page starts as \texttt{(unprotected, unduplicated)}.
