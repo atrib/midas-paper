@@ -65,7 +65,6 @@
 \newrefformat{pat}{\hyperref[#1]{Patch~\ref*{#1}}}
 \newrefformat{alg}{\hyperref[#1]{Algorithm~\ref*{#1}}}
 
-\newcommand\TODO[1]{\noindent{\color{green} {\bf \fbox{TODO}} {\it#1}}}
 \newcommand\mat[1]{\noindent{\color{blue} {\bf \fbox{Mat}} {\it#1}}}
 \newcommand\atri[1]{\noindent{\color{red} {\bf \fbox{AB}} {\it#1}}}
 
@@ -93,6 +92,13 @@ Your Institution
 Your abstract text goes here. Just a few facts. Whet our appetites.
 Not more than 200 words, if possible, and preferably closer to 150.
 \end{abstract}
+
+\begin{figure}[]
+  \centering
+  \includegraphics[width=.85\linewidth]{img/doublefetch.pdf}
+  \caption{Example of a double-fetch bug}
+  \label{fig:doublefetch}
+\end{figure}
 
 \section{Design}
 
@@ -208,6 +214,12 @@ holding the latest state of the page.
   \label{fig:tiktok_states}
 \end{figure*}
 
+\begin{figure}[]
+  \includegraphics[width=\linewidth]{img/doublefetch_tiktok.pdf}
+  \caption{Diagram illustrating \tiktok preventing exploitation of a double fetch.}
+  \label{fig:doublefetch_tiktok}
+\end{figure}
+
 To track multiple versions of the contents of a page when being concurrently 
 accessed by numerous tasks, from userspace or during a syscall,
 \tiktok implicitly maintains a per-user-page state machine.
@@ -230,12 +242,14 @@ Writes from user/kernel code and reads from userspace access the latest
 copy, which is mapped in process' address spaces.
 \TODO{Should I formally define this mapping?}
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
-In the following paragraphs, we describe how the state machine for a single, 
-writable user page transitions between its states, what triggers each transition, 
-and what changes are made to the copies and snapshot sets on a transition.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
 The latest copy $C_L$ of read-only pages remains read-only in both states.
+In the following paragraphs, we describe how the state machine for a single, 
+writable user page transitions between its states, what triggers each transition, 
+and what changes are made to the copies and snapshot sets on a transition.
+In \autoref{fig:doublefetch_tiktok}, we illustrate how the state machine protects the 
+syscall from \autoref{fig:doublefetch}.
 
 \paragraph{State 0}
 A page starts as \texttt{(unprotected, unduplicated)}.
@@ -246,6 +260,8 @@ All processes where this page is mapped have unrestricted userspace read and wri
 access, and unrestricted kernel write access.
 The remaining operation, a read from kernel code, triggers a transition to 
 the next state.
+In \autoref{fig:doublefetch_tiktok}, we see the snapshot $L$ initially containing 
+the value $42$.
 
 \paragraph{State 1}
 The page in State 0 transitions to the \texttt{(protected, unduplicated)} state as soon as a syscall 
@@ -260,6 +276,8 @@ Prior to any writes to this page, any other syscalls which also read the page
 get their own snapshots (e.g., $S_1$) all pointing to the single copy $C_L$.
 The page's read-only status causes the hardware to fault on any write,
 notifying \tiktok to transition the page to the next state.
+In \autoref{fig:doublefetch_tiktok}, the page transistions to state 1 when 
+the syscall first reads it, and adds a snapshot $S_0$.
 
 \paragraph{State 2}
 A page in State 1 transitions to (unprotected, duplicated) on any write from 
@@ -282,6 +300,13 @@ up-to-date with all the writes to the page, from both user and kernel code.
 Further, \tiktok does not need to merge writes from userspace and syscall code
 on a syscall's completion, since both directly modify the same copy $C_L$.
 All other copies $C_i$ are immutable.
+When the attacker writes to the page in \autoref{fig:doublefetch_tiktok}, the
+page moves to state 2, linking the snapshot $S_0$ to a copy holding the 
+original value $42$.
+The writes from both the adversary and the syscall itself both affect 
+the copy $C_L$, but the read from the syscall accesses the snapshot $S_0$
+and reads the same value as the first time.
+
 
 \paragraph{State 3}
 A separate syscall subsequently reading the page in State 2 transitions 
@@ -305,6 +330,8 @@ If $S_i$ is mapped to any other duplicate $C_i$, \tiktok frees the copy along
 with the snapshot if $S_i$ is the last remaining snapshot mapped to $C_i$.
 If the page was in state 2, $C_L$ was writable and unmapped by any snapshot,
 so \tiktok changes the page to state 0.
+This transitions is shown in \autoref{fig:doublefetch_tiktok}, where the 
+snapshot $S_0$ and the copy $C_0$ are both discarded.
 If the page was in state 3, $C_L$ was read-only and mapped by some other
 snapshot, so \tiktok moves the page to state 1.
 
@@ -389,12 +416,12 @@ A single, per-page lock can serialize operations on that page
 and assure forward progress.
 
 
-\TODO{Discuss how Midgard would help}
+\todo{Discuss how Midgard would help}
 \tiktok assumes that syscalls do not both read and write to the same user data. 
 There are particular syscalls, however, which rely on such behaviour, and 
 are not instrumented.
 
-\TODO{In implementation, discuss how IOMMU's can be used to prevent devide writes,
+\todo{In implementation, discuss how IOMMU's can be used to prevent devide writes,
 but is currently unsupported.}
 
 Fake citation for compilation~\cite{silberschatz2018operating}.
