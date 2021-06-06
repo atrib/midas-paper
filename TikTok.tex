@@ -67,6 +67,7 @@
 
 \newcommand\TODO[1]{\noindent{\color{green} {\bf \fbox{TODO}} {\it#1}}}
 \newcommand\mat[1]{\noindent{\color{blue} {\bf \fbox{Mat}} {\it#1}}}
+\newcommand\atri[1]{\noindent{\color{red} {\bf \fbox{AB}} {\it#1}}}
 
 %don't want date printed
 \date{}
@@ -112,9 +113,8 @@ need to be protected.
 Accesses to userspace objects from userspace and kernel objects by kernel 
 code remains unaffected.
 
-\atri{Correctness is hard to define. The term "identical"}
 In addition, \tiktok must assure \emph{correctness}: there must exist an
-execution on a non-\tiktok machine where userspace never modifies data 
+execution on a non-\tiktok system where userspace \emph{never} modifies data 
 between double-fetches by the kernel which is identical to the execution
 of syscalls protected by \tiktok.
 
@@ -175,7 +175,7 @@ blocks until Task C completes and is unnecessarily delayed.
 A more performant approach is to duplicate the page: the copy is 
 kept should task C fetch data from the page again, and task D
 can write to the original and proceed without delays.
-\TODO{Maybe link to database optimistic concurrency control}
+\atri{Maybe link to database optimistic concurrency control}
 
 \tiktok must maintain multiple versions of a page read by a syscall 
 to maintain its invariant in the face of concurrent writes.
