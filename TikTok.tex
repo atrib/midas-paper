@@ -119,7 +119,7 @@ Not more than 200 words, if possible, and preferably closer to 150.
 
 In this section, we describe the threat model for exploiting double-fetch
 bugs in the kernel and classify the possible attacks based on how the 
-data is modified between the vulnerable double-fetches.
+data is modified between vulnerable double-fetches.
 
 \subsection{Threat Model}
 \label{sec:threatmodel}
@@ -144,14 +144,14 @@ tsafrir2008portably} are out of scope.
 \label{sec:attacks}
 
 % List five attacks and explain them quickly
-\tiktok guards data passed into the kernel against modification by 
-different means. 
+\tiktok guards data passed into the kernel against concurrent modification.
 In the following classification, we denote the data fetched twice
 by code containing a \tocttou bug as vulnerable data.
 \begin{enumerate}
   \item \label{attk:direct} \emph{Direct double fetch}: The adversary runs
-  concurrently with a system call in a different thread in the same address space
+  concurrently with a system call in a separate thread in the same address space
   and uses userspace store instructions to modify the vulnerable data.
+  % user write -> kernel read
 
   \item \label{attk:systemcall} \emph{Privileged double fetch}: The adversary
   executes a \Code{read} syscall to run concurrently as the target syscall in 
@@ -160,6 +160,7 @@ by code containing a \tocttou bug as vulnerable data.
   into which the \Code{read} syscall will write.
   In an example of a confused-deputy attack, the kernel thread executing the
   \Code{read} on the adversary's behalf modifies the vulnerable data.
+  % read(): kernel (privileged) write -> kernel read
 
   \item \label{attk:remapping} \emph{Reflected double fetch}: The target
   syscall should be reading the vulnerable data from a file-backed page.
@@ -167,21 +168,26 @@ by code containing a \tocttou bug as vulnerable data.
   as writable and modifies the vulnerable data using the new mappings.
   This approach attempts to bypass any protections set up by the kernel
   when first reading the vulnerable data by adding a new mapping to it later.
+  % mmap(): user write -> kernel read
 
   \item \label{attk:writebuffers} \emph{Inception double fetch}: The 
   target syscall should be reading the vulnerable data from a file-backed 
   page. The adversary opens the file and issues a \Code{write} syscall.
   The kernel modifies the vulnerable data while executing the filesystem's
   write code for the file.
+  % mmap(): write(): kernel (privileged) write -> kernel read
 
   \item \label{attk:devicefiles} \emph{Device double fetch}: The target 
   syscall is reading a page available for direct-memory access (DMA) by 
   an I/O device. The device can initiate a DMA write, modifying the 
   vulnerable data. This avenue does not use store instructions in any 
   CPU core.
+  % device write -> kernel read
 
 \end{enumerate}
-
+\mat{Can we add a short sequence or figure for each of these attacks? This would
+IMO help. I've added a note in comments to describe the attack/victim
+scenarios.}
 
 Watson~\cite{watson2007exploiting} in his analysis of CerbNG introduces
 \autoref{attk:direct}, \autoref{attk:remapping} and \autoref{attk:writebuffers}.
@@ -189,7 +195,9 @@ We extend the discussion of known attacks and introduce
 \autoref{attk:systemcall} and \autoref{attk:devicefiles}.
 
 A comprehensive protection against \tocttou bugs must protect against 
-all of these attack vectors. 
+all concurrent writes of these representative attack vectors.
+\mat{Are we sure these are complete? Can we make a stronger statement that a
+defense must enforce a generic property?}
 The protection mechanism necessarily manages access control for pages
 mapped across multiple address spaces and also via file-system drivers.
 As shown above, an adversary can use its own mappings to try to modify the
@@ -197,6 +205,7 @@ vulnerable data, or coerce the kernel to do so using particular syscalls.
 The next sections describe \tiktok, our protection mechanism which 
 protects against the first four vectors, and can be extended to protect 
 against the final vector too.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{\tiktok Design} 
@@ -224,6 +233,10 @@ In addition, \tiktok must assure \emph{correctness}: there must exist an
 execution on a non-\tiktok system where userspace \emph{never} modifies data 
 between double-fetches by the kernel which is identical to the execution
 of syscalls protected by \tiktok.
+\mat{Rephrase correctness invariant, you are basically saying tiktok may not
+introduce any false executions. Separate the two invariants into a security
+invariant and a correctness invariant.}
+\mat{I rephrased the below assuming two variants.}
 
 \tiktok's implementation builds on the protection mechanisms provided by 
 existing virtual memory implementations.
@@ -232,14 +245,15 @@ page-granularity by setting bits in pagetable entries (PTEs).
 These permission bits are checked by the hardware on memory access, 
 efficiently enforcing that the permissions are respected, or raising 
 a fault when they are not.
-Therefore, \tiktok implements its invariant at a page-granularity, not object 
+Therefore, \tiktok implements its invariants at page-granularity, not object 
 granularity: when a syscall reads from userspace, every page touched by that 
-read is covered by the invariant, not merely the bytes read.
-As a side-effect of this implementation, \tiktok cannot differentiate between
+read is covered, not merely the bytes read.
+As a side-effect of this implementation, \tiktok does not distinguish
 accesses to different parts of a page, and may incur performance overhead due
 to false sharing within a page. 
 Page-granularity protections are more conservative compared to byte-granularity
-protection, therefore \tiktok maintains its invariant nonetheless.
+protection and, therefore, \tiktok maintains its invariants nonetheless but may
+incur performance overhead for false sharing on highly contended pages.
 
 For an object spanning multiple pages, \tiktok's design sequentially 
 protects each page before reading from it.
@@ -249,12 +263,13 @@ pages before the syscall first reads them.
 However, the attacker is prevented from modifying any of these earlier pages
 after the syscall's first read, ensuring that double-fetches respect
 the invariant.
-\mat{Argue that this is a 'wavefront' style of mitigation.}
+%\mat{Argue that this is a 'wavefront' style of mitigation.}
+%\mat{If you think this is a bad analogy, simply cut it.}
 If the syscall code contains a \tocttou bug, the modification will
 be visible to the first fetch itself (which is used for checking for 
 validity of the data) and will lead to the data being rejected 
 straightaway.
-\tiktok's invariant therefore prevents exploitation of double-fetch
+\tiktok's invariants therefore prevent exploitation of double-fetch
 vulnerabilities even when the fetched objects span multiple pages.
 
 A major requirement for \tiktok is to allow concurrent access to pages
@@ -269,7 +284,7 @@ of a system with two tasks, A and B.
 Task A issues a blocking system call which reads a user page and blocks. 
 Task B writes to the same user page before issuing a syscall which 
 resumes task A. 
-In this case, if Task A's read to the page preceeds Task B's write, 
+In this case, if Task A's read to the page preceds Task B's write, 
 Task B will be blocked waiting for A to complete its syscall.
 Task A will also remain blocked waiting for Task B's syscall, 
 introducing a circular dependency, leading to deadlock.
@@ -279,13 +294,15 @@ Task C reads from a page and sleeps for a long, determinate while.
 Task C does not read from the page a second time.
 Task D writes to the same page after task C has read from it, and 
 blocks until Task C completes and is unnecessarily delayed.
-A more performant approach is to duplicate the page: the copy is 
+A more performant approach is to duplicate the concurrently accessed page: the copy is 
 kept should task C fetch data from the page again, and task D
 can write to the original and proceed without delays.
 \atri{Maybe link to database optimistic concurrency control}
+\mat{Yes, that's a good idea, maybe even with a hint 'similar optimizations
+exist in databses.'}
 
 \tiktok must maintain multiple versions of a page read by a syscall 
-to maintain its invariant in the face of concurrent writes.
+to maintain its invariants in the face of concurrent writes.
 \tiktok introduces \emph{snapshots} and \emph{copies} to keep track 
 of page versions. 
 Snapshots are logical views of the page's contents at a particular time,
@@ -297,14 +314,15 @@ these snapshots will map to a single copy, reducing \tiktok's space overheads
 and performance overheads for creating copies.
 \tiktok maintains a snapshot of every page when first read by a syscall.
 On a double fetch by the same syscall, the copy mapped to by the snapshot 
-is accessed ensuring that the data read is the same as the first time.
+is accessed, ensuring that the data read is the same as the first time.
 The latest copy of the page is used for all writes, by the syscall as 
 well as from concurrently running tasks, updating the page as seen 
 from userspace.
-Essentially, \tiktok is a multi-versioning system for pages where 
+\emph{Essentially, \tiktok is a multi-versioning system for pages where 
 syscalls read from immutable versions to prevent \tocttou bugs and
 syscalls and userspace both write to a single mutable version 
-holding the latest state of the page.
+holding the latest state of the page.}
+
 
 \subsection{Page state machine}
 
@@ -338,10 +356,14 @@ At every state, the page has two associated sets:
   \item the copies set $C = \{C_L, C_0, \dots\}$ holds multiple copies of the page over time, and
   \item the snapshots set $S = \{L, S_0, S_1, \dots\}$ tracks logical versions of the page, each corresponding to one executing syscall and mapping to a copy. 
 \end{inparaenum}
-Reads from kernel code in a syscall use the copy corresponding to its snapshot.
-Writes from user/kernel code and reads from userspace access the latest 
-copy, which is mapped in process' address spaces.
+Reads from kernel code in a syscall use the \emph{snapshot's corresponding copy}.
+Writes from user/kernel code and reads from userspace access the \emph{latest 
+copy}, which is mapped in process' address spaces.
+\mat{What if a syscall reads (taking a snapshot), writes, reads again? The write
+may not show up in the 2nd read? As you describe below, this is not supported. I
+wonder if we should forward reference?}
 \todo{Should I formally define this mapping?}
+\mat{I highlighted and think it's good enough.}
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
@@ -381,13 +403,15 @@ In \autoref{fig:doublefetch_tiktok}, the page transitions to state 1 when
 the syscall first reads it, and adds a snapshot $S_0$.
 
 \paragraph{State 2}
-A page in State 1 transitions to (unprotected, duplicated) on any write from 
+A page in State 1 transitions to the \texttt{(unprotected, duplicated)} state on any write from 
 user or kernel code.
 \tiktok duplicates the latest copy $C_L$, creating a new copy $C_0$ holding
 the contents of the page prior to the write.
 \tiktok moves all snapshots except $L$ (i.e. $S_0$ and $S_1$) previously 
 pointing to $C_L$ to now point to the new copy $C_0$ (shown by green shading 
 in \autoref{fig:tiktok_states}). 
+\mat{Why not explain in reverse? I.e., $C_L$ changes and all older copies are
+simply renamed to +1?}
 Thereafter, the latest copy $C_L$ is made writable, and the triggering write 
 is retried. 
 Note how, at this state, any read using the snapshots $S_0$ or $S_1$ reads 
@@ -415,6 +439,8 @@ it to \texttt{(protected, duplicated)} state.
 The new snapshot, $S_2$, points to the latest copy $C_L$.
 On a write, the page will be duplicated and this snapshot 
 will point to the new copy (similar to that in state 2).
+\mat{Unclear why state 3 is necessary (and why state 2 is not sufficient), please
+explain in more detail.}
 
 \paragraph{Releasing snapshots}
 \tiktok uses snapshots to enable a syscall to read the same data from a page 
@@ -478,7 +504,7 @@ Such syscalls are listed in \autoref{tab:except_syscall}.
 The \Code{futex} syscall implements a fast synchronization mechanism
 for userspace and relies on atomic writes from concurrent userspace
 threads to update a condition the syscall is waiting for. 
-Subjecting a \Code{futex} syscall to \tiktok's invariant will prevent
+Subjecting a \Code{futex} syscall to \tiktok's invariants will prevent
 it from ever waking up the waiting task.
 Such syscalls cannot be protected by \tiktok, and we implement an 
 exception list to prevent transitions in the state machines of pages read 
@@ -488,17 +514,20 @@ vulnerabilities.
 Crucially, exempting these syscalls from \tiktok's protection does not 
 affect the security of other syscalls. 
 Any writes from these syscalls are subject to the same rules described
-in the state machine, and cannot break \tiktok's invariant.
+in the state machine, and cannot break \tiktok's invariants.
 
 Further, a hypothetical syscall which reads from an object, writes to it, and
 then reads back the updated object cannot be protected using \tiktok.
 \tiktok's invariant will ensure that the second read is identical to the first,
 and does not reflect the intermediate write. 
+\mat{This needs to be phrased carefully: we're over-approximating to page basis,
+so some false sharing may cause incidents (tm). Can we say how this is not an
+issue?}
 The authors did not find any syscall which exhibits this behavior in the Linux
 kernel. 
 Such syscalls will also need to be exempted from \tiktok's instrumentation.
 
-\paragraph{Preventing deadlocks in design}
+\paragraph{Preventing deadlocks by design}
 \tiktok's design is free of deadlocks, and exempts syscalls which 
 require violation of its invariant from triggering particular 
 state-machine transitions.
@@ -538,9 +567,10 @@ we instrument for our prototype.
 The second requirement causes the hardware to raise a faults, 
 directing execution on the processor to a pre-defined exception 
 handler in the OS.
-Our prototype instruments the Linux'  fault handler in the funtion 
-\Code{handle_pte_fault} to implement the write-triggered transisions 
+Our prototype instruments the Linux' fault handler in the function 
+\Code{handle_pte_fault} to implement the write-triggered transmissions 
 from states 2 and 4.
+
 
 \subsection{Tracking page state}
 
@@ -556,7 +586,7 @@ its snapshot and copy sets.
 track this state in our prototype.
 Linux maintains a \Code{struct page} object for every frame of 
 physical memory. 
-We augment this structure with a list holding a list of snapshots
+We augment this structure with a list holding the snapshots
 for this page, excluding the latest snapshot $L$.
 Each snapshot has a pointer to its copy. 
 In the figure, the snapshots $S_1$ and $S_0$ share the copy $C_0$.
@@ -573,6 +603,7 @@ map the copy $C_L$, enabling userspace to directly access this
 copy with reads (and writes for writable pages).
 We use one software-controlled bit (SW3) in the pagetable entries 
 to track the protection status of the page, and another (SW2)\footnotemark
+\mat{Where's the footnote?}
 to track the original protections for the page. 
 SW3 is set whenever the page is in one of the two protected
 states (1 and 3).
@@ -581,11 +612,13 @@ efficiently determine if the fault was due to \tiktok's protection
 mechanisms, triggering a state change, or due to buggy software
 accessing a page with illegal permissions, triggering a signal to 
 the task.
+\mat{This needs to be highlighted as a core property: we prohibit double fetches
+and can also report them! This is different from simply mitigating them.}
 Other architectures might have a fewer number of software-usable 
 bits in the page-table, and implementations of \tiktok would 
-require store the protection status of pages in a separate data structure.
+require storing the protection status of pages in a separate data structure.
 The duplication status of the page is implicitly encoded in the 
-snapshots: the page is duplicated when any of its snaphots
+snapshots: the page is duplicated when any of its snapshots
 holds a pointer to a copy other than $C_L$.
 
 Changing the protection state of pages requires updates to 
@@ -652,6 +685,7 @@ in our prototype.
 
 \footnotetext{The SW2 bit is also used by the Software Dirty Pages feature of 
 Linux, and cannot be run alongside \tiktok in our prototype.}
+\mat{Why not just using the footnote command itself?}
 
 \todo{Limitations: raw\_copy\_from\_user\_inatomic}
 
