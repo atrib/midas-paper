@@ -107,6 +107,16 @@ Copies are only maintained during syscalls' lifetimes, and are released as
 soon as no syscall needs it.
 Consequently, each userspace object has a single copy when no syscalls are
 running.
+The invariant also means that only accesses to userspace objects by the kernel
+need to be protected. 
+Accesses to userspace objects from userspace and kernel objects by kernel 
+code remains unaffected.
+
+\atri{Correctness is hard to define. The term "identical"}
+In addition, \tiktok must assure \emph{correctness}: there must exist an
+execution on a non-\tiktok machine where userspace never modifies data 
+between double-fetches by the kernel which is identical to the execution
+of syscalls protected by \tiktok.
 
 \tiktok's implementation builds on the protection mechanisms provided by 
 existing virtual memory implementations.
@@ -174,15 +184,16 @@ of page versions.
 Snapshots are logical views of the page's contents at a particular time,
 while the actual contents are stored in one of many copies. 
 Each snapshot maps to a copy, allowing the contents of the page at the 
-time of creating the snapshot to be accessed. 
+time of creating the snapshot to be read. 
 If multiple snapshots are taken without intervening writes to the page, 
 these snapshots will map to a single copy, reducing \tiktok's space overheads 
 and performance overheads for creating copies.
 \tiktok maintains a snapshot of every page when first read by a syscall.
 On a double fetch by the same syscall, the copy mapped to by the snapshot 
 is accessed ensuring that the data read is the same as the first time.
-A separate copy of the page is used for concurrent writes, updating the 
-page as seen from userspace.
+The latest copy of the page is used for all writes, by the syscall as 
+well as from concurrently running tasks, updating the page as seen 
+from userspace.
 Essentially, \tiktok is a multi-versioning system for pages where 
 syscalls read from immutable versions to prevent \tocttou bugs and
 syscalls and userspace both write to a single mutable version 
@@ -192,7 +203,8 @@ holding the latest state of the page.
 
 \begin{figure*}[]
   \includegraphics[width=\linewidth]{img/tiktok_states.pdf}
-  \caption{State diagram for a page in \tiktok}
+  \caption{State diagram for a page in \tiktok. Reads/writes from userspace/syscall 
+          code are marked (u)/(s) respectively.}
   \label{fig:tiktok_states}
 \end{figure*}
 
@@ -218,25 +230,27 @@ Writes from user/kernel code and reads from userspace access the latest
 copy, which is mapped in process' address spaces.
 \TODO{Should I formally define this mapping?}
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
-In the following paragraphs, we describe how the state machine for a single page 
-transitions between its states, what triggers each transition, and what 
-changes are made to the copies and snapshot sets on a transition.
+In the following paragraphs, we describe how the state machine for a single, 
+writable user page transitions between its states, what triggers each transition, 
+and what changes are made to the copies and snapshot sets on a transition.
+Read-only pages only use states 0 and 1, and writes lead to segmentation faults
+as they do on non-\tiktok systems.
 
 \paragraph{State 0}
-\mat{Todo: come up with better name for states.}
-A page starts as \texttt{(writable, unduplicated)}.
-At this stage, there is a single writable \mat{not necessarily writable but a
-page with original permissions?} copy $C_L$ and a single snapshot $L$. 
+A page starts as \texttt{(unprotected, unduplicated)}.
+In this state, there is a single copy $C_L$ and a single ``snapshot'' $L$. 
+The snapshot $L$ refers to the latest version of the page which changes 
+with time, and is the only mutable snapshot.
 All processes where this page is mapped have unrestricted userspace read and write 
 access, and unrestricted kernel write access.
 The remaining operation, a read from kernel code, triggers a transition to 
 the next state.
 
 \paragraph{State 1}
-The page in State 0 transitions to the \texttt{(read-only, unduplicated)} state as soon as a syscall 
+The page in State 0 transitions to the \texttt{(protected, unduplicated)} state as soon as a syscall 
 reads from it.
 \tiktok first marks the page's latest copy $C_L$ read-only in all processes, 
-restricting \mat{trapping?} writes to it but allowing concurrent reads to continue.
+trapping writes to the page but allowing concurrent userspace reads to continue.
 A new snapshot, $S_0$ linked to this syscall is allocated for this page.
 For the rest of its lifetime, this syscall will only read from this snapshot.
 Both snaphots $S_0$ and $L$ refer to the same copy $C_L$ (shown by the 
@@ -247,13 +261,13 @@ The page's read-only status causes the hardware to fault on any write,
 notifying \tiktok to transition the page to the next state.
 
 \paragraph{State 2}
-A page in State 1 transitions to (unmarked, duplicated) on any write from 
+A page in State 1 transitions to (unprotected, duplicated) on any write from 
 user or kernel code.
 \tiktok duplicates the latest copy $C_L$, creating a new copy $C_0$ holding
 the contents of the page prior to the write.
-\tiktok moves all snapshots ($S_0$ and $S_1$) previously pointing to 
-$C_L$ to now point to the new copy $C_0$ (shown by green shading in 
-\autoref{fig:tiktok_states}). 
+\tiktok moves all snapshots except $L$ (i.e. $S_0$ and $S_1$) previously 
+pointing to $C_L$ to now point to the new copy $C_0$ (shown by green shading 
+in \autoref{fig:tiktok_states}). 
 Thereafter, the latest copy $C_L$ is made writable, and the triggering write 
 is retried. 
 Note how, at this state, any read using the snapshots $S_0$ or $S_1$ reads 
@@ -270,7 +284,7 @@ All other copies $C_i$ are immutable.
 
 \paragraph{State 3}
 A separate syscall subsequently reading the page in State 2 transitions 
-it to \texttt{(read-only, duplicated)} state. 
+it to \texttt{(protected, duplicated)} state. 
 The new snapshot, $S_2$, points to the latest copy $C_L$.
 On a write, the page will be duplicated and this snapshot 
 will point to the new copy (similar to that in state 2).
@@ -293,8 +307,18 @@ so \tiktok changes the page to state 0.
 If the page was in state 3, $C_L$ was read-only and mapped by some other
 snapshot, so \tiktok moves the page to state 1.
 
-\mat{What about concurrent writes from different syscalls to pages in different
-states? What about conflict resolution?}
+Under \tiktok, all writes are affected on to a single copy of the page $C_L$,
+maintaining correctness for syscalls writing concurrently to the page while
+eliminating the need for merging snapshots when syscalls complete.
+On non-\tiktok systems, writes to a page from syscalls running concurrently
+are interleaved onto the page based on what order these writes were 
+executed. 
+The same syscalls protected by \tiktok write to the latest snapshot $L$ (i.e. 
+the copy $C_L$), and the final state corresponds to an interleaving of these
+writes, just as in the non-\tiktok case.
+The snapshots $S_i$ is immutable, can be dropped without requiring page 
+merging, as described in the previous paragraph.
+
 
 \subsection{Discussion}
 
