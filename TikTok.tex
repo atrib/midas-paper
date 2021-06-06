@@ -97,6 +97,13 @@ Not more than 200 words, if possible, and preferably closer to 150.
 
 
 \section{Background}
+
+\subsection{Linux Memory Subsystem}
+
+\subsection{Page Tables and Memory Protection}
+
+\subsection{SMAP}
+
 \begin{figure}[]
   \centering
   \includegraphics[width=.85\linewidth]{img/doublefetch.pdf}
@@ -221,7 +228,7 @@ of syscalls protected by \tiktok.
 \tiktok's implementation builds on the protection mechanisms provided by 
 existing virtual memory implementations.
 On modern platforms, virtual memory protection is set up by the OS at
-page-granularity by setting bits in pagetable entries.
+page-granularity by setting bits in pagetable entries (PTEs).
 These permission bits are checked by the hardware on memory access, 
 efficiently enforcing that the permissions are respected, or raising 
 a fault when they are not.
@@ -370,7 +377,7 @@ Prior to any writes to this page, any other syscalls which also read the page
 get their own snapshots (e.g., $S_1$) all pointing to the single copy $C_L$.
 The page's read-only status causes the hardware to fault on any write,
 notifying \tiktok to transition the page to the next state.
-In \autoref{fig:doublefetch_tiktok}, the page transistions to state 1 when 
+In \autoref{fig:doublefetch_tiktok}, the page transitions to state 1 when 
 the syscall first reads it, and adds a snapshot $S_0$.
 
 \paragraph{State 2}
@@ -510,6 +517,145 @@ A single, per-page lock can serialize operations on that page
 and assure forward progress.
 
 
+%%%%%%%%%%%%%%%%%%%
+\section{\tiktok implementation}
+\label{sec:impl}
+%%%%%%%%%%%%%%%%%%%
+
+The \tiktok prototype implements the state machine described in 
+\autoref{sec:design} on Linux, targeting the x86-64 architecture.
+A page protected by \tiktok transitions between states on 
+either a kernel read to user memory, or when user or kernel code
+writes to read-only memory (see \autoref{fig:tiktok_states}).
+\tiktok can be implemented on any operating system kernel that uses 
+a defined interface for reading from userspace (\Code{read_in}) and
+on any architecture which implements hardware-controlled access 
+control to memory through page tables. 
+The first requirement enables \tiktok to implement transitions on 
+kernel reads from user memory.
+The Linux kernel uses the \Code{raw_copy_from_user} interface which 
+we instrument for our prototype.
+The second requirement causes the hardware to raise a faults, 
+directing execution on the processor to a pre-defined exception 
+handler in the OS.
+Our prototype instruments the Linux'  fault handler in the funtion 
+\Code{handle_pte_fault} to implement the write-triggered transisions 
+from states 2 and 4.
+
+\subsection{Tracking page state}
+
+\begin{figure}[]
+  \includegraphics[width=\linewidth]{img/book-keeping.pdf}
+  \caption{Bookkeeping information for a page}
+  \label{fig:tiktok_bookeeping}
+\end{figure}
+
+\tiktok needs to track the state for every userspace page, including
+its snapshot and copy sets.
+\autoref{fig:tiktok_bookeeping} shows the data structures used to
+track this state in our prototype.
+Linux maintains a \Code{struct page} object for every frame of 
+physical memory. 
+We augment this structure with a list holding a list of snapshots
+for this page, excluding the latest snapshot $L$.
+Each snapshot has a pointer to its copy. 
+In the figure, the snapshots $S_1$ and $S_0$ share the copy $C_0$.
+The authors are aware of the strong aversion of the 
+Linux kernel developer community towards increasing the size of 
+\Code{struct page}. 
+An alternate implementation can use a hashmap to
+map from a page's frame number to its snaphots list or
+reuse existing data members (e.g., \Code{struct list_head lru} which 
+can be used as a generic list by page owners).
+
+Each pagetable entry for this page in different address spaces 
+map the copy $C_L$, enabling userspace to directly access this
+copy with reads (and writes for writable pages).
+We use one software-controlled bit (SW3) in the pagetable entries 
+to track the protection status of the page, and another (SW2)\footnotemark
+to track the original protections for the page. 
+SW3 is set whenever the page is in one of the two protected
+states (1 and 3).
+On a write-triggered protection fault, SW3 can be read to 
+efficiently determine if the fault was due to \tiktok's protection 
+mechanisms, triggering a state change, or due to buggy software
+accessing a page with illegal permissions, triggering a signal to 
+the task.
+Other architectures might have a fewer number of software-usable 
+bits in the page-table, and implementations of \tiktok would 
+require store the protection status of pages in a separate data structure.
+The duplication status of the page is implicitly encoded in the 
+snapshots: the page is duplicated when any of its snaphots
+holds a pointer to a copy other than $C_L$.
+
+Changing the protection state of pages requires updates to 
+PTEs for the page in all address spaces where the page is mapped.
+The page's \Code{struct page} structure includes a reverse-map
+listing all of these address pages, and the corresponding virtual
+address in each.
+
+\subsection{Kernel reads from user memory}
+
+\begin{minipage}{\linewidth}
+\begin{lstlisting}[language=C, 
+  caption={Pseudo-code for kernel copy from user memory},
+  label=code:rawcopyfromuser,  breaklines=true, captionpos=b,
+  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+  numbers=left,basicstyle=\scriptsize, xleftmargin=5.0ex]
+raw_copy_from_user(dest, __user source, size) {
+  void *copy_ptr;
+
+  foreach page_va in range(source, source + size) {
+    // Walk page table to find page frame
+    struct page *page = walk_page_table(page_va);
+
+    if page has snapshot for this task { 
+      // Find the correct copy to read from
+      if page in state 1
+        // Read from C_L
+        copy_ptr = page_address(page); 
+      else 
+        // page is in states 2 or 3
+        // Read from another copy
+        copy_ptr = find_snapshot(page->snaphots_list, current)->copy;
+    } else {                             
+      // Create a new snapshot pointing to C_L
+      list_add(new snapshot, page->snaphots_list);
+
+      // Add page to those protected for the 
+      // current task's task_struct
+      list_add(page, current->protected_pages_list);
+
+      // Protect page in all address spaces
+      rmap_walk(...);
+
+      // Read from C_L
+      copy_ptr = page_address(page);     
+    } 
+    // Perform the actual copy within the page
+    memcpy(dest, source, size);
+  }
+}
+\end{lstlisting}
+\end{minipage}
+
+Syscalls reading from user memory the first time triggers the 
+allocation of a new snapshot. 
+If the page is not protected (states 1 and 3), this also 
+triggers a state change where the kernel protects the page
+in all address space that it is mapped in. 
+\autoref{code:rawcopyfromuser} shows the pseudocode for 
+\Code{raw_copy_from_user}, which implements this functionality
+in our prototype.
+
+
+
+\footnotetext{The SW2 bit is also used by the Software Dirty Pages feature of 
+Linux, and cannot be run alongside \tiktok in our prototype.}
+
+\todo{Limitations: raw\_copy\_from\_user\_inatomic}
+
+
 \todo{Discuss how Midgard would help}
 \tiktok assumes that syscalls do not both read and write to the same user data. 
 There are particular syscalls, however, which rely on such behaviour, and 
@@ -517,8 +663,6 @@ are not instrumented.
 
 \todo{In implementation, discuss how IOMMU's can be used to prevent devide writes,
 but is currently unsupported.}
-
-Fake citation for compilation~\cite{silberschatz2018operating}.
 
 \bibliographystyle{plain}
 \bibliography{TikTok}
