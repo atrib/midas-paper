@@ -263,8 +263,6 @@ pages before the syscall first reads them.
 However, the attacker is prevented from modifying any of these earlier pages
 after the syscall's first read, ensuring that double-fetches respect
 the invariant.
-%\mat{Argue that this is a 'wavefront' style of mitigation.}
-%\mat{If you think this is a bad analogy, simply cut it.}
 If the syscall code contains a \tocttou bug, the modification will
 be visible to the first fetch itself (which is used for checking for 
 validity of the data) and will lead to the data being rejected 
@@ -297,9 +295,6 @@ blocks until Task C completes and is unnecessarily delayed.
 A more performant approach is to duplicate the concurrently accessed page: the copy is 
 kept should task C fetch data from the page again, and task D
 can write to the original and proceed without delays.
-\atri{Maybe link to database optimistic concurrency control}
-\mat{Yes, that's a good idea, maybe even with a hint 'similar optimizations
-exist in databses.'}
 
 \tiktok must maintain multiple versions of a page read by a syscall 
 to maintain its invariants in the face of concurrent writes.
@@ -322,7 +317,10 @@ from userspace.
 syscalls read from immutable versions to prevent \tocttou bugs and
 syscalls and userspace both write to a single mutable version 
 holding the latest state of the page.}
-
+\tiktok's design draws parallels to multi-version concurrency control 
+methods for databases based on snapshot isolation. \todo{cite}
+Transactions read from a snapshot of the database state from when 
+they started, and writes update the up-to-date state of the database.
 
 \subsection{Page state machine}
 
@@ -403,17 +401,13 @@ In \autoref{fig:doublefetch_tiktok}, the page transitions to state 1 when
 the syscall first reads it, and adds a snapshot $S_0$.
 
 \paragraph{State 2}
-A page in State 1 transitions to the \texttt{(unprotected, duplicated)} state on any write from 
-user or kernel code.
-\tiktok duplicates the latest copy $C_L$, creating a new copy $C_0$ holding
-the contents of the page prior to the write.
-\tiktok moves all snapshots except $L$ (i.e. $S_0$ and $S_1$) previously 
-pointing to $C_L$ to now point to the new copy $C_0$ (shown by green shading 
-in \autoref{fig:tiktok_states}). 
-\mat{Why not explain in reverse? I.e., $C_L$ changes and all older copies are
-simply renamed to +1?}
-Thereafter, the latest copy $C_L$ is made writable, and the triggering write 
-is retried. 
+A page in State 1 transitions to the \texttt{(unprotected, duplicated)} state 
+on any write from user or kernel code.
+\tiktok duplicates the old contents of the page from copy $C_L$, creating a 
+read-only copy $C_0$ (shown by green shading in \autoref{fig:tiktok_states}).
+Snapshots except $L$ (i.e. $S_0$ and $S_1$) previously mapping to $C_L$ are 
+mapped to the copy $C_0$.
+The write then modifies the latest copy $C_L$, which is now made writable.
 Note how, at this state, any read using the snapshots $S_0$ or $S_1$ reads 
 from the unmodified copy $C_0$ while writes directly affect $C_L$.
 Certain syscalls such as \Code{rt_sigaction} both read and write from 
@@ -545,6 +539,25 @@ None of the operations on a page rely on operations on other pages.
 A single, per-page lock can serialize operations on that page
 and assure forward progress.
 
+\paragraph{Detecting double fetches}
+\tiktok's state machine for pages also allows it to be used as a 
+sanitizer since it can detect, and therefore report when a syscall 
+double fetches from the same page.
+When a syscall first reads from a user page, it creates a snapshot 
+of that page.
+On future reads, the snapshot is used in order to maintain the 
+invariant.
+This means that for reading from a page, implementations must check 
+if a snapshot exists for the syscall: if yes, the snapshot is used
+for the read, otherwise a new snapshot is created and then used 
+for the read. 
+The prior existence of a snapshot means that the syscall had previously
+read from this page and had then created this snapshot, implying a double 
+fetch.
+This approach, however, is prone to false positives due to false sharing.
+The two reads might read from the same page, but might access entirely 
+disjoint bytes. 
+\tiktok's design does not currently allow us to prevent such false positives.
 
 %%%%%%%%%%%%%%%%%%%
 \section{\tiktok implementation}
@@ -603,7 +616,6 @@ map the copy $C_L$, enabling userspace to directly access this
 copy with reads (and writes for writable pages).
 We use one software-controlled bit (SW3) in the pagetable entries 
 to track the protection status of the page, and another (SW2)\footnotemark
-\mat{Where's the footnote?}
 to track the original protections for the page. 
 SW3 is set whenever the page is in one of the two protected
 states (1 and 3).
@@ -612,14 +624,15 @@ efficiently determine if the fault was due to \tiktok's protection
 mechanisms, triggering a state change, or due to buggy software
 accessing a page with illegal permissions, triggering a signal to 
 the task.
-\mat{This needs to be highlighted as a core property: we prohibit double fetches
-and can also report them! This is different from simply mitigating them.}
 Other architectures might have a fewer number of software-usable 
 bits in the page-table, and implementations of \tiktok would 
 require storing the protection status of pages in a separate data structure.
 The duplication status of the page is implicitly encoded in the 
 snapshots: the page is duplicated when any of its snapshots
 holds a pointer to a copy other than $C_L$.
+
+\footnotetext{The SW2 bit is also used by the Software Dirty Pages feature of 
+Linux, and cannot be run alongside \tiktok in our prototype.}
 
 Changing the protection state of pages requires updates to 
 PTEs for the page in all address spaces where the page is mapped.
@@ -681,11 +694,6 @@ in all address space that it is mapped in.
 \Code{raw_copy_from_user}, which implements this functionality
 in our prototype.
 
-
-
-\footnotetext{The SW2 bit is also used by the Software Dirty Pages feature of 
-Linux, and cannot be run alongside \tiktok in our prototype.}
-\mat{Why not just using the footnote command itself?}
 
 \todo{Limitations: raw\_copy\_from\_user\_inatomic}
 
