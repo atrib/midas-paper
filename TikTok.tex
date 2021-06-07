@@ -229,15 +229,6 @@ need to be protected.
 Accesses to userspace objects from userspace and kernel objects by kernel 
 code remains unaffected.
 
-In addition, \tiktok must assure \emph{correctness}: there must exist an
-execution on a non-\tiktok system where userspace \emph{never} modifies data 
-between double-fetches by the kernel which is identical to the execution
-of syscalls protected by \tiktok.
-\mat{Rephrase correctness invariant, you are basically saying tiktok may not
-introduce any false executions. Separate the two invariants into a security
-invariant and a correctness invariant.}
-\mat{I rephrased the below assuming two variants.}
-
 \tiktok's implementation builds on the protection mechanisms provided by 
 existing virtual memory implementations.
 On modern platforms, virtual memory protection is set up by the OS at
@@ -457,19 +448,10 @@ This transitions is shown in \autoref{fig:doublefetch_tiktok}, where the
 snapshot $S_0$ and the copy $C_0$ are both discarded.
 If the page was in state 3, $C_L$ was read-only and mapped by some other
 snapshot, so \tiktok moves the page to state 1.
-
-Under \tiktok, all writes are affected on to a single copy of the page $C_L$,
-maintaining correctness for syscalls writing concurrently to the page while
-eliminating the need for merging snapshots when syscalls complete.
-On non-\tiktok systems, writes to a page from syscalls running concurrently
-are interleaved onto the page based on what order these writes were 
-executed. 
-The same syscalls protected by \tiktok write to the latest snapshot $L$ (i.e. 
-the copy $C_L$), and the final state corresponds to an interleaving of these
-writes, just as in the non-\tiktok case.
-The snapshots $S_i$ is immutable, can be dropped without requiring page 
-merging, as described in the previous paragraph.
-
+Recall that all snapshots $S_i$ (i.e. excepting snapshot $L$) are immutable
+any data written by the syscalls directly affect the snapshot $L$. 
+Therefore, dropping a snapshot $S_i$ is trivial and does not require 
+writes from the syscall to be merged into the latest copy.
 
 \subsection{Discussion}
 
@@ -492,6 +474,69 @@ System Call & Exemption reason \\
 \caption{System calls uninstrumented by \tiktok}
 \label{tab:except_syscall}
 \end{table}
+
+\paragraph{Correctness concerning syscalls directly updating snapshot $L$}
+\tiktok's design lets all writes, including those from syscalls, to directly 
+update the latest copy of the page $C_L$ and this design maintains correctness 
+of system execution.
+In this paragraph, we shall show that there is a valid, safe\footnotemark 
+execution trace of a system not protected by \tiktok which generates the same 
+sequence of writes to the page, and therefore generates the same contents
+of the page when the syscall ends. 
+By showing that the final contents of memory after a \tiktok syscall has a 
+corresponding execution without \tiktok (which we assume to be correct), 
+we can conclude that the execution of the \tiktok syscall is also correct.
+For this proof, we assume that no syscall reads the same object after writing 
+to it (r-w-r pattern). 
+Such syscalls do not exist in the Linux kernel, and are discussed below.
+Therefore, our syscalls write to an object after completing all of its reads.
+
+\footnotetext{A safe trace has no writes to vulnerable data between double fetches 
+by the kernel, and therefore does not trigger any existing \tocttou bugs.}
+
+Let us consider a page holding a single-byte object $O_0$, and the 
+sequence of operations to this byte during a \tiktok syscall be 
+$Ops = \{Op_0, Op_1, \dots \}$. 
+Each operation is a tuple $(r/w, k/u)$ specifying whether the 
+operation was a read or a write, and whether the operation was due to 
+a user or kernel instruction.
+Suppose there was no attempt to exploit a \tocttou bug, i.e. between
+any two read operations by the same syscall, there was no write to 
+this object.
+In this case, \tiktok reads the same value from its snapshot of the 
+object as is present on the latest version. 
+The same sequence of operations on a non-\tiktok system would be valid and
+safe, since the object value does not change between the kernel's double 
+fetch and the syscall reads the same value on this system.
+
+Let us now assume that there was an attempt to exploit a \tocttou bug:
+a write $Op_1$ exists between two syscall reads $Op_0$ and $Op_2$.
+\tiktok protects the syscall ensuring that $Op_2$ does not see the 
+effect of $Op_1$ by reading from a snapshot instead of the latest 
+copy $C_L$. 
+Since our syscalls are assumed to not contain any r-w-r pattern, 
+any writes by the syscall happen after $Op_2$.
+Let us assume that the syscall's write is $Op_3$.
+We can generate a valid, safe execution on a non-\tiktok system 
+by moving the adversary's write to after the last read by the 
+syscall, i.e. $Ops = \{Op_0, Op_2, Op_1, Op_3\}$.
+The syscall in this system reads the same value both times, and 
+hence has the same execution as that in the \tiktok case.
+The value of the object when the syscall completes is that 
+written by $Op_3$ in both cases (or that written by $Op_1$ in 
+case the syscall does not have a final write).
+Since the syscall has the same execution and the final value of 
+the object is the same, the execution of the \tiktok system 
+is the same as that of the non-\tiktok system.
+In general, any trace of operations on a \tiktok system can 
+be translated  to a valid, safe trace on a non-\tiktok system 
+by moving adversarial writes to just after the last after 
+double fetches by executing syscalls.
+Multiple syscalls in \tiktok can therefore write without affecting 
+correctness, because the an equivalent, valid, safe non-\tiktok trace 
+exists where all of the writes have been postponed, in the same order 
+to after the double fetch reads. 
+
 \paragraph{Exceptions}
 Certain syscalls such as \Code{futex} rely on user data changing between 
 double fetches to implement their functionality and cannot be protected by
