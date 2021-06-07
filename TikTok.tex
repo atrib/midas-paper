@@ -318,7 +318,7 @@ syscalls read from immutable versions to prevent \tocttou bugs and
 syscalls and userspace both write to a single mutable version 
 holding the latest state of the page.}
 \tiktok's design draws parallels to multi-version concurrency control 
-methods for databases based on snapshot isolation. \todo{cite}
+methods for databases based on snapshot isolation~\cite{0001MK15}.
 Transactions read from a snapshot of the database state from when 
 they started, and writes update the up-to-date state of the database.
 
@@ -327,7 +327,8 @@ they started, and writes update the up-to-date state of the database.
 \begin{figure*}[]
   \includegraphics[width=\linewidth]{img/tiktok_states.pdf}
   \caption{State diagram for a page in \tiktok. Reads/writes from userspace/syscall 
-          code are marked (u)/(s) respectively.}
+          code are marked (u)/(s) respectively. Shading is used to represent the 
+          mapping from snapshots to copies.}
   \label{fig:tiktok_states}
 \end{figure*}
 
@@ -820,13 +821,17 @@ programs, syscall-heavy server programs (Apache).
 We plot \tiktok's performance relative to the baseline kernel on
 these benchmarks in \autoref{fig:pts_performance}, roughly ordered 
 workloads in increasing order of syscall dependence from left to right.
-The benchmark titled ``Linux'' represents compilation of the Linux kernel.
 For benchmarks for which PTS reports runtime, we compute the inverse 
 of the runtime as performance.
-Benchmarks with low syscall frequency such as OpenSSL, Linux compilation, 
+Benchmarks with low syscall frequency such as OpenSSL, 
 Pybench and Git have correspondingly low dependence on kernel performance.
 Accordingly, these benchmarks see a negligible overhead when running 
 on our prototype kernel.
+The benchmark titled ``Linux'' represents compilation of the Linux kernel.
+While compilation is mostly CPU bound, compiling the Linux kernel requires 
+compilation of a large number of source files, resulting in the creation 
+of a large number of compiler processes each of which read different files. 
+\tiktok experiences a small, but non-negligible overhead on this workload.
 Redis requires syscalls for receiving and replying to requests, but 
 processes its transaction entirely in-memory. 
 Our evaluation prototype version achieves almost identical performance
