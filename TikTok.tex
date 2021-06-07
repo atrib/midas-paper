@@ -717,12 +717,91 @@ in all address space that it is mapped in.
 \autoref{fig:copy_from_user} shows the flowchart implemented
 by the kernel function \Code{raw_copy_from_user} for reading
 from user memory.
+This function also uses the kernel's \Code{mark_page_accessed} 
+interface to move the page to the ``Active'' state for the 
+kernel's swapping mechanism, making the page ineligible for being 
+swapped out.
 
 \begin{figure}[]
+  \centering
   \includegraphics[width=0.8\linewidth]{img/copy_from_user.pdf}
   \caption{Flowchart for syscall reading from userspace memory}
   \label{fig:copy_from_user}
 \end{figure}
+
+\begin{figure}[]
+  \includegraphics[width=\linewidth]{img/pagefault.pdf}
+  \caption{Flowchart for handling a page fault. operations
+           marked with an asterisk are unmodified.}
+  \label{fig:fault_handling}
+\end{figure}
+
+\begin{figure}[]
+  \includegraphics[width=\linewidth]{img/pagefault_cow.pdf}
+  \caption{Flowchart for handling a page fault to a COW page}
+  \label{fig:fault_handling_cow}
+\end{figure}
+
+\paragraph{Handling Faults}
+The processor generates a fault when kernel or user code accesses
+a page without having the correct permission in the corresponding PTE.
+\tiktok marks writable pages read-only to protect them in 
+states 1 and 3, allowing the kernel to detect writes to these pages.
+A common OS mechanism, copy-on-write (COW) pages, also uses 
+permissions in the PTE to detect when COW pages need to be copied.
+The PTE's present bit are used to store pointers to file-backed pages
+when they are swapped to disk.
+\autoref{fig:fault_handling} shows the flowchart implemented by
+\Code{handle_pte_fault} to handle faults for userspace addresses.
+
+The page-fault handler first checks if the PTE is NULL, and if so 
+knows that it has to allocate a page. 
+If the required page is anonymous, the page can be allocated as usual.
+Otherwise, for file-backed pages, the handler has to check if the 
+page is already in a protected state (states 1 and 3) by reading 
+the SW3 bit of the PTE and if so, transitions to the required state
+and allocates a new copy. 
+Pages in states 0 and 2 can be directly mapped, and subsequently
+accessed.
+By correctly handling new mappings to file-backed pages, \tiktok
+prevents \autoref{attk:remapping}. 
+
+For non-NULL PTEs, the handler checks if the PTE indicates that the 
+page is present, and non-present pages are swapped-in as usual.
+Faults for a present page indicate a permission fault (write to 
+a read-only page).
+If the page is not a COW-page, the handler then checks if the page
+is in a protected state by checking the SW3 bit.
+If the page was protected, a new copy is allocated and the page 
+transitions to the following state.
+For non-protected pages, however, this fault implies a real access
+violation, sending a signal to the process.
+
+COW pages represent separate virtual pages from different 
+address spaces mapped to the same physical page.
+This is illustrated in \autoref{fig:fault_handling_cow} where 
+logically separate pages A and B are actually mapped to the COW
+page.
+A COW page cannot be in states 2 or 3, since they cannot have multiple
+\tiktok copies.
+COW pages in state 0 can be dealt with by the kernel's standard 
+duplication method (not \tiktok's duplication).
+For a COW page in state 1, its list of snapshots can correspond to 
+reads from syscalls for threads in different address spaces.
+In \autoref{fig:fault_handling_cow}, we show snapshots $S_A$ and 
+$S_B$ corresponding to syscalls for threads in different address 
+spaces (containing A and B respectively).
+These snapshots correspond to different logical pages, but are 
+all squashed into the snapshots list of the single COW page. 
+Therefore, after the kernel duplicates the COW page (new page
+B created, in \autoref{fig:fault_handling_cow}), \tiktok moves 
+the snapshots for the faulting process ($S_B$) to new page.
+Finally, this new page is transitioned to its next state to allow 
+for the write to occur, creating a new copy ($C_0$) for the 
+snapshot $S_B$ to read from.
+
+
+
 
 \section{Evaluation}
 
