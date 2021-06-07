@@ -360,8 +360,6 @@ copy}, which is mapped in process' address spaces.
 \mat{What if a syscall reads (taking a snapshot), writes, reads again? The write
 may not show up in the 2nd read? As you describe below, this is not supported. I
 wonder if we should forward reference?}
-\todo{Should I formally define this mapping?}
-\mat{I highlighted and think it's good enough.}
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
@@ -431,10 +429,13 @@ and reads the same value as the first time.
 A separate syscall subsequently reading the page in State 2 transitions 
 it to \texttt{(protected, duplicated)} state. 
 The new snapshot, $S_2$, points to the latest copy $C_L$.
-On a write, the page will be duplicated and this snapshot 
-will point to the new copy (similar to that in state 2).
-\mat{Unclear why state 3 is necessary (and why state 2 is not sufficient), please
-explain in more detail.}
+State 3 is similar to state 1, except that there are different copies of 
+the page used for reading by different syscalls. 
+The syscall for which $S_0$ was allocated will read from the copy $C_0$,
+while the syscall for which $S_2$ was allocated will read from copy $C_L$.
+On a write, the page will transition to state 2 and will be duplicated again,
+creating another copy $C_1$: snapshot $S_2$ will map to $C_1$ while 
+snapshots $S_1$ and $S_0$ will continue to map to $C_0$. 
 
 \paragraph{Releasing snapshots}
 \tiktok uses snapshots to enable a syscall to read the same data from a page 
@@ -510,16 +511,33 @@ affect the security of other syscalls.
 Any writes from these syscalls are subject to the same rules described
 in the state machine, and cannot break \tiktok's invariants.
 
-Further, a hypothetical syscall which reads from an object, writes to it, and
+
+\paragraph{Syscalls with read-write-read patterns}
+A hypothetical syscall which reads from an object, writes to it, and
 then reads back the updated object cannot be protected using \tiktok.
 \tiktok's invariant will ensure that the second read is identical to the first,
 and does not reflect the intermediate write. 
-\mat{This needs to be phrased carefully: we're over-approximating to page basis,
-so some false sharing may cause incidents (tm). Can we say how this is not an
-issue?}
+Such syscalls will also need to be exempted from \tiktok's instrumentation.
 The authors did not find any syscall which exhibits this behavior in the Linux
 kernel. 
-Such syscalls will also need to be exempted from \tiktok's instrumentation.
+
+\paragraph{Syscalls with false sharing}
+Another hypothetical syscall could face problems with \tiktok's 
+instrumentation due to false sharing. 
+Suppose a page contains two objects, $O_0$ and $O_1$, and a syscall  
+sequentially reads $O_0$ then $O_1$.
+Due to \tiktok's invariant being enforced at page-granularity and 
+false-sharing of the page between these objects, \tiktok guarantees that
+the value of object $O_1$ read is the same as what was contained when it 
+first read object $O_0$. 
+A syscall which requires the value of $O_1$ to change between these two 
+points in time would, therefore, not work with \tiktok protections. 
+We believe that such a syscall, requiring concurrent modifications to its 
+arguments, will likely exist to support some synchronization mechanism 
+similar to a \Code{futex} and can be safely exempt from \tiktok's invariant.
+The authors did not find any syscall which exhibits this behavior in the 
+Linux kernel. 
+
 
 \paragraph{Preventing deadlocks by design}
 \tiktok's design is free of deadlocks, and exempts syscalls which 
@@ -565,7 +583,8 @@ disjoint bytes.
 %%%%%%%%%%%%%%%%%%%
 
 The \tiktok prototype implements the state machine described in 
-\autoref{sec:design} on Linux, targeting the x86-64 architecture.
+\autoref{sec:design} on Linux version 5.11, targeting the x86-64 
+architecture. 
 A page protected by \tiktok transitions between states on 
 either a kernel read to user memory, or when user or kernel code
 writes to read-only memory (see \autoref{fig:tiktok_states}).
@@ -694,14 +713,156 @@ in all address space that it is mapped in.
 \Code{raw_copy_from_user}, which implements this functionality
 in our prototype.
 
+\atri{TODO: write why write is not vulnerable to double fetch}
+\section{Evaluation}
 
+In this section, we quantify \tiktok's overhead on workloads 
+with different characteristics, both compute-bound applications
+which rarely use syscalls and I/O-bound applications which 
+heavily rely on the kernel's I/O interface.
+\tiktok's overhead depends on the number of address spaces 
+where protected pages are mapped. 
+Relevant benchmarks therefore include multiprocessing, parallel 
+benchmarks.
+
+We evaluate \tiktok on two benchmark suites: the NAS Parallel 
+Benchmark (NPB)~\cite{npb} and select workloads from the 
+Phoronix Test Suite (PTS)~\cite{pts}. 
+NPB includes CPU-bound multiprocessing workloads with a 
+low, but non-negligible syscall rate. 
+NPB therefore demonstrates the ability of \tiktok to 
+scale to systems where pages are protected across numerous 
+address spaces.
+PTS includes a variety of benchmarks, both CPU-bound and 
+I/O bound representative of both desktop and server workloads.
+PTS includes syscall-heavy applications with varying degrees 
+of parallelism.
+We do not include CPU benchmarks from the SPEC benchmark suite
+as they are heavily CPU bound and designed to isolate userspace 
+performance without syscalls, and therefore do not test kernel 
+performance.
+
+The testbench for the evaulation consists of a desktop machine 
+with an 8-core Intel i7-9700 processor and 16GB DRAM running 
+Ubuntu 20.04 LTS.
+To eliminate the effect of dynamic frequency and voltage 
+scaling (DVFS), we set the processor to run at constant 
+frequency of 3.0GHz which is this model's base frequency.
+In the \emph{baseline} configuration, we run the testbench 
+with the mainline kernel v5.11 available from Ubuntu's package 
+repository.
+The \emph{\tiktok} configuration runs our prototype \tiktok kernel 
+based on kernel v5.11.
+For particular benchmarks, we also run the \emph{\tiktok-extra}
+configuration which also runs our prototype \tiktok kernel
+but instruments all syscalls including \Code{write}.
+
+\subsection{NAS Parallel Benchmarks}
+
+\begin{figure}[]
+  \includegraphics[width=\linewidth]{img/npb_performance.pdf}
+  \caption{\tiktok performance on NPB benchmarks relative to baseline with 
+          the same parallelization technique}
+  \label{fig:npb_performance}
+\end{figure}
+
+NAS Parallel Benchmarks (NPB)~\cite{npb} is a benchmark introduced by
+NASA. 
+NPB consists of several parallel programs using different communication
+patterns and is available for two technology stacks for parallel programming:
+OpenMP and MPI.
+% Two variants that test either threads or processes
+OpenMP~\cite{dagum1998openmp} is a compiler extension that splits a 
+program's execution to multiple threads. 
+All threads still use the same address space, keeping the overhead minimal. 
+MPI~\cite{snir1998mpi} implements parallel execution by launching multiple
+processes which communicate by message-passing. 
+The two technology stacks have different frequency of syscalls due to 
+different communication methods.
+Communication through kernel syscalls for either stack will incur overhead
+due to \tiktok's protection.
+Additional global TLB shootdowns added by \tiktok will also affect the 
+performance of such parallel benchmarks.
+
+We evaluated NPB benchmarks of class A on our testbench, running 
+4 threads/processes in parallel.
+These benchmarks' runtime varies between 10 seconds and 8 minutes, 
+and are all long enough for the kernel to reach equilibrium.
+Certain benchmarks require a parallelism number which is a perfect square.
+On our 8-core CPU, having 4 CPU-bound threads/processes instead of 16 allows 
+all of them to run without time-sharing.
+\autoref{fig:npb_performance} shows \tiktok's performance for both MPI and OpenMP 
+normalized to the performance of the baseline system with the same parallelization
+technique for the NPB benchmarks.
+On average, \tiktok achieved $96.3\%$ of the baseline system's performance with 
+both 
+On both systems, \tiktok's performance for the \Code{ep} (Embarassingly Parallel)
+benchmark is closest to that of the baseline, since it has low 
+communication overheads.
+\tiktok shows low overhead ($3.7\%$) for CPU-bound workloads, even when they 
+involve parallelism.
+
+\subsection{Phoronix Test Suite}
+
+\begin{figure}[]
+  \includegraphics[width=\linewidth]{img/pts_performance.pdf}
+  \caption{\tiktok performance on PTS benchmarks relative to baseline system}
+  \label{fig:pts_performance}
+\end{figure}
+
+The Phoronix Test Suite (PTS)~\cite{pts} includes a large set of 
+open-source benchmarks, of which we have chosen a range of benchmarks 
+suitable for evaluating both desktop and server performance.
+These benchmarks complement those from NPB and range from single-threaded, 
+CPU-bound applications (OpenSSL) to multi-threaded, multi-process 
+programs, syscall-heavy server programs (Apache).
+
+We plot \tiktok's performance relative to the baseline kernel on
+these benchmarks in \autoref{fig:pts_performance}, roughly ordered 
+workloads in increasing order of syscall dependence from left to right.
+The benchmark titled ``Linux'' represents compilation of the Linux kernel.
+For benchmarks for which PTS reports runtime, we compute the inverse 
+of the runtime as performance.
+Benchmarks with low syscall frequency such as OpenSSL, Linux compilation, 
+Pybench and Git have correspondingly low dependence on kernel performance.
+Accordingly, these benchmarks see a negligible overhead when running 
+on our prototype kernel.
+Redis requires syscalls for receiving and replying to requests, but 
+processes its transaction entirely in-memory. 
+Our evaluation prototype version achieves almost identical performance
+as the baseline kernel.
+However, Redis' performance on earlier, less optimized prototypes showed
+significant degradation in performance (upto $69\%$).
+The webservers, Apache and Nginx require network and file-system I/O, 
+and rely heavily on syscall performance. 
+We see that Nginx, which is a higher-performance webserver, sees a larger
+overhead.
+Fs-mark, which accesses a filesystem with 5000 files of 1MB concurrently
+from 4 threads, and IPC, which implements 128 byte transfers between 
+two processes over a TCP connection, are almost entirely bound by kernel 
+performance. 
+These benchmarks see a performance overhead of upto $10\%$ on \tiktok.
+
+Our prototype \tiktok kernel benefits significantly from 
+exempting particular, proven-safe syscalls from instrumentation.
+While we exclude \Code{write}-like syscalls from \tiktok because they 
+are not vulnerable to double-fetch bugs, we also evaluated the
+performance cost of a na\"ive implementation (\tiktok-extra)
+which also instruments these syscalls.
+To highlight the worst-case performance of the na\"ive approach, we 
+evaluate the performance of the IPC benchmark on \tiktok-extra due 
+to its high frequency of \Code{write} syscalls.
+From \autoref{fig:pts_performance}, we see that the benchmark's 
+performance is further degraded by $81\%$ compared to \tiktok, 
+showing that developer effort towards properly exempting 
+frequently called syscalls from \tiktok protections is crucial
+towards for implementations to maintain competitive performance
+compared to the baseline.
+
+\section{Trash}
 \todo{Limitations: raw\_copy\_from\_user\_inatomic}
 
-
 \todo{Discuss how Midgard would help}
-\tiktok assumes that syscalls do not both read and write to the same user data. 
-There are particular syscalls, however, which rely on such behaviour, and 
-are not instrumented.
 
 \todo{In implementation, discuss how IOMMU's can be used to prevent devide writes,
 but is currently unsupported.}
