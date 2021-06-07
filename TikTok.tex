@@ -252,7 +252,7 @@ by code containing a \tocttou bug as vulnerable data.
   when first reading the vulnerable data by adding a new mapping to it later.
   % mmap(): user write -> kernel read
 
-  \item \label{attk:swap} \emph{\atri{Wut name double fetch}}: The adversary
+  \item \label{attk:swap} \emph{\atri{Frankenstein double fetch}}: The adversary
   waits for a file-backed page to be swapped to disk. 
   The targeted syscall then tries to access the page, swaps it in, and 
   reads from it. 
