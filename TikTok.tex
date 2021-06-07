@@ -139,7 +139,7 @@ wrappers}.
 To mitigate double-fetch bugs in the kernel, a system must prohibit
 \emph{concurrent changes} to memory accessed by the system call. Attackers may
 find thrifty ways to trigger such concurrent writes:
-\begin{enumerate*}[label=\textbf{(\roman*)}]
+\begin{inparaenum}[\itshape i\upshape)]
 \item  direct writes from user-space (e.g., from concurrent threads),
 \item  kernel writes from system calls (e.g., from concurrent system calls),
 \item  modifying address space mappings,
@@ -147,7 +147,7 @@ find thrifty ways to trigger such concurrent writes:
 file pages, or
 \item  storing arguments on device-backed pages, leveraging devices to trigger
 concurrent writes
-\end{enumerate*}.
+\end{inparaenum}.
 To prevent attacks, all kinds of concurrent writes must be prohibited.
 
 % TODO key idea
@@ -244,6 +244,25 @@ by code containing a \tocttou bug as vulnerable data.
   and uses userspace store instructions to modify the vulnerable data.
   % user write -> kernel read
 
+  \item \label{attk:remapping} \emph{Reflected double fetch}: The target
+  syscall should be reading the vulnerable data from a file-backed page.
+  The adversary running in another address space maps the same file-backed page
+  as writable and modifies the vulnerable data using the new mappings.
+  This approach attempts to bypass any protections set up by the kernel
+  when first reading the vulnerable data by adding a new mapping to it later.
+  % mmap(): user write -> kernel read
+
+  \item \label{attk:swap} \emph{\atri{Wut name double fetch}}: The adversary
+  waits for a file-backed page to be swapped to disk. 
+  The targeted syscall then tries to access the page, swaps it in, and 
+  reads from it. 
+  Note that the adversary's page-table entry still indicates that the page
+  is swapped out.
+  Before the second read, the adversary writes to the vulnerable data, 
+  causing the page to be re-mapped in its address space, modifying the 
+  vulnerable data.
+  % swap(): user write -> kernel read
+
   \item \label{attk:systemcall} \emph{Privileged double fetch}: The adversary
   executes a \Code{read} syscall to run concurrently as the target syscall in 
   the same address space. 
@@ -252,14 +271,6 @@ by code containing a \tocttou bug as vulnerable data.
   In an example of a confused-deputy attack, the kernel thread executing the
   \Code{read} on the adversary's behalf modifies the vulnerable data.
   % read(): kernel (privileged) write -> kernel read
-
-  \item \label{attk:remapping} \emph{Reflected double fetch}: The target
-  syscall should be reading the vulnerable data from a file-backed page.
-  The adversary running in another address space maps the same file-backed page
-  as writable and modifies the vulnerable data using the new mappings.
-  This approach attempts to bypass any protections set up by the kernel
-  when first reading the vulnerable data by adding a new mapping to it later.
-  % mmap(): user write -> kernel read
 
   \item \label{attk:writebuffers} \emph{Inception double fetch}: The 
   target syscall should be reading the vulnerable data from a file-backed 
@@ -276,6 +287,13 @@ by code containing a \tocttou bug as vulnerable data.
   % device write -> kernel read
 
 \end{enumerate}
+
+In the first three attacks, the adversary is modifying the vulnerable data 
+from userspace.
+In the next two, the adversary convinces the kernel to modify the vulnerable
+data in a \emph{confused deputy attack}.
+In the final attack, the adversary uses a device with DMA rights to modify 
+the vulnerable data.
 \mat{Can we add a short sequence or figure for each of these attacks? This would
 IMO help. I've added a note in comments to describe the attack/victim
 scenarios.}
@@ -289,7 +307,7 @@ A comprehensive protection against \tocttou bugs must protect against
 all concurrent writes of these representative attack vectors.
 \mat{Are we sure these are complete? Can we make a stronger statement that a
 defense must enforce a generic property?}
-The protection mechanism necessarily manages access control for pages
+Any protection mechanism must necessarily manage access control for pages
 mapped across multiple address spaces and also via file-system drivers.
 As shown above, an adversary can use its own mappings to try to modify the
 vulnerable data, or coerce the kernel to do so using particular syscalls.
@@ -426,7 +444,7 @@ To track multiple versions of the contents of a page when being concurrently
 accessed by numerous tasks, from userspace or during a syscall,
 \tiktok implicitly maintains a per-user-page state machine.
 For each page, its corresponding state machine 
-\begin{inparaenum}
+\begin{inparaenum}[\itshape i\upshape)]
   \item tracks snapshots for currently executing syscalls which have read it, 
   \item tracks copies of the page, and 
   \item maintains the mapping between snapshots and copies necessary for providing 
@@ -869,13 +887,21 @@ By correctly handling new mappings to file-backed pages, \tiktok
 prevents \autoref{attk:remapping}. 
 
 For non-NULL PTEs, the handler checks if the PTE indicates that the 
-page is present, and non-present pages are swapped-in as usual.
-Faults for a present page indicate a permission fault (write to 
-a read-only page).
+page is present.
+Non-present pages are swapped-in as usual.
+To prevent \autoref{attk:swap}, \tiktok checks if the page was already
+swapped in by any other task and is now in a protected state.
+For protected pages, \tiktok implements a state change based on 
+whether the access causing this fault was a read or a write.
+
+In the remaining case, faults for a present page indicate a 
+permission fault (write to a read-only page).
 If the page is not a COW-page, the handler then checks if the page
 is in a protected state by checking the SW3 bit.
 If the page was protected, a new copy is allocated and the page 
 transitions to the following state.
+This case protects against both \autoref{attk:direct} and 
+\autoref{attk:systemcall}.
 For non-protected pages, however, this fault implies a real access
 violation, sending a signal to the process.
 In addition, \tiktok will report the access violation in the syslog.
@@ -899,9 +925,20 @@ all squashed into the snapshots list of the single COW page.
 Therefore, after the kernel duplicates the COW page (new page
 B created, in \autoref{fig:fault_handling_cow}), \tiktok moves 
 the snapshots for the faulting process ($S_B$) to new page.
+Here, \tiktok also updates the protected page list in the 
+affected syscalls' \Code{task_struct}s so that they point to the 
+new page.
 Finally, this new page is transitioned to its next state to allow 
 for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
+
+\paragraph{Syscall completion}
+On syscall completion, \tiktok cleans up snapshots allocated for 
+the syscall by instrumenting the end of \Code{do_syscall_64}.
+\tiktok goes through the list of all the pages for which the 
+executing syscall has a snapshot, and frees those snapshots.
+For snapshots which were the last to point to a copy, that 
+copy is also freed.
 
 
 %%%%%%%%%%%%%%%%%%%%
