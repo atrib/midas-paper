@@ -587,7 +587,16 @@ System Call & Exemption reason \\
 \end{table}
 
 \paragraph{Correctness concerning syscalls directly updating snapshot $L$}
-\tiktok's design lets all writes, including those from syscalls, to directly 
+\tiktok's design lets all writes, including those from syscalls, directly 
+% \mat{This almost got lost in a merge conflict. I'm not sure we need to discuss
+% the first, trivial case. Why should we?}
+% update the latest copy of the page $C_L$. To discuss the correctness of this
+% design, we have to consider two scenarios, (1) there are \emph{no} concurrent
+% writes during a systcall's execution and (2) there \emph{are} concurrent writes
+% during a syscall's execution. In this paragraph, we show that for both scenarios
+% \tiktok yields a valid and therefore safe sequence of operations that is correct
+% in non-\tiktok systems and, therefore we conclude that the execution of \tiktok
+% syscalls are also correct.
 update the latest copy of the page $C_L$ and this property maintains correctness 
 of system execution.
 In this paragraph, we shall show that there is a valid, safe %\footnotemark 
@@ -605,7 +614,7 @@ we can conclude that the execution of the \tiktok syscall is also correct.
 For this proof, we assume that no syscall reads the same object after writing 
 to it (r-w-r pattern). 
 Such syscalls do not exist in the Linux kernel, and are discussed below.
-Therefore, our syscalls write to an object after completing all of its reads.
+Therefore, our syscalls write to an object after completing all of their reads.
 
 % \footnotetext{A safe trace has no writes to vulnerable data between double fetches 
 % by the kernel, and therefore does not trigger any existing \tocttou bugs.}
@@ -619,13 +628,22 @@ a user or kernel instruction.
 Suppose there was no attempt to exploit a \tocttou bug, i.e., between
 any two read operations by the same syscall, there was no write to 
 this object.
+% \mat{Second part of the conflict.}
+% In case of the above mentioned scenario (1), which covers no concurrent
+% writes, there are no writes to this object between any two read operations by
+% the same syscall.
 In this case, \tiktok reads the same value from its snapshot of the 
 object as is present on the latest version. 
 The same sequence of operations on a non-\tiktok system would be valid and
 safe, since the object value does not change between the kernel's double 
 fetch and the syscall reads the same value on this system.
 
-Let us now assume that there was an attempt to exploit a \tocttou bug:
+% \mat{Third part of the conflict.}
+% Let us know focus on scenario (2) -- concurrent writes during a syscall's
+% execution -- and
+Let us now
+%
+assume that there was an attempt to exploit a \tocttou bug:
 a write $Op_1$ exists between two syscall reads $Op_0$ and $Op_2$.
 \tiktok protects the syscall ensuring that $Op_2$ does not see the 
 effect of $Op_1$ by reading from a snapshot instead of the latest 
@@ -635,7 +653,7 @@ any writes by the syscall happen after $Op_2$.
 Let us assume that the syscall's write is $Op_3$.
 We can generate a valid, safe execution on a non-\tiktok system 
 by moving the adversary's write to after the last read by the 
-syscall, i.e. $Ops = \{Op_0, Op_2, Op_1, Op_3\}$.
+syscall, i.e., $Ops = \{Op_0, Op_2, Op_1, Op_3\}$.
 The syscall in this system reads the same value both times, and 
 hence has the same execution as that in the \tiktok case.
 The value of the object when the syscall completes is that 
@@ -647,7 +665,7 @@ is the same as that of the non-\tiktok system.
 In general, any trace of operations on a \tiktok system can 
 be translated  to a valid, safe trace on a non-\tiktok system 
 by moving adversarial writes to just after the last
-double fetch. % by executing syscalls.
+double fetch.
 Multiple syscalls in \tiktok can therefore write without affecting 
 correctness, because an equivalent, valid, safe non-\tiktok trace 
 exists where all of the writes have been postponed, in the same order 
