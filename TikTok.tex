@@ -395,14 +395,16 @@ is accessed, ensuring that the data read is the same as the first time.
 The latest copy of the page is used for all writes, by the syscall as 
 well as from concurrently running tasks, updating the page as seen 
 from userspace.
-\emph{Essentially, \tiktok is a multi-versioning system for pages where 
-syscalls read from immutable versions to prevent \tocttou bugs and
-syscalls and userspace both write to a single mutable version 
-holding the latest state of the page.}
+%
 \tiktok's design draws parallels to multi-version concurrency control 
 methods for databases based on snapshot isolation~\cite{0001MK15}.
 Transactions read from a snapshot of the database state from when 
 they started, and writes update the up-to-date state of the database.
+%
+\emph{Essentially, \tiktok is a multi-versioning system for pages where 
+syscalls read from immutable versions to prevent \tocttou bugs and
+syscalls and userspace both write to a single mutable version 
+holding the latest state of the page.}
 
 \subsection{Page state machine}
 
@@ -539,8 +541,8 @@ This transitions is shown in \autoref{fig:doublefetch_tiktok}, where the
 snapshot $S_0$ and the copy $C_0$ are both discarded.
 If the page was in state 3, $C_L$ was read-only and mapped by some other
 snapshot, so \tiktok moves the page to state 1.
-Recall that all snapshots $S_i$ (i.e. excepting snapshot $L$) are immutable
-any data written by the syscalls directly affect the snapshot $L$. 
+Recall that all snapshots $S_i$ (i.e. excepting snapshot $L$) are immutable.
+Any data written by the syscalls directly affect the snapshot $L$. 
 Therefore, dropping a snapshot $S_i$ is trivial and does not require 
 writes from the syscall to be merged into the latest copy.
 
@@ -568,12 +570,17 @@ System Call & Exemption reason \\
 
 \paragraph{Correctness concerning syscalls directly updating snapshot $L$}
 \tiktok's design lets all writes, including those from syscalls, to directly 
-update the latest copy of the page $C_L$ and this design maintains correctness 
+update the latest copy of the page $C_L$ and this property maintains correctness 
 of system execution.
-In this paragraph, we shall show that there is a valid, safe\footnotemark 
+In this paragraph, we shall show that there is a valid, safe %\footnotemark 
 execution trace of a system not protected by \tiktok which generates the same 
 sequence of writes to the page, and therefore generates the same contents
-of the page when the syscall ends. 
+of the page when the syscall ends.
+%
+We define a safe trace as one that has no writes to vulnerable data between
+double fetches by the kernel, and therefore does not trigger any existing
+\tocttou bugs.
+%
 By showing that the final contents of memory after a \tiktok syscall has a 
 corresponding execution without \tiktok (which we assume to be correct), 
 we can conclude that the execution of the \tiktok syscall is also correct.
@@ -582,8 +589,8 @@ to it (r-w-r pattern).
 Such syscalls do not exist in the Linux kernel, and are discussed below.
 Therefore, our syscalls write to an object after completing all of its reads.
 
-\footnotetext{A safe trace has no writes to vulnerable data between double fetches 
-by the kernel, and therefore does not trigger any existing \tocttou bugs.}
+% \footnotetext{A safe trace has no writes to vulnerable data between double fetches 
+% by the kernel, and therefore does not trigger any existing \tocttou bugs.}
 
 Let us consider a page holding a single-byte object $O_0$, and the 
 sequence of operations to this byte during a \tiktok syscall be 
@@ -591,7 +598,7 @@ $Ops = \{Op_0, Op_1, \dots \}$.
 Each operation is a tuple $(r/w, k/u)$ specifying whether the 
 operation was a read or a write, and whether the operation was due to 
 a user or kernel instruction.
-Suppose there was no attempt to exploit a \tocttou bug, i.e. between
+Suppose there was no attempt to exploit a \tocttou bug, i.e., between
 any two read operations by the same syscall, there was no write to 
 this object.
 In this case, \tiktok reads the same value from its snapshot of the 
@@ -621,10 +628,10 @@ the object is the same, the execution of the \tiktok system
 is the same as that of the non-\tiktok system.
 In general, any trace of operations on a \tiktok system can 
 be translated  to a valid, safe trace on a non-\tiktok system 
-by moving adversarial writes to just after the last after 
-double fetches by executing syscalls.
+by moving adversarial writes to just after the last
+double fetch. % by executing syscalls.
 Multiple syscalls in \tiktok can therefore write without affecting 
-correctness, because the an equivalent, valid, safe non-\tiktok trace 
+correctness, because an equivalent, valid, safe non-\tiktok trace 
 exists where all of the writes have been postponed, in the same order 
 to after the double fetch reads. 
 
@@ -653,14 +660,14 @@ in the state machine, and cannot break \tiktok's invariants.
 A hypothetical syscall which reads from an object, writes to it, and
 then reads back the updated object cannot be protected using \tiktok.
 \tiktok's invariant will ensure that the second read is identical to the first,
-and does not reflect the intermediate write. 
-Such syscalls will also need to be exempted from \tiktok's instrumentation.
-The authors did not find any syscall which exhibits this behavior in the Linux
+and does not reflect the intermediate write.
+Such syscalls must be exempted from \tiktok's instrumentation.
+During extensive tests, the authors did not find any syscall which exhibits this behavior in the Linux
 kernel. 
 
 \paragraph{Syscalls with false sharing}
-Another hypothetical syscall could face problems with \tiktok's 
-instrumentation due to false sharing. 
+Another hypothetical type of syscall could struggle with \tiktok's 
+instrumentation due to false sharing.
 Suppose a page contains two objects, $O_0$ and $O_1$, and a syscall  
 sequentially reads $O_0$ then $O_1$.
 Due to \tiktok's invariant being enforced at page-granularity and 
@@ -672,7 +679,8 @@ points in time would, therefore, not work with \tiktok protections.
 We believe that such a syscall, requiring concurrent modifications to its 
 arguments, will likely exist to support some synchronization mechanism 
 similar to a \Code{futex} and can be safely exempt from \tiktok's invariant.
-The authors did not find any syscall which exhibits this behavior in the 
+%
+During extensive tests, the authors did not find any syscall which exhibits this behavior in the 
 Linux kernel. 
 
 
@@ -695,9 +703,9 @@ A single, per-page lock can serialize operations on that page
 and assure forward progress.
 
 \paragraph{Detecting double fetches}
-\tiktok's state machine for pages also allows it to be used as a 
-sanitizer since it can detect, and therefore report when a syscall 
-double fetches from the same page.
+\tiktok's state machine for pages enables the precise detection of double fetch
+bugs, turning it into an effective sanitizer and developer debugging tool in
+addition to being an efficient mitigation.
 When a syscall first reads from a user page, it creates a snapshot 
 of that page.
 On future reads, the snapshot is used in order to maintain the 
@@ -711,8 +719,11 @@ read from this page and had then created this snapshot, implying a double
 fetch.
 This approach, however, is prone to false positives due to false sharing.
 The two reads might read from the same page, but might access entirely 
-disjoint bytes. 
-\tiktok's design does not currently allow us to prevent such false positives.
+disjoint bytes.
+So far, \tiktok reports double fetches at page granularity. A more precise
+sanitizer could, in detail, compare the differences of the two pages to rule out
+false positives.
+
 
 %%%%%%%%%%%%%%%%%%%
 \section{\tiktok implementation}
@@ -834,7 +845,7 @@ swapped out.
 \end{figure}
 
 \paragraph{Handling Faults}
-The processor generates a fault when kernel or user code accesses
+The memory management unit generates a fault when kernel or user code accesses
 a page without having the correct permission in the corresponding PTE.
 \tiktok marks writable pages read-only to protect them in 
 states 1 and 3, allowing the kernel to detect writes to these pages.
@@ -867,6 +878,7 @@ If the page was protected, a new copy is allocated and the page
 transitions to the following state.
 For non-protected pages, however, this fault implies a real access
 violation, sending a signal to the process.
+In addition, \tiktok will report the access violation in the syslog.
 
 COW pages represent separate virtual pages from different 
 address spaces mapped to the same physical page.
@@ -875,7 +887,7 @@ logically separate pages A and B are actually mapped to the COW
 page.
 A COW page cannot be in states 2 or 3, since they cannot have multiple
 \tiktok copies.
-COW pages in state 0 can be dealt with by the kernel's standard 
+COW pages in state 0 can be dealt with by the kernel's standard
 duplication method (not \tiktok's duplication).
 For a COW page in state 1, its list of snapshots can correspond to 
 reads from syscalls for threads in different address spaces.
@@ -888,13 +900,13 @@ Therefore, after the kernel duplicates the COW page (new page
 B created, in \autoref{fig:fault_handling_cow}), \tiktok moves 
 the snapshots for the faulting process ($S_B$) to new page.
 Finally, this new page is transitioned to its next state to allow 
-for the write to occur, creating a new copy ($C_0$) for the 
+for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
 
 
-
-
+%%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
+%%%%%%%%%%%%%%%%%%%%
 
 In this section, we quantify \tiktok's overhead on workloads 
 with different characteristics, both compute-bound applications
@@ -902,8 +914,8 @@ which rarely use syscalls and I/O-bound applications which
 heavily rely on the kernel's I/O interface.
 \tiktok's overhead depends on the number of address spaces 
 where protected pages are mapped. 
-Relevant benchmarks therefore include multiprocessing, parallel 
-benchmarks.
+Relevant benchmarks where we expect overhead therefore include multiprocessing,
+parallel benchmarks.
 
 We evaluate \tiktok on two benchmark suites: the NAS Parallel 
 Benchmark (NPB)~\cite{npb} and select workloads from the 
@@ -917,14 +929,17 @@ PTS includes a variety of benchmarks, both CPU-bound and
 I/O bound representative of both desktop and server workloads.
 PTS includes syscall-heavy applications with varying degrees 
 of parallelism.
-We do not include CPU benchmarks from the SPEC benchmark suite
+We do not include the SPEC CPU2017 benchmarks
 as they are heavily CPU bound and designed to isolate userspace 
 performance without syscalls, and therefore do not test kernel 
-performance.
+performance. SPEC CPU2017 benchmarks would unfairly bias performance in favor of
+\tiktok.
 
-The testbench for the evaulation consists of a desktop machine 
+The testbench for the evaluation consists of a desktop machine 
 with an 8-core Intel i7-9700 processor and 16GB DRAM running 
-Ubuntu 20.04 LTS.
+Ubuntu 20.04 LTS. This configuration and CPU is commonly used on desktop
+machines and workstations.
+%
 To eliminate the effect of dynamic frequency and voltage 
 scaling (DVFS), we set the processor to run at constant 
 frequency of 3.0GHz which is this model's base frequency.
@@ -936,6 +951,7 @@ based on kernel v5.11.
 For particular benchmarks, we also run the \emph{\tiktok-extra}
 configuration which also runs our prototype \tiktok kernel
 but instruments all syscalls including \Code{write}.
+
 
 \subsection{NAS Parallel Benchmarks}
 
@@ -961,7 +977,7 @@ The two technology stacks have different frequency of syscalls due to
 different communication methods.
 Communication through kernel syscalls for either stack will incur overhead
 due to \tiktok's protection.
-Additional global TLB shootdowns added by \tiktok will also affect the 
+Additional global TLB shootdowns (for snapshot synchronization) added by \tiktok will also affect the 
 performance of such parallel benchmarks.
 
 We evaluated NPB benchmarks of class A on our testbench, running 
@@ -976,11 +992,12 @@ normalized to the performance of the baseline system with the same parallelizati
 technique for the NPB benchmarks.
 On average, \tiktok achieved $96.3\%$ of the baseline system's performance with 
 both 
-On both systems, \tiktok's performance for the \Code{ep} (Embarassingly Parallel)
+On both systems, \tiktok's performance for the \Code{ep} (Embarrassingly Parallel)
 benchmark is closest to that of the baseline, since it has low 
 communication overheads.
-\tiktok shows low overhead ($3.7\%$) for CPU-bound workloads, even when they 
+\tiktok shows negligible overhead ($3.7\%$) for CPU-bound workloads, even when they 
 involve parallelism.
+
 
 \subsection{Phoronix Test Suite}
 
@@ -993,6 +1010,9 @@ involve parallelism.
 The Phoronix Test Suite (PTS)~\cite{pts} includes a large set of 
 open-source benchmarks, of which we have chosen a range of benchmarks 
 suitable for evaluating both desktop and server performance.
+\mat{How did we select the benchmarks? Why is this a good selection? And argue
+that it is common to NOT run all Phoronix benchmarks. --- Otherwise, we're
+hitting a benchmark crime of selecting only a subset of benchmarks.}
 These benchmarks complement those from NPB and range from single-threaded, 
 CPU-bound applications (OpenSSL) to multi-threaded, multi-process 
 programs, syscall-heavy server programs (Apache).
@@ -1015,8 +1035,9 @@ Redis requires syscalls for receiving and replying to requests, but
 processes its transaction entirely in-memory. 
 Our evaluation prototype version achieves almost identical performance
 as the baseline kernel.
-However, Redis' performance on earlier, less optimized prototypes showed
+However, Redis' performance on initial, unoptimized prototypes showed
 significant degradation in performance (upto $69\%$).
+\mat{What key optimization enabled this good performance? And why?}
 The webservers, Apache and Nginx require network and file-system I/O, 
 and rely heavily on syscall performance. 
 We see that Nginx, which is a higher-performance webserver, sees a larger
