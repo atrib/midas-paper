@@ -52,7 +52,7 @@
 \newcommand{\paragraph}[1]{\textbf{#1.}}
 \newcolumntype{Q}{>{\centering\arraybackslash}X}
 
-\newcommand\tocttou[0]{ToCtToU\xspace}
+\newcommand\tocttou[0]{TOCTTOU\xspace}
 \newcommand\tiktok[0]{TikTok\xspace}
 
 \newrefformat{cha}{\hyperref[#1]{Chapter~\ref*{#1}}}
@@ -94,6 +94,97 @@ Your Institution
 Your abstract text goes here. Just a few facts. Whet our appetites.
 Not more than 200 words, if possible, and preferably closer to 150.
 \end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+%%%%%%%%%%%%%%%%%%%%%%
+
+The kernel enables isolation between processes and is a key trusted computing
+base in every system. Each \emph{untrusted} user-space process runs under a
+dedicated user in its own address space and must request resources such as
+communication channels or changes to its address space from the \emph{trusted}
+kernel. The user-space/kernel-space interface forms an explicit trust barrier
+and all data that crosses this boundary must be carefully checked by the kernel.
+%
+User-space processes attack the kernel by issuing system calls that then trigger
+kernel bugs, elevating the privileges of the process.
+%
+A common class of kernel bugs are so-called \emph{double-fetch}
+bugs~\cite{serna08doublefetch, twizsgrakky07ring0, wilhelm2016xenpwn,
+wang2018survey}. They occur when higher-privileged code, such as
+the kernel, reads the same data from the lower-privileged address space twice.
+%
+Double-fetch bugs are a type of
+\emph{race condition} between threads of different privileges. A
+\emph{Time-of-check to time-of-use (\tocttou)} violation occurs when the first
+read is used to check a condition while the second read is used to modify
+state.
+%
+An example of a double fetch bug is when the kernel reads the length of a buffer
+from user-space, allocates a kernel buffer, then reads the length a second time
+to finally copy the data from user-space to kernel. An attacker may concurrently
+overwrite the length of the buffer to a larger number after the kernel allocated
+its buffer, causing the memory copy to overflow it.
+%
+Double-fetch bugs are a frequent problem in kernels and
+hypervisors~\cite{cve201812633, cve202012652, cve20131332, cve201920610,
+cve20158550, cve201610439, cve201610435, cve201610433, cve20195519,
+cve20168438}. Considering that double-fetches also appear in drivers, legacy
+systems with binary-only drivers cannot be patched, even if a bug is found.
+Furthermore, Watson~\cite{watson2007exploiting} blames an unfixable \tocttou
+constellation as a reason for the generic insecurity of \emph{system call
+wrappers}.
+
+
+To mitigate double-fetch bugs in the kernel, a system must prohibit
+\emph{concurrent changes} to memory accessed by the system call. Attackers may
+find thrifty ways to trigger such concurrent writes:
+\begin{enumerate*}[label=\textbf{(\roman*)}]
+\item  direct writes from user-space (e.g., from concurrent threads),
+\item  kernel writes from system calls (e.g., from concurrent system calls),
+\item  modifying address space mappings,
+\item  concurrent \texttt{write}s to a file that alters mapped
+file pages, or
+\item  storing arguments on device-backed pages, leveraging devices to trigger
+concurrent writes
+\end{enumerate*}.
+To prevent attacks, all kinds of concurrent writes must be prohibited.
+
+% TODO key idea
+We base our defense on a single key invariant: 
+\textbf{\emph{through a syscall's lifetime, every read to a userspace object 
+will return the same value}}. Based on this invariant we derive a \emph{security
+property} that ensures that every read during the execution of a system call is
+cached. Subsequent reads of the same address will always return the same value.
+For performance, multiple versions of an object may exist at the same time
+depending on when the system call was started and depending on how many
+concurrent system calls are in flight. Orthogonal, we derive a \emph{correctness
+property} that ensures the sharing of the correct version among the different
+system calls that are in flight. All writes end up on the most recent version of
+the objects and therefore allow forward progress.
+% Mat: should we split it into security, correctness, and performance
+% properties, all driven by the core invariant?
+We implement our invariant in \tiktok for the Linux kernel but the defense
+applies to any modern operating system kernel.
+
+% TODO performance
+Our evaluation shows overall low performance overhead for our mitigation.
+\mat{TODO talk about benchmarks.}
+The security evaluation demonstrates how \tiktok successfully stops all attacks
+against vulnerable system calls, along with providing the developer with
+sufficient information about the location of the bug.
+
+
+The main contributions of this paper are:
+
+\begin{itemize}
+\item Distillation of \tocttou attack vectors into a core variant that protects
+the kernel against malicious concurrent modifications;
+\item \tiktok, a design that prohibits and detects
+\tocttou attacks against modern kernels, prohibiting their exploitation and
+enabling developers to detect \tocttou bugs;
+\item an efficient implementation of \tiktok for the Linux kernel.
+\end{itemize}
 
 
 \section{Background}
