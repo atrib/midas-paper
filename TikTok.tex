@@ -349,12 +349,12 @@ At every state, the page has two associated sets:
 Reads from kernel code in a syscall use the \emph{snapshot's corresponding copy}.
 Writes from user/kernel code and reads from userspace access the \emph{latest 
 copy}, which is mapped in process' address spaces.
-\mat{What if a syscall reads (taking a snapshot), writes, reads again? The write
-may not show up in the 2nd read? As you describe below, this is not supported. I
-wonder if we should forward reference?}
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
+Knowing which state the page is allows \tiktok to differentiate faults due
+to protecting pages from faults due to programs actually writing to an 
+originally read-only page.
 The latest copy $C_L$ of read-only pages remains read-only in both states.
 In the following paragraphs, we describe how the state machine for a single, 
 writable user page transitions between its states, what triggers each transition, 
@@ -704,62 +704,26 @@ PTEs for the page in all address spaces where the page is mapped.
 The page's \Code{struct page} structure includes a reverse-map
 listing all of these address pages, and the corresponding virtual
 address in each.
+Our prototype uses this mapping to change PTE permissions across
+multiple address spaces for a page.
 
-\subsection{Kernel reads from user memory}
-
-\begin{minipage}{\linewidth}
-\begin{lstlisting}[language=C, 
-  caption={Pseudo-code for kernel copy from user memory},
-  label=code:rawcopyfromuser,  breaklines=true, captionpos=b,
-  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
-  numbers=left,basicstyle=\scriptsize, xleftmargin=5.0ex]
-raw_copy_from_user(dest, __user source, size) {
-  void *copy_ptr;
-
-  foreach page_va in range(source, source + size) {
-    // Walk page table to find page frame
-    struct page *page = walk_page_table(page_va);
-
-    if page has snapshot for this task { 
-      // Find the correct copy to read from
-      if page in state 1
-        // Read from C_L
-        copy_ptr = page_address(page); 
-      else 
-        // page is in states 2 or 3
-        // Read from another copy
-        copy_ptr = find_snapshot(page->snaphots_list, current)->copy;
-    } else {                             
-      // Create a new snapshot pointing to C_L
-      list_add(new snapshot, page->snaphots_list);
-
-      // Add page to those protected for the 
-      // current task's task_struct
-      list_add(page, current->protected_pages_list);
-
-      // Protect page in all address spaces
-      rmap_walk(...);
-
-      // Read from C_L
-      copy_ptr = page_address(page);     
-    } 
-    // Perform the actual copy within the page
-    memcpy(dest, source, size);
-  }
-}
-\end{lstlisting}
-\end{minipage}
-
+\subsection{Stuff like modified functions}
+\paragraph{Kernel reads from user memory}
 Syscalls reading from user memory the first time triggers the 
 allocation of a new snapshot. 
 If the page is not protected (states 1 and 3), this also 
 triggers a state change where the kernel protects the page
 in all address space that it is mapped in. 
-\autoref{code:rawcopyfromuser} shows the pseudocode for 
-\Code{raw_copy_from_user}, which implements this functionality
-in our prototype.
+\autoref{fig:copy_from_user} shows the flowchart implemented
+by the kernel function \Code{raw_copy_from_user} for reading
+from user memory.
 
-\atri{TODO: write why write is not vulnerable to double fetch}
+\begin{figure}[]
+  \includegraphics[width=0.8\linewidth]{img/copy_from_user.pdf}
+  \caption{Flowchart for syscall reading from userspace memory}
+  \label{fig:copy_from_user}
+\end{figure}
+
 \section{Evaluation}
 
 In this section, we quantify \tiktok's overhead on workloads 
