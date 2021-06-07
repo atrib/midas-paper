@@ -139,7 +139,7 @@ wrappers}.
 To mitigate double-fetch bugs in the kernel, a system must prohibit
 \emph{concurrent changes} to memory accessed by the system call. Attackers may
 find thrifty ways to trigger such concurrent writes:
-\begin{enumerate*}[label=\textbf{(\roman*)}]
+\begin{inparaenum}[\itshape i\upshape)]
 \item  direct writes from user-space (e.g., from concurrent threads),
 \item  kernel writes from system calls (e.g., from concurrent system calls),
 \item  modifying address space mappings,
@@ -147,7 +147,7 @@ find thrifty ways to trigger such concurrent writes:
 file pages, or
 \item  storing arguments on device-backed pages, leveraging devices to trigger
 concurrent writes
-\end{enumerate*}.
+\end{inparaenum}.
 To prevent attacks, all kinds of concurrent writes must be prohibited.
 
 % TODO key idea
@@ -442,7 +442,7 @@ To track multiple versions of the contents of a page when being concurrently
 accessed by numerous tasks, from userspace or during a syscall,
 \tiktok implicitly maintains a per-user-page state machine.
 For each page, its corresponding state machine 
-\begin{inparaenum}
+\begin{inparaenum}[\itshape i\upshape)]
   \item tracks snapshots for currently executing syscalls which have read it, 
   \item tracks copies of the page, and 
   \item maintains the mapping between snapshots and copies necessary for providing 
