@@ -250,9 +250,12 @@ by code containing a \tocttou bug as vulnerable data.
   as writable and modifies the vulnerable data using the new mappings.
   This approach attempts to bypass any protections set up by the kernel
   when first reading the vulnerable data by adding a new mapping to it later.
+  In a variant of this attack, the adversary runs forks the address space, 
+  creating a new address space from where it can try to modify the vulnerable 
+  data.
   % mmap(): user write -> kernel read
 
-  \item \label{attk:swap} \emph{\atri{Frankenstein double fetch}}: The adversary
+  \item \label{attk:swap} \emph{Frankenstein double fetch}: The adversary
   waits for a file-backed page to be swapped to disk. 
   The targeted syscall then tries to access the page, swaps it in, and 
   reads from it. 
@@ -890,12 +893,8 @@ care about \tocttou protection.
   \label{fig:fault_handling_cow}
 \end{figure}
 
-<<<<<<< HEAD
 \paragraph{Handling Faults}
 The memory management unit generates a fault when kernel or user code accesses
-=======
-The processor generates a fault when kernel or user code accesses
->>>>>>> Added impl of file-system writes
 a page without having the correct permission in the corresponding PTE.
 \tiktok marks writable pages read-only to protect them in 
 states 1 and 3, allowing the kernel to detect writes to these pages.
@@ -1021,8 +1020,23 @@ hostfs, HPFS, JFS, JFFS2, Minix, NILFS2, OMFS, OrangeFS, ramfs, ReiserFS,
 SystemV, UBIFS, UDF, UFS, VboxSF, shmem.}
 
 \subsection{New mappings to protected pages}
-\Code{mmap} with \Code{MAP_POPULATE}, or just on later access.
-\Code{clone}.
+
+Our \tiktok prototype preserves the state machine for user pages
+across operations which create new mappings to a page, as is 
+exploited in \autoref{attk:remapping}.
+The \Code{mmap} syscall is responsible for creating new virtual
+memory mappings for processes, and needs to be instrumented.
+When \Code{mmap} is called with the \Code{MAP_POPULATE} flag, or 
+on the first access to the page, the \Code{mm_populate} function 
+is responsible for actually mapping the correct page in the 
+page table. 
+In our prototype, we check if the page being mapped is protected, 
+and if so, correctly protect the new mapping too.
+Another syscall, \Code{clone}, duplicates a process' address space
+when called without the \Code{CLONE_VM} flag creating new mappings
+to mapped pages. 
+We instrument this syscall to ensure that new mappings for protected 
+pages are also correctly protected.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
