@@ -845,8 +845,15 @@ address in each.
 Our prototype uses this mapping to change PTE permissions across
 multiple address spaces for a page.
 
-\subsection{Stuff like modified functions}
-\paragraph{Kernel reads from user memory}
+\subsection{Kernel reads from user memory}
+
+\begin{figure}[]
+  \centering
+  \includegraphics[width=0.8\linewidth]{img/copy_from_user.pdf}
+  \caption{Flowchart for syscall reading from userspace memory}
+  \label{fig:copy_from_user}
+\end{figure}
+
 Syscalls reading from user memory the first time triggers the 
 allocation of a new snapshot. 
 If the page is not protected (states 1 and 3), this also 
@@ -860,12 +867,15 @@ interface to move the page to the ``Active'' state for the
 kernel's swapping mechanism, making the page ineligible for being 
 swapped out.
 
-\begin{figure}[]
-  \centering
-  \includegraphics[width=0.8\linewidth]{img/copy_from_user.pdf}
-  \caption{Flowchart for syscall reading from userspace memory}
-  \label{fig:copy_from_user}
-\end{figure}
+The Linux kernel has an exception to the aforementioned method
+of handling kernel reads from user memory, namely
+\Code{raw_copy_from_user_inatomic}.
+This function is used by the kernel to read user memory in 
+special situations such as a kernel oops, where the kernel
+reads user memory to provide a backtrace and does not 
+care about \tocttou protection.
+
+\subsection{Handling Faults}
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/pagefault.pdf}
@@ -880,8 +890,12 @@ swapped out.
   \label{fig:fault_handling_cow}
 \end{figure}
 
+<<<<<<< HEAD
 \paragraph{Handling Faults}
 The memory management unit generates a fault when kernel or user code accesses
+=======
+The processor generates a fault when kernel or user code accesses
+>>>>>>> Added impl of file-system writes
 a page without having the correct permission in the corresponding PTE.
 \tiktok marks writable pages read-only to protect them in 
 states 1 and 3, allowing the kernel to detect writes to these pages.
@@ -950,7 +964,7 @@ Finally, this new page is transitioned to its next state to allow
 for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
 
-\paragraph{Syscall completion}
+\subsection{Syscall completion}
 On syscall completion, \tiktok cleans up snapshots allocated for 
 the syscall by instrumenting the end of \Code{do_syscall_64}.
 \tiktok goes through the list of all the pages for which the 
@@ -958,6 +972,57 @@ executing syscall has a snapshot, and frees those snapshots.
 For snapshots which were the last to point to a copy, that 
 copy is also freed.
 
+\subsection{File system writes}
+
+\tiktok instruments file-system writes to protect the kernel
+from \autoref{attk:writebuffers}.
+When a \Code{write} syscall writes to a file, it actually
+writes to copies of pages of the file stored in memory within 
+a page cache.
+In the spirit of abstraction, the kernel does not directly write to 
+these pages, but calls the relevant file-system (FS) driver instead.
+When writing to pages in the page cache, FS driver will access the 
+page using kernel mappings.
+Since \tiktok only protects userspace mappings for protected pages, 
+writes by FS drivers will not raise a fault.
+To comprehensively protect the page, any implementation needs to 
+instrument FS-drivers' write functions.
+Fortunately, FS drivers provided with the kernel follow a simple 
+recipe: for pages not in the page cache, the driver executes 
+FS-specific code to read the page into the page cache and then 
+call a generic function (\Code{generic_file_write_iter}) to actually 
+write the data into the page.
+Instrumenting this generic function, therefore, protects the kernel
+for a wide range of common file-systems (including ext4, nfs and 
+ntfs). \footnotemark
+The added instrumentation checks whether the target page is 
+protected, and if so, transitions it to the next state and 
+creates a copy of the page before writing to the latest copy.
+
+Our current prototype does not, however, protect out-of-tree drivers
+which are not distributed with the kernel if they do not use the 
+\Code{generic_file_write_iter} function.
+A user with superuser privileges can load a module implementing a 
+different, insecure FS driver in order to effect \autoref{attk:writebuffers}.
+However, such a user can also inject other arbitrary modules into 
+the kernel which can more directly modify kernel data, and is 
+outside our threat model.
+A more reasonable threat involves a sysadmin unwittingly loading a 
+insecure driver which a non-privileged user can then use to 
+exploit a \tocttou bug. 
+One solution would be for the kernel to inspect the relocations table of 
+a new module while loading it to see if it uses \Code{generic_file_write_iter}
+and raising a warning if it does not.
+
+\footnotetext{A more comprehensive list of kernel-provided FS drivers 
+protected via \Code{generic_file_write_iter} includes v9fs, ADFS, AFFS, 
+AFS, BFS, CIFS, eCryptfs, extFAT, ext2, F2FS,  FAT, FUSE, HFS, HFS+, 
+hostfs, HPFS, JFS, JFFS2, Minix, NILFS2, OMFS, OrangeFS, ramfs, ReiserFS,
+SystemV, UBIFS, UDF, UFS, VboxSF, shmem.}
+
+\subsection{New mappings to protected pages}
+\Code{mmap} with \Code{MAP_POPULATE}, or just on later access.
+\Code{clone}.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
@@ -1120,7 +1185,6 @@ towards for implementations to maintain competitive performance
 compared to the baseline.
 
 \section{Trash}
-\todo{Limitations: raw\_copy\_from\_user\_inatomic}
 
 \todo{Discuss how Midgard would help}
 
