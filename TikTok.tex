@@ -52,7 +52,7 @@
 \newcommand{\paragraph}[1]{\textbf{#1.}}
 \newcolumntype{Q}{>{\centering\arraybackslash}X}
 
-\newcommand\tocttou[0]{ToCtToU\xspace}
+\newcommand\tocttou[0]{TOCTTOU\xspace}
 \newcommand\tiktok[0]{TikTok\xspace}
 
 \newrefformat{cha}{\hyperref[#1]{Chapter~\ref*{#1}}}
@@ -94,6 +94,97 @@ Your Institution
 Your abstract text goes here. Just a few facts. Whet our appetites.
 Not more than 200 words, if possible, and preferably closer to 150.
 \end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+%%%%%%%%%%%%%%%%%%%%%%
+
+The kernel enables isolation between processes and is a key trusted computing
+base in every system. Each \emph{untrusted} user-space process runs under a
+dedicated user in its own address space and must request resources such as
+communication channels or changes to its address space from the \emph{trusted}
+kernel. The user-space/kernel-space interface forms an explicit trust barrier
+and all data that crosses this boundary must be carefully checked by the kernel.
+%
+User-space processes attack the kernel by issuing system calls that then trigger
+kernel bugs, elevating the privileges of the process.
+%
+A common class of kernel bugs are so-called \emph{double-fetch}
+bugs~\cite{serna08doublefetch, twizsgrakky07ring0, wilhelm2016xenpwn,
+wang2018survey}. They occur when higher-privileged code, such as
+the kernel, reads the same data from the lower-privileged address space twice.
+%
+Double-fetch bugs are a type of
+\emph{race condition} between threads of different privileges. A
+\emph{Time-of-check to time-of-use (\tocttou)} violation occurs when the first
+read is used to check a condition while the second read is used to modify
+state.
+%
+An example of a double fetch bug is when the kernel reads the length of a buffer
+from user-space, allocates a kernel buffer, then reads the length a second time
+to finally copy the data from user-space to kernel. An attacker may concurrently
+overwrite the length of the buffer to a larger number after the kernel allocated
+its buffer, causing the memory copy to overflow it.
+%
+Double-fetch bugs are a frequent problem in kernels and
+hypervisors~\cite{cve201812633, cve202012652, cve20131332, cve201920610,
+cve20158550, cve201610439, cve201610435, cve201610433, cve20195519,
+cve20168438}. Considering that double-fetches also appear in drivers, legacy
+systems with binary-only drivers cannot be patched, even if a bug is found.
+Furthermore, Watson~\cite{watson2007exploiting} blames an unfixable \tocttou
+constellation as a reason for the generic insecurity of \emph{system call
+wrappers}.
+
+
+To mitigate double-fetch bugs in the kernel, a system must prohibit
+\emph{concurrent changes} to memory accessed by the system call. Attackers may
+find thrifty ways to trigger such concurrent writes:
+\begin{enumerate*}[label=\textbf{(\roman*)}]
+\item  direct writes from user-space (e.g., from concurrent threads),
+\item  kernel writes from system calls (e.g., from concurrent system calls),
+\item  modifying address space mappings,
+\item  concurrent \texttt{write}s to a file that alters mapped
+file pages, or
+\item  storing arguments on device-backed pages, leveraging devices to trigger
+concurrent writes
+\end{enumerate*}.
+To prevent attacks, all kinds of concurrent writes must be prohibited.
+
+% TODO key idea
+We base our defense on a single key invariant: 
+\textbf{\emph{through a syscall's lifetime, every read to a userspace object 
+will return the same value}}. Based on this invariant we derive a \emph{security
+property} that ensures that every read during the execution of a system call is
+cached. Subsequent reads of the same address will always return the same value.
+For performance, multiple versions of an object may exist at the same time
+depending on when the system call was started and depending on how many
+concurrent system calls are in flight. Orthogonal, we derive a \emph{correctness
+property} that ensures the sharing of the correct version among the different
+system calls that are in flight. All writes end up on the most recent version of
+the objects and therefore allow forward progress.
+% Mat: should we split it into security, correctness, and performance
+% properties, all driven by the core invariant?
+We implement our invariant in \tiktok for the Linux kernel but the defense
+applies to any modern operating system kernel.
+
+% TODO performance
+Our evaluation shows overall low performance overhead for our mitigation.
+\mat{TODO talk about benchmarks.}
+The security evaluation demonstrates how \tiktok successfully stops all attacks
+against vulnerable system calls, along with providing the developer with
+sufficient information about the location of the bug.
+
+
+The main contributions of this paper are:
+
+\begin{itemize}
+\item Distillation of \tocttou attack vectors into a core variant that protects
+the kernel against malicious concurrent modifications;
+\item \tiktok, a design that prohibits and detects
+\tocttou attacks against modern kernels, prohibiting their exploitation and
+enabling developers to detect \tocttou bugs;
+\item an efficient implementation of \tiktok for the Linux kernel.
+\end{itemize}
 
 
 \section{Background}
@@ -349,12 +440,12 @@ At every state, the page has two associated sets:
 Reads from kernel code in a syscall use the \emph{snapshot's corresponding copy}.
 Writes from user/kernel code and reads from userspace access the \emph{latest 
 copy}, which is mapped in process' address spaces.
-\mat{What if a syscall reads (taking a snapshot), writes, reads again? The write
-may not show up in the 2nd read? As you describe below, this is not supported. I
-wonder if we should forward reference?}
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
+Knowing which state the page is allows \tiktok to differentiate faults due
+to protecting pages from faults due to programs actually writing to an 
+originally read-only page.
 The latest copy $C_L$ of read-only pages remains read-only in both states.
 In the following paragraphs, we describe how the state machine for a single, 
 writable user page transitions between its states, what triggers each transition, 
@@ -695,62 +786,105 @@ PTEs for the page in all address spaces where the page is mapped.
 The page's \Code{struct page} structure includes a reverse-map
 listing all of these address pages, and the corresponding virtual
 address in each.
+Our prototype uses this mapping to change PTE permissions across
+multiple address spaces for a page.
 
-\subsection{Kernel reads from user memory}
-
-\begin{minipage}{\linewidth}
-\begin{lstlisting}[language=C, 
-  caption={Pseudo-code for kernel copy from user memory},
-  label=code:rawcopyfromuser,  breaklines=true, captionpos=b,
-  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
-  numbers=left,basicstyle=\scriptsize, xleftmargin=5.0ex]
-raw_copy_from_user(dest, __user source, size) {
-  void *copy_ptr;
-
-  foreach page_va in range(source, source + size) {
-    // Walk page table to find page frame
-    struct page *page = walk_page_table(page_va);
-
-    if page has snapshot for this task { 
-      // Find the correct copy to read from
-      if page in state 1
-        // Read from C_L
-        copy_ptr = page_address(page); 
-      else 
-        // page is in states 2 or 3
-        // Read from another copy
-        copy_ptr = find_snapshot(page->snaphots_list, current)->copy;
-    } else {                             
-      // Create a new snapshot pointing to C_L
-      list_add(new snapshot, page->snaphots_list);
-
-      // Add page to those protected for the 
-      // current task's task_struct
-      list_add(page, current->protected_pages_list);
-
-      // Protect page in all address spaces
-      rmap_walk(...);
-
-      // Read from C_L
-      copy_ptr = page_address(page);     
-    } 
-    // Perform the actual copy within the page
-    memcpy(dest, source, size);
-  }
-}
-\end{lstlisting}
-\end{minipage}
-
+\subsection{Stuff like modified functions}
+\paragraph{Kernel reads from user memory}
 Syscalls reading from user memory the first time triggers the 
 allocation of a new snapshot. 
 If the page is not protected (states 1 and 3), this also 
 triggers a state change where the kernel protects the page
 in all address space that it is mapped in. 
-\autoref{code:rawcopyfromuser} shows the pseudocode for 
-\Code{raw_copy_from_user}, which implements this functionality
-in our prototype.
+\autoref{fig:copy_from_user} shows the flowchart implemented
+by the kernel function \Code{raw_copy_from_user} for reading
+from user memory.
+This function also uses the kernel's \Code{mark_page_accessed} 
+interface to move the page to the ``Active'' state for the 
+kernel's swapping mechanism, making the page ineligible for being 
+swapped out.
 
-\atri{TODO: write why write is not vulnerable to double fetch}
+\begin{figure}[]
+  \centering
+  \includegraphics[width=0.8\linewidth]{img/copy_from_user.pdf}
+  \caption{Flowchart for syscall reading from userspace memory}
+  \label{fig:copy_from_user}
+\end{figure}
+
+\begin{figure}[]
+  \includegraphics[width=\linewidth]{img/pagefault.pdf}
+  \caption{Flowchart for handling a page fault. operations
+           marked with an asterisk are unmodified.}
+  \label{fig:fault_handling}
+\end{figure}
+
+\begin{figure}[]
+  \includegraphics[width=\linewidth]{img/pagefault_cow.pdf}
+  \caption{Flowchart for handling a page fault to a COW page}
+  \label{fig:fault_handling_cow}
+\end{figure}
+
+\paragraph{Handling Faults}
+The processor generates a fault when kernel or user code accesses
+a page without having the correct permission in the corresponding PTE.
+\tiktok marks writable pages read-only to protect them in 
+states 1 and 3, allowing the kernel to detect writes to these pages.
+A common OS mechanism, copy-on-write (COW) pages, also uses 
+permissions in the PTE to detect when COW pages need to be copied.
+The PTE's present bit are used to store pointers to file-backed pages
+when they are swapped to disk.
+\autoref{fig:fault_handling} shows the flowchart implemented by
+\Code{handle_pte_fault} to handle faults for userspace addresses.
+
+The page-fault handler first checks if the PTE is NULL, and if so 
+knows that it has to allocate a page. 
+If the required page is anonymous, the page can be allocated as usual.
+Otherwise, for file-backed pages, the handler has to check if the 
+page is already in a protected state (states 1 and 3) by reading 
+the SW3 bit of the PTE and if so, transitions to the required state
+and allocates a new copy. 
+Pages in states 0 and 2 can be directly mapped, and subsequently
+accessed.
+By correctly handling new mappings to file-backed pages, \tiktok
+prevents \autoref{attk:remapping}. 
+
+For non-NULL PTEs, the handler checks if the PTE indicates that the 
+page is present, and non-present pages are swapped-in as usual.
+Faults for a present page indicate a permission fault (write to 
+a read-only page).
+If the page is not a COW-page, the handler then checks if the page
+is in a protected state by checking the SW3 bit.
+If the page was protected, a new copy is allocated and the page 
+transitions to the following state.
+For non-protected pages, however, this fault implies a real access
+violation, sending a signal to the process.
+
+COW pages represent separate virtual pages from different 
+address spaces mapped to the same physical page.
+This is illustrated in \autoref{fig:fault_handling_cow} where 
+logically separate pages A and B are actually mapped to the COW
+page.
+A COW page cannot be in states 2 or 3, since they cannot have multiple
+\tiktok copies.
+COW pages in state 0 can be dealt with by the kernel's standard 
+duplication method (not \tiktok's duplication).
+For a COW page in state 1, its list of snapshots can correspond to 
+reads from syscalls for threads in different address spaces.
+In \autoref{fig:fault_handling_cow}, we show snapshots $S_A$ and 
+$S_B$ corresponding to syscalls for threads in different address 
+spaces (containing A and B respectively).
+These snapshots correspond to different logical pages, but are 
+all squashed into the snapshots list of the single COW page. 
+Therefore, after the kernel duplicates the COW page (new page
+B created, in \autoref{fig:fault_handling_cow}), \tiktok moves 
+the snapshots for the faulting process ($S_B$) to new page.
+Finally, this new page is transitioned to its next state to allow 
+for the write to occur, creating a new copy ($C_0$) for the 
+snapshot $S_B$ to read from.
+
+
+
+
 \section{Evaluation}
 
 In this section, we quantify \tiktok's overhead on workloads 
