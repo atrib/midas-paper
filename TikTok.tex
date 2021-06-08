@@ -75,7 +75,7 @@
 \date{}
 
 % make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{\Large \bf Kernel TOCTTOU Protection}
+\title{\Large \bf \tiktok: \atri{Systematic?} Kernel TOCTTOU Protection}
 
 %for single author (just remove % characters)
 \author{
@@ -107,7 +107,7 @@ that through a syscall's lifetime, every read to a userspace object
 will return the same value.
 
 \tiktok shows no noticeable drop in performance when evaluated on CPU-bound
-workloads. On system call heavy workloads, \tiktok incurs $0.2-18\%$
+workloads. On system call heavy workloads, \tiktok incurs 0.2-18\%
 performance overhead, while protecting the kernel
 against any \tocttou attacks. On average, \tiktok shows a $4.3\%$ overhead on
 diverse workloads across two benchmark suites.
@@ -154,8 +154,9 @@ cve20168438}. Considering that double-fetches also appear in drivers, legacy
 systems with binary-only drivers cannot be patched, even if a bug is found.
 Furthermore, Watson~\cite{watson2007exploiting} blames an unfixable \tocttou
 constellation as a reason for the generic insecurity of \emph{system call
-wrappers}.
-
+wrappers}. For example, \tiktok enables deep argument inspection for 
+SecComp~\cite{seccomp_deep, seccomp}, dereferencing pointer arguments without introducing 
+\tocttou bugs.
 
 To mitigate double-fetch bugs in the kernel, a system must prohibit
 \emph{concurrent changes} to memory accessed by the system call. Attackers may
