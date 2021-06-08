@@ -418,89 +418,114 @@ tsafrir2008portably} are out of scope.
 \subsection{Attacks Classification}
 \label{sec:attacks}
 
-% List five attacks and explain them quickly
-\tiktok guards data passed into the kernel against concurrent modification.
-In the following classification, we denote the data fetched twice
-by code containing a \tocttou bug as vulnerable data.
-\begin{enumerate}
-  \item \label{attk:direct} \emph{Direct double fetch}: The adversary runs
-  concurrently with a system call in a separate thread in the same address space
-  and uses userspace store instructions to modify the vulnerable data.
-  % user write -> kernel read
+\begin{table}
+  \begin{center}
+  \begin{tabularx}{\columnwidth} { | l | l | X | X |}
+  \hline
+   & Userspace & Kernel & Device \\ \hline
+  \hline
+  \multirow{2}{*}{\shortstack{Existing \\mapping}} 
+      & Intra AS      & User mapping   & Device page       \\ 
+      & Cross AS      & Kernel mapping & Device DMA page   \\ \cline{1-4}
+  \multirow{2}{*}{\shortstack{New \\mapping}} 
+      & mmap          & mm\_populate   & New device page   \\ 
+      & clone         &                & New device DMA    \\ 
+      & swap          &                & New device DMA    \\ \cline{1-4}
+  \end{tabularx}
+  \end{center}
+  \caption{Attack vector classification for \tocttou exploits}
+  \label{tab:attack_class}
+\end{table}
 
-  \item \label{attk:remapping} \emph{Reflected double fetch}: The target
-  syscall should be reading the vulnerable data from a file-backed page.
-  The adversary running in another address space maps the same file-backed page
-  as writable and modifies the vulnerable data using the new mappings.
-  This approach attempts to bypass any protections set up by the kernel
-  when first reading the vulnerable data by adding a new mapping to it later.
-  In a variant of this attack, the adversary forks the address space, 
-  creating a new address space from where it can try to modify the vulnerable 
-  data.
-  % mmap(): user write -> kernel read
+\tiktok guards data passed to the kernel against concurrent modification.
+We denote the data fetched twice as vulnerable data.
+In this section, we classify attacks based on two criterion: the 
+privilege level of the writer, and whether the mapping used for writing 
+existed at the time of the first read (see \autoref{tab:attack_class}).
+This classification helps us understand existing attacks and how to 
+protect against them, and where future attacks can arise.
+The device column is for attacks where a device (any processing element 
+besides a CPU core, such as an attached I/O device like a network card or 
+a coprocessor like a GPU) is responsible for modifying vulnerable data.
 
-  \item \label{attk:swap} \emph{Frankenstein double fetch}: The adversary
-  waits for a file-backed page to be swapped to disk. 
-  The targeted syscall then tries to access the page, swaps it in, and 
-  reads from it. 
-  Note that the adversary's page-table entry still indicates that the page
-  is swapped out.
-  Before the second read, the adversary writes to the vulnerable data, 
-  causing the page to be re-mapped in its address space, modifying the 
-  vulnerable data.
-  % swap(): user write -> kernel read
+Existing userspace mappings to a page can be used to modify 
+vulnerable data which the targeted syscall is reading.
+Userspace can directly write to a mapped page, whether that mapping is 
+in the same or in a different address space. 
+Such attacks are called \emph{direct double fetch} 
+attacks~\cite{watson2007exploiting}.
+Alternatively, a concurrently executing syscall can also modify the 
+vulnerable data in a confused-deputy attack.
+When the adversary passes a pointer to the vulnerable data to 
+the syscall as a user-buffer in which the syscall can return some 
+data, the kernel's write to the buffer can modify vulnerable data.
+An example of this is the \Code{read} system call where userspace 
+provides a pointer to a user buffer where the contents of a file 
+will be copied.
+Another example is \Code{rt_sigaction} where the kernel writes to 
+a user buffer pointed to by the \Code{oldact} argument.
+In both of these attacks, the adversarial write uses a userspace
+mapping. 
+A protection mechanism must, therefore, account for all userspace 
+mappings to pages containing vulnerable data at the time of the 
+targeted syscall's first read.
 
-  \item \label{attk:systemcall} \emph{Privileged double fetch}: The adversary
-  executes a \Code{read} syscall to run concurrently as the target syscall in 
-  the same address space. 
-  The adversary provides the address of the vulnerable data as the buffer 
-  into which the \Code{read} syscall will write.
-  In an example of a confused-deputy attack, the kernel thread executing the
-  \Code{read} on the adversary's behalf modifies the vulnerable data.
-  % read(): kernel (privileged) write -> kernel read
+Existing kernel mappings to a page also mapped in userspace can be 
+leveraged by an attacker in another confused-deputy attack.
+A file-backed page in the page-cache needs to be mapped in a
+userspace process and then passed as an argument to the targeted syscall.
+A concurrently executing \Code{write} syscall can modify the 
+vulnerable data using kernel mappings for the page-cache pages.
+This attack is called \emph{inception double fetch}~\cite{watson2007exploiting}.
+The kernel does not explicitly track kernel addresses mapping to a page, 
+but the file-system driver does explicitly find the page before writing to it.
+A protection mechanism must, therefore, instrument file-system 
+drivers to account for writes via kernel mappings to vulnerable data.
 
-  \item \label{attk:writebuffers} \emph{Inception double fetch}: The 
-  target syscall should be reading the vulnerable data from a file-backed 
-  page. The adversary opens the file and issues a \Code{write} syscall.
-  The kernel modifies the vulnerable data while executing the filesystem's
-  write code for the file.
-  % mmap(): write(): kernel (privileged) write -> kernel read
+The kernel might create new mappings to the vulnerable data 
+between the double fetches by the target syscall, bypassing protection 
+mechanisms which instrument the first read to protect the accessed page.
+A user can call \Code{mmap} and \Code{clone} syscalls to create 
+a new mapping to the vulnerable data before writing to it.
+The first version is called a \emph{reflected double fetch} 
+attack~\cite{watson2007exploiting}.
+The mapping might not be created at the time of the adversarial syscall, 
+but lazily when the attacker writes to the vulnerable data.
+In a more complicated variant, the adversary can use the kernel as a 
+confused deputy which touches the unmapped page and maps it in, 
+then writes to the vulnerable data.
+In all of the above vectors, the function populating pages for a 
+process (\Code{mm_populate} for Linux) is creating the mapping.
+A protection mechanism must, therefore, instrument \Code{mm_populate}
+of the code of any other syscall which can lead to new mappings 
+being created.
+A new mapping might also be created due to swapping.
+If the adversary writes to a page that was previously swapped 
+to disk, but later swapped in to be read by the target syscall in 
+a different address space, the kernel might lazily reinstate its 
+mapping to the page.
+The swapping mechanism must, therefore, be protected.
+\tiktok protects against all of the aforementioned attack vectors.
+In the absence of any other syscall which can create new userspace 
+mappings to vulnerable data, \tiktok's protection is complete 
+against writes from user and kernel code.
 
-  \item \label{attk:devicefiles} \emph{Device double fetch}: The target 
-  syscall is reading a page available for direct-memory access (DMA) by 
-  an I/O device. The device can initiate a DMA write, modifying the 
-
-\end{enumerate}
-
-In the first three attacks, the adversary is modifying the vulnerable data 
-In the next two, the adversary convinces the kernel to modify the vulnerable
-data in a \emph{confused deputy attack}.
-In the final attack, the adversary uses a device with DMA rights to modify 
-the vulnerable data.
-\mat{Can we add a short sequence or figure for each of these attacks? This would
-IMO help. I've added a note in comments to describe the attack/victim
-scenarios.}
-
-Watson~\cite{watson2007exploiting} in his analysis of CerbNG introduces
-\autoref{attk:direct}, \autoref{attk:remapping} and \autoref{attk:writebuffers}.
-We extend the discussion of known attacks and introduce
-\autoref{attk:systemcall} and \autoref{attk:devicefiles}.
-
-A comprehensive protection against \tocttou bugs must protect against 
-all concurrent writes of these representative attack vectors.
-\mat{Are we sure these are complete? Can we make a stronger statement that a
-defense must enforce a generic property?}
-\UT{One can form two dimensional grid: page type x attack vector. Page types are
-anonymous, file-backed and device-backed page. Attack vectors are: userland writes, system-calls and devices.
-The attack types would then fit in the 3x3 grid, with the device attack vector potentially overwhelming TikTok (e.g. rogue peripheral), unless IOMMU is present.}
-Any protection mechanism must necessarily manage access control for pages
-mapped across multiple address spaces and also via file-system drivers.
-As shown above, an adversary can use its own mappings to try to modify the
-vulnerable data, or coerce the kernel to do so using particular syscalls.
-The next sections describe \tiktok, our protection mechanism which 
-protects against the first four vectors, and can be extended to protect 
-against the final vector too.
-
+Finally, a device might modify vulnerable data if it is either 
+allowed to DMA to the page, or if the page is memory-mapped and is 
+actually backed by the device.
+In the latter case, external factors can change the vulnerable 
+data.
+Existing discretionary access control rules generally bar users 
+except a superuser from mapping device-backed pages into their
+address spaces.
+Such users are also disallowed from configuring DMA devices.
+Therefore, device modifications to vulnerable data fall outside 
+our threat model and are not protected by \tiktok.
+The superuser is able to load arbitrary kernel code via loadable
+modules and confused-deputy attacks leveraging a incompetent 
+system administrator are also outside the purview of our threat model.
+However, on processors supporting IOMMUs, \tiktok can be extended 
+to protect against modifications by DMA devices.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{\tiktok Design} 
@@ -1262,24 +1287,6 @@ pages are also correctly protected.
 
 \subsection{Discussion}
 %%%%%%%%%%%%%%%%%%%%%%%
-
-\paragraph{Protecting against device writes}
-Device-backed pages, or pages for which devices have DMA access can 
-change independently of software. 
-Specially, device-backed pages which are used with memory-mapped I/O 
-to control the device can change based on the device's state due to 
-external events, without user or kernel action.
-Our current implementation does not protect against either of these
-attack vectors.
-For device-backed pages, Discretionary Access Control (DAC) can 
-be used to prevent the mapping of such pages into the address 
-spaces of untrusted user-controlled processes.
-This is an unlikely situation since non-superuser users are not 
-allowed to access devices directly.
-Access to pages to which devices can DMA can be controlled for 
-devices and processors which supports IOMMUs.
-For such processors, updates to the IO page tables would prevent
-devices from writing to protected pages, preventing \autoref{attk:devicefiles}.
 
 \paragraph{Optimizations on capable hardware}
 To protect a page in an address space, a \tiktok implementation 
