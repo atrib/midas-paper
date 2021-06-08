@@ -107,11 +107,10 @@ that through a syscall's lifetime, every read to a userspace object
 will return the same value.
 
 \tiktok shows no noticeable drop in performance when evaluated on CPU-bound
-workloads. On extremely system call heavy workloads, \tiktok incurs $18\%$
-performance overhead for the nginx benchmark, while protecting the kernel
+workloads. On system call heavy workloads, \tiktok incurs $0.2-18\%$
+performance overhead, while protecting the kernel
 against any \tocttou attacks. On average, \tiktok shows a $4.3\%$ overhead on
 diverse workloads across two benchmark suites.
-\mat{nginx may be a bad example due to high overhead.}
 
 \end{abstract}
 
@@ -200,7 +199,7 @@ sufficient information about the location of the bug.
 
 The main contributions of this paper are:
 
-\begin{itemize}
+\begin{itemize}[noitemsep]
 \item Distillation of \tocttou attack vectors into a core invariant that protects
 the kernel against malicious concurrent modifications;
 \item \tiktok, a design that prohibits and detects
@@ -243,15 +242,11 @@ virtual address are used as indices into levels of the page table.
 At the leaf page table, a unique page-table entry (PTE) stores the 
 translation and protection information for a page.
 
-\mat{This can likely be shortened as we don't need most information.}
 A PTE in x86-64 is a 64-bit value holding the following metadata:
 \begin{description}[noitemsep]
-  \item[Present bit (P)] which indicates that the PTE holds a valid entry
-  \item[Read/Write bit (R/W)] which is set if the page is writable
-  \item[Not Executable bit (NX)] which is set if code stored on the page 
-        cannot be executed 
-  \item[User/Supervisor bit (U/S)] which tracks whether the page is 
-        a supervisor page or accessible to userspace
+  \item[Present bit (P)] which marks the PTE's validity
+  \item[Protection bits (NX, R/W, U/S)] which restricts the type of 
+        access and the privilege level of the accessing code
   \item[Software-usable bits] (SW1-SW4) ignored by the MMU and used by the 
         operating system to store metadata
   \item[Page Frame Number (PFN)] identifying the page's physical address.
@@ -589,22 +584,26 @@ a na\"ive design which blocks all other tasks writing to pages already
 read by a syscall until the syscall completes.
 The na\"ive design can deadlock because it introduces dependencies between
 tasks for forward progress, and we illustrate this in the following example
-of a system with two tasks, A and B. \UT{Is there space to enumerate the steps? This section has always been a bit convoluted.}
-Task A issues a blocking system call which reads a user page and blocks. 
-Task B writes to the same user page before issuing a syscall which 
-resumes task A. 
+of a system with two tasks (A and B):
+\begin{inparaenum}[\itshape i\upshape)]
+  \item Task A issues a blocking system call which reads a user page and blocks, then
+  \item Task B writes to the same user page before issuing a syscall which 
+  resumes task A. 
+\end{inparaenum}
 In this case, if Task A's read to the page preceds Task B's write, 
 Task B will be blocked waiting for A to complete its syscall.
 Task A will also remain blocked waiting for Task B's syscall, 
 introducing a circular dependency, leading to deadlock.
 The na\"ive design also introduces unnecessary delays in other cases, 
-such as the one described below, again with two tasks C and D.
-Task C reads from a page and sleeps for a long, determinate while.
-Task C does not read from the page a second time.
-Task D writes to the same page after task C has read from it, and 
-blocks until Task C completes and is unnecessarily delayed.
-A more performant approach is to duplicate the concurrently accessed page: the copy is 
-kept should task C fetch data from the page again, and task D
+such as the one described below, again with two tasks (C and D):
+\begin{inparaenum}[\itshape i\upshape)]
+  \item Task C reads from a page and sleeps for a long while, b
+        but does not read from the page a second time, then
+  \item Task D writes to the same page after task C has read from it, 
+        and blocks until Task C completes and is unnecessarily delayed.
+\end{inparaenum}
+A more performant approach is to duplicate the concurrently accessed page: 
+the copy is kept for task C for future fetches, and task D
 can write to the original and proceed without delays.
 
 \tiktok must maintain multiple versions of a page read by a syscall 
@@ -638,14 +637,16 @@ holding the latest state of the page.}
 \subsection{Page state machine}
 
 \begin{figure*}[]
-  \includegraphics[width=\linewidth]{img/tiktok_states.pdf}
+  \centering
+  \includegraphics[width=0.9\linewidth]{img/tiktok_states.pdf}
   \caption{State diagram for a page in \tiktok. Reads/writes from userspace/syscall 
           code are marked (u)/(s) respectively. Shading is used to represent the 
           mapping from snapshots to copies.}
   \label{fig:tiktok_states}
 \end{figure*}
 
-\begin{figure}[]
+\begin{figure}[h]
+  \centering
   \includegraphics[width=\linewidth]{img/doublefetch_tiktok.pdf}
   \caption{Diagram illustrating \tiktok preventing exploitation of a double fetch.}
   \label{fig:doublefetch_tiktok}
@@ -797,7 +798,7 @@ System Call & Exemption reason \\
 \label{tab:except_syscall}
 \end{table}
 
-\paragraph{Correctness concerning syscalls directly updating snapshot $L$}
+\paragraph{Correctness of syscalls directly updating snapshot $L$}
 \tiktok's design lets all writes, including those from syscalls, directly 
 % \mat{This almost got lost in a merge conflict. I'm not sure we need to discuss
 % the first, trivial case. Why should we?}
@@ -1078,7 +1079,7 @@ reading from user memory.
 This function also uses the kernel's \Code{mark_page_accessed} 
 interface to move the page to the ``Active'' state for the 
 kernel's swapping mechanism, making the page ineligible for being 
-swapped out. \UT{This also kills Fran}
+swapped out. 
 
 \paragraph{Exemptions}
 Our prototype \tiktok kernel exempts a couple of functions 
@@ -1117,14 +1118,14 @@ they can prove to be secure from doublefetch bugs.
 \subsection{Handling Faults}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{figure}[]
+\begin{figure}[h]
   \includegraphics[width=\linewidth]{img/pagefault.pdf}
   \caption{Flowchart for handling a page fault. operations
            marked with an asterisk are unmodified.}
   \label{fig:fault_handling}
 \end{figure}
 
-\begin{figure}[]
+\begin{figure}[h]
   \includegraphics[width=\linewidth]{img/pagefault_cow.pdf}
   \caption{Flowchart for handling a page fault to a COW page}
   \label{fig:fault_handling_cow}
@@ -1151,20 +1152,15 @@ the SW3 bit of the PTE and if so, transitions to the required state
 and allocates a new copy. 
 Pages in states 0 and 2 can be directly mapped, and subsequently
 accessed.
-By correctly handling new mappings to file-backed pages, \tiktok
-prevents \autoref{attk:remapping}. 
 
 For non-NULL PTEs, the handler checks if the PTE indicates that the 
 page is present.
 Non-present pages are swapped-in as usual.
-To prevent \autoref{attk:swap}, \tiktok checks if the page was already
-swapped in by any other task and is now in a protected state.
+Otherwise, \tiktok checks if the page was already swapped in by 
+any other task and is now in a protected state.
+If not, the swap proceeds as usual.
 For protected pages, \tiktok implements a state change based on 
 whether the access causing this fault was a read or a write.
-\UT{Attack 3 refers to swapping to disc and then you mentioned
-that another task swapped it in. What about the case where it is still on disc?
-Did you store information about the flags with the disc data in the PTE? I know 
-we prevent swapping out of marked pages, but at this point it is unclear.}
 
 In the remaining case, faults for a present page indicate a 
 permission fault (write to a read-only page).
@@ -1172,11 +1168,8 @@ If the page is not a COW-page, the handler then checks if the page
 is in a protected state by checking the SW3 bit.
 If the page was protected, a new copy is allocated and the page 
 transitions to the following state.
-This case protects against both \autoref{attk:direct} and 
-\autoref{attk:systemcall}.
 For non-protected pages, however, this fault implies a real access
 violation, sending a signal to the process.
-In addition, \tiktok will report the access violation in the syslog.
 
 COW pages represent separate virtual pages from different 
 address spaces mapped to the same physical page.
@@ -1220,7 +1213,7 @@ copy is also freed.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \tiktok instruments file-system writes to protect the kernel
-from \autoref{attk:writebuffers}.
+from modifications via kernel mappings.
 When a \Code{write} syscall writes to a file, it actually
 writes to copies of pages of the file stored in memory within 
 a page cache.
@@ -1252,10 +1245,8 @@ Our current prototype does not, however, protect out-of-tree drivers
 which are not distributed with the kernel if they do not use the 
 \Code{generic_file_write_iter} function.
 A user with superuser privileges can load a module implementing a 
-different, insecure FS driver in order to effect \autoref{attk:writebuffers}.
-However, such a user can also inject other arbitrary modules into 
-the kernel which can more directly modify kernel data, and is 
-outside our threat model.
+different, insecure FS driver which does not implement \tiktok checks.
+A malicious superuser is, however, outside our threat model.
 A more reasonable threat involves a sysadmin unwittingly loading a 
 insecure driver which a non-privileged user can then use to 
 exploit a \tocttou bug. 
@@ -1268,8 +1259,8 @@ and raising a warning if it does not.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Our \tiktok prototype preserves the state machine for user pages
-across operations which create new mappings to a page, as is 
-exploited in \autoref{attk:remapping}.
+across operations which create new mappings to a page to prevent 
+attacks which rely on mappings being created between double fetches.
 The \Code{mmap} syscall is responsible for creating new virtual
 memory mappings for processes, and requires instrumentation.
 When \Code{mmap} is called with the \Code{MAP_POPULATE} flag, or 
