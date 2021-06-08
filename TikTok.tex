@@ -1120,7 +1120,12 @@ for invalidating TLB entries globally, not just on the executing
 core. 
 The AMD64 architecture manual~\cite{amd64prog} lists such an instruction 
 (\Code{INVLPGB}), though it is yet to be implemented in any commercially 
-available processors.
+available x86 processors.
+The ARM v8-A architecture manual~\cite{armv8a} lists similar instructions 
+\Code{TLBI ASIDE1IS} and \Code{TLBI ASIDE1OS} which invalidates all entries 
+of a page within a cluster of cores but not for cores in other clusters
+(called an Inner Shareable Domain) and cores across clusters (called an 
+Outer Shareable Domain) respectively.
 Alternate architectures with a single, system-wide translation 
 table~\cite{guptarebooting,ChaseLFL94} 
 would also benefit \tiktok by having a single page table to 
@@ -1131,7 +1136,7 @@ is mapped in.
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
 %%%%%%%%%%%%%%%%%%%%
-
+\atri{Add average bars on plots}
 In this section, we quantify \tiktok's overhead on workloads 
 with different characteristics, both compute-bound applications
 which rarely use syscalls and I/O-bound applications which 
