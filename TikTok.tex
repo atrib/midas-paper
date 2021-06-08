@@ -250,7 +250,7 @@ Architectures rely on page tables orchestrated by the operating system
 to translate between these address spaces and to protect such accesses.
 Page tables are arranged as radix-trees where different bits of the 
 virtual address are used as indices into levels of the page table.
-At the leaf page table, a unique page-table entry (PTE) stores the 
+At the leaf page table, a unique pagetable entry (PTE) stores the 
 translation and protection information for a page.
 
 A PTE in x86-64 is a 64-bit value holding, among other, the following metadata:
@@ -615,7 +615,7 @@ of a system with two tasks (A and B):
   \item Task B writes to the same user page before issuing a syscall which 
   resumes task A. 
 \end{inparaenum}
-In this case, if Task A's read to the page preceds Task B's write, 
+In this case, if Task A's read to the page preceeds Task B's write, 
 Task B will be blocked waiting for A to complete its syscall.
 Task A will also remain blocked waiting for Task B's syscall, 
 introducing a circular dependency, leading to deadlock.
@@ -729,7 +729,7 @@ reads from it.
 trapping writes to the page but allowing concurrent userspace reads to continue.
 A new snapshot, $S_0$ linked to this syscall is allocated for this page.
 For the rest of its lifetime, this syscall will only read from this snapshot.
-Both snaphots $S_0$ and $L$ refer to the same copy $C_L$ (shown by the 
+Both snapshots $S_0$ and $L$ refer to the same copy $C_L$ (shown by the 
 blue cross-thatch in \autoref{fig:tiktok_states}).
 Prior to any writes to this page, any other syscalls which also read the page  
 get their own snapshots (e.g., $S_1$) all pointing to the single copy $C_L$.
@@ -1049,7 +1049,7 @@ The authors are aware of the strong aversion of the
 Linux kernel developer community towards increasing the size of 
 \Code{struct page}. 
 An alternate implementation can use a hashmap to
-map from a page's frame number to its snaphots list or
+map from a page's frame number to its snapshots list or
 reuse existing data members (e.g., \Code{struct list_head lru} which 
 can be used as a generic list by page owners).
 
@@ -1477,7 +1477,7 @@ different files.
 Redis requires syscalls for receiving and replying to requests, but 
 processes its transaction entirely in-memory. 
 While early prototypes of our kernel caused significant degradation
-of Redis' throughput (upto $69\%$), demonstrating Redis' dependence 
+of Redis' throughput (up to $69\%$), demonstrating Redis' dependence 
 on kernel performance, 
 our evaluation prototype achieves almost identical results as the baseline, 
 highlighting the prototype's competitive performance.
@@ -1485,11 +1485,11 @@ The webservers, Apache and Nginx require network and file-system I/O,
 and rely heavily on syscall performance. 
 We see that Nginx, which is a higher-performance webserver, sees a larger
 overhead.
-Fs-mark, which accesses a filesystem with 5000 files of 1MB concurrently
+Fs-mark, which accesses a file system with 5000 files of 1MB concurrently
 from 4 threads, and IPC, which implements 128 byte transfers between 
 two processes over a TCP connection, are almost entirely bound by kernel 
 performance. 
-These benchmarks see a performance overhead of upto $10\%$ on \tiktok.
+These benchmarks see a performance overhead of up to $10\%$ on \tiktok.
 
 Our prototype \tiktok kernel benefits significantly from 
 exempting particular, proven-safe syscalls from instrumentation.
