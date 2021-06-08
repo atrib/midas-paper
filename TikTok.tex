@@ -1243,12 +1243,32 @@ frequently called syscalls from \tiktok protections is crucial
 towards for implementations to maintain competitive performance
 compared to the baseline.
 
-\section{Trash}
+% \todo{Discuss how Midgard would help}
 
-\todo{Discuss how Midgard would help}
+% \todo{In implementation, discuss how IOMMU's can be used to prevent devide writes,
+% but is currently unsupported.}
 
-\todo{In implementation, discuss how IOMMU's can be used to prevent devide writes,
-but is currently unsupported.}
+%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+%%%%%%%%%%%%%%%%%%%%
+
+\tiktok mitigates double-fetch bugs in system calls and protects the operating
+system kernel by enforcing a core invariant:  \emph{through a syscall's
+lifetime, every read to a userspace object will return the same value}.
+Our \tiktok implementation creates on-demand snapshots and copies of pages that
+are read and merges any writes through the execution of the system call.
+%
+Our mitigation protects the core kernel, as well as drivers by carefully
+instrumenting functions that interact with the process address space. While our
+implementation focuses on Linux for x86-64, our concept is generic and empowers
+other kernels to protect themselves against notoriously hard-to-find and
+easy-to-exploit double fetch bugs.
+
+The performance evaluation of our prototype implementation is promising.
+CPU-intensive benchmarks have negligible overhead and even syscall-intensive
+benchmarks exhibit low overhead. We will release the source code of our
+prototype as open-source and continue our interaction with the Linux kernel
+community.
 
 \bibliographystyle{plain}
 \bibliography{TikTok}
