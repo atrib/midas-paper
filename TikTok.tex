@@ -118,7 +118,8 @@ diverse workloads across two benchmark suites.
 \section{Introduction}
 %%%%%%%%%%%%%%%%%%%%%%
 
-The kernel enables isolation between processes and is a key trusted computing
+The operating system (OS) kernel enables isolation between processes and is 
+a key trusted computing
 base in every system. Each \emph{untrusted} user-space process runs under a
 dedicated user in its own address space and must request resources such as
 communication channels or changes to its address space from the \emph{trusted}
@@ -210,19 +211,164 @@ enabling developers to detect \tocttou bugs;
 
 \section{Background}
 
-\subsection{Linux Memory Subsystem}
+\tiktok orchestrates several mechanisms within the Linux memory subsystem 
+to provide its protection guarantees.
+Linux uses architecturally-defined per-address space page tables to define
+mappings to pages.
+\tiktok protects these pages by temporarily marking them read-only in the 
+page tables.
+This section provides the background information necessary to reason about 
+why and how \tiktok protects syscalls from concurrent writes.
 
 \subsection{Page Tables and Memory Protection}
+Virtually all modern architectures (for e.g., x86, x86-64, ARM, SPARC and 
+RISC-V) implement separate virtual and physical
+address spaces based on fixed-size regions called pages. 
+\footnote{Some architectures also include segmentation-based protection 
+working in tandem with page tables, but are irrelevant for \tiktok.}
+Programs execute in their virtual address space while caches and main memory
+are accessed using physical addresses.
+Architectures rely on page tables orchestrated by the operating system 
+to translate between these address spaces and to protect such accesses.
+Page tables are arranged as radix-trees where different bits of the 
+virtual address are used as indices into levels of the page table.
+At the leaf page table, a unique page-table entry (PTE) stores the 
+translation and protection information for a page.
 
-\subsection{SMAP}
+A PTE in x86-64 is a 64-bit value holding the following metadata:
+\begin{description}
+  \item[Present bit (P)] which indicates that the PTE holds a valid entry
+  \item[Read/Write bit (R/W)] which is set if the page is writable
+  \item[Not Executable bit (NX)] which is set if code stored on the page 
+        cannot be executed 
+  \item[User/Supervisor bit (U/S)] which tracks whether the page is 
+        a supervisor page or accessible to userspace
+  \item[Software-usable bits] (SW1-SW4) ignored by the MMU and used by the 
+        operating system to store metadata
+  \item[Page Frame Number (PFN)] identifying the page's physical address
+\end{description}
 
+An access using a virtual address first reads the corresponding PTE's 
+present bit to check its validity. 
+Then, the access checks whether the access is allowed from the executing
+code's privilege level by checking the U/S bit and whether the 
+read/write access is allowed by checking the R/W bit.
+When all checks pass, the processor uses the PFN to find the data in 
+the caches or in memory.
+When a check fails, the processor raises a protection fault/exception and
+moves control to a OS-specified exception handler.
+
+Reading PTEs from a multi-level page table is an expensive operation, and 
+modern processors cache PTEs in caches known as Translation Lookaside 
+Buffers (TLBs) to reduce the cost of subsequent accesses. 
+On most architectures, the OS is responsible for keeping TLBs coherent with 
+the page table, necessitating entries to be flushed from TLBs when the 
+corresponding PTE is updated.
+
+\subsection{Linux Memory Subsystem}
+Linux implements various abstractions, such as processes, files and shared
+memory using the architecture's page tables.
+All threads within a Linux process share a single address space, and 
+consequently use the same page table for translation and protection.
+Each page within the process' virtual address space may be mapped or 
+unmapped, and mapped pages have separate read/write/execute permissions.
+Generally, programs have write-execute exclusion which means that 
+code pages cannot be written to and data pages cannot be executed.
+These permissions map directly to page-table bits.
+Pages in Linux may also be copy-on-write pages which are mapped read-only
+in multiple address spaces, but duplicated whenever any process writes
+to it, thereby requiring a separate copy.
+
+Linux maintains userspace and kernel mappings to memory in distinct 
+parts of the virtual address space. 
+The top half of the address space holds kernel mappings, and the 
+PTE entries for such pages have the U/S bit set. 
+The kernel mappings are identical for all address spaces, and are 
+kept consistent across processes' page tables.
+The bottom half of the address space is used for userspace mappings, 
+and the PTE entries have the U/S bit reset.
+A userspace page has at-least one userspace mapping, and at-least one
+kernel mapping.
+Shared userspace memory is implemented by mapping a page in more than 
+one address space.
+
+Files in Linux occupy a separate namespace as that of virtual memory
+(rooted at \Code{/}).
+However, when files are read or written, parts of the file are cached
+in the kernel's page cache consisting pages mapped in the kernel's 
+address space.
+Further, programs can explicitly map pages from a file, in which case 
+the corresponding pages from the page cache are mapped in userspace 
+addresses in the process' page table.
+Mapped file pages can therefore be accessed by the file-system using 
+kernel addresses, and userspace programs using userspace addresses.
+Userspace pages not backed by a file are called anonymous pages.
+
+\subsection{Supervisor Memory Protection  and user-copy interfaces}
+
+Kernel accesses to userspace memory use userspace mappings, and 
+come with the risk of the kernel confusing data structures 
+stored in userspace memory as kernel data structures.
+A class of attacks can exploit this behavior via bugs in the 
+kernel.
+Essentially, the adversary needs to set up either data structures
+or code within its accessible memory, then exploit a kernel 
+bug to make the kernel use these data structures, or to execute 
+this code.
+
+Architectures and OSs have mitigated this class of vulnerabilities
+by introducing Supervisor Memory Protection.
+Essentially, kernel read/write/execute access to userspace memory
+raises a fault depending on the state of a per-processor system 
+register.
+On x86-64, these features are known as Supervisor Memory Access 
+Protection (SMAP) for data accesses and Supervisor Memory Execution 
+Protection (SMEP) for code accesses, and bits in the CR4 register 
+are used to enable/disable the features.
+The architecture also exposes privileged instructions 
+\Code{stac}/\Code{clac} to quickly disable and enable this access 
+control.
+On the OS side, all accesses to userspace memory are made explicit, 
+using special functions to read from and write to userspace memory.
+Any unintended access, outside these functions, cause a 
+hardware fault, indicating either a kernel bug or an attack.
+Linux implements the functions \Code{copy_{from/to}_user} which 
+use the access control instructions to disable SMAP before 
+accessing userspace data, and then re-enabling SMAP.
+Kernel accesses to userspace data therefore become explicit, allowing
+\tiktok to reliably track all kernel fetches from userspace memory, 
+and therefore protect them.
+
+
+\subsection{Double-fetch bugs}
 \begin{figure}[]
   \centering
-  \includegraphics[width=.85\linewidth]{img/doublefetch.pdf}
+  \includegraphics[width=.8\linewidth]{img/doublefetch.pdf}
   \caption{Example of a double-fetch bug}
   \label{fig:doublefetch}
 \end{figure}
 
+Double-fetch bugs occur when a privileged environment (such as the kernel)
+reads untrusted memory two or more times, and the read values are not 
+identical. 
+An example of such a situation is depicted in \autoref{fig:doublefetch}.
+In between two reads by the target thread, the value in memory is changed
+by an adversary.
+The bug is a race condition since it requires accesses to memory in 
+a particular order across threads.
+The situation where the first fetch validates the value in memory and 
+the second fetch uses this value is called a 
+\emph{Time-of-check to time-of-use (\tocttou)} bug.
+\tocttou bugs have been widely studied in file systems, where the 
+API makes it possible to swap the file after validating the access 
+rights~\cite{payer2012protecting,
+pu2006methodical, wei2010modeling, tsafrir2008portably}.
+\tocttou bugs affect kernel code~\cite{jurczyk2013bochspwn, wang2018survey}
+as well as dynamically-loaded driver code~\cite{cve201812633,cve201812633fix}.
+Wang et al.~\cite{wang2018survey} showed that double-fetches appear not only
+in kernels, but wherever there is a trust boundary to cross (e.g., kernel ---
+hypervisor~\cite{wilhelm2016xenpwn} and hardware---kernel
+boundaries~\cite{lu2018untrusted}). 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Attack vectors}
