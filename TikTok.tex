@@ -155,11 +155,14 @@ its buffer, causing the memory copy to overflow it.
 Double-fetch bugs are a frequent problem in kernels and
 hypervisors~\cite{cve201812633, cve202012652, cve20131332, cve201920610,
 cve20158550, cve201610439, cve201610435, cve201610433, cve20195519,
-cve20168438}. Considering that double-fetches also appear in drivers, legacy
-systems with binary-only drivers cannot be patched, even if a bug is found.
-Furthermore, Watson~\cite{watson2007exploiting} blames an unfixable \tocttou
+cve20168438}. 
+% Considering that double-fetches also appear in drivers, legacy
+% systems with binary-only drivers cannot be patched, even if a bug is found.
+Watson~\cite{watson2007exploiting} blames an unfixable \tocttou
 constellation as a reason for the generic insecurity of \emph{system call
-wrappers}. For example, \tiktok enables deep argument inspection for 
+wrappers}. System call filtering requires that data read from userspace for the
+initial check remains the same when the kernel later uses it for computation. 
+For example, \tiktok enables deep argument inspection for 
 SecComp~\cite{seccomp_deep, seccomp}, dereferencing pointer arguments without introducing 
 \tocttou bugs. Without \tiktok, such inspection is inherently impossible due to
 inherent \tocttou bugs.
@@ -174,8 +177,8 @@ find thrifty ways to trigger such concurrent writes:
 \item  concurrent \texttt{write}s to a file that alters mapped
 file pages, or
 \item  storing arguments on device-backed pages, leveraging devices to trigger
-concurrent writes
-\end{inparaenum}.
+concurrent writes.
+\end{inparaenum}
 To prevent attacks, all kinds of concurrent writes must be prohibited.
 
 % TODO key idea
@@ -192,7 +195,7 @@ system calls that are in flight. All writes end up on the most recent version of
 the objects and therefore allow forward progress.
 % Mat: should we split it into security, correctness, and performance
 % properties, all driven by the core invariant?
-We implement our invariant in \tiktok for the Linux kernel but the defense
+We implement our invariant in \tiktok for the Linux kernel, but the defense
 applies to any modern operating system kernel.
 
 Our evaluation shows overall low performance overhead for our mitigation.
@@ -212,7 +215,8 @@ the kernel against malicious concurrent modifications;
 \item \tiktok, a design that prohibits and detects
 \tocttou attacks against modern kernels, prohibiting their exploitation and
 enabling developers to detect \tocttou bugs;
-\item an efficient implementation of \tiktok for the Linux kernel.
+\item An efficient implementation of \tiktok for the Linux kernel that exhibits
+low performance overhead.
 \end{itemize}
 
 
@@ -233,7 +237,7 @@ why and how \tiktok protects syscalls from concurrent writes.
 \subsection{Page Tables and Memory Protection}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Virtually all modern architectures (e.g., x86, x86-64, ARM, SPARC and 
+Virtually all modern architectures (e.g., x86, x86-64, ARM, SPARC, and 
 RISC-V) implement separate virtual and physical
 address spaces based on fixed-size regions called pages.
 %
@@ -249,15 +253,21 @@ virtual address are used as indices into levels of the page table.
 At the leaf page table, a unique page-table entry (PTE) stores the 
 translation and protection information for a page.
 
-A PTE in x86-64 is a 64-bit value holding the following metadata:
-\begin{description}[noitemsep]
-  \item[Present bit (P)] which marks the PTE's validity;
-  \item[Protection bits (NX, R/W, U/S)] which restrict the type of;
-        access and the privilege level of the accessing code;
-  \item[Software-usable bits] (SW1-SW4) ignored by the MMU and used by the 
-        operating system to store metadata;
-  \item[Page Frame Number (PFN)] identifying the page's physical address.
-\end{description}
+A PTE in x86-64 is a 64-bit value holding, among other, the following metadata:
+% \begin{description}[noitemsep]
+%   \item[Present bit (P)] which marks the PTE's validity;
+%   \item[Protection bits (NX, R/W, U/S)] which restrict the type of
+%         access and the privilege level of the accessing code;
+%   \item[Software-usable bits] (SW1-SW4) ignored by the MMU and used by the 
+%         operating system to store metadata;
+%   \item[Page Frame Number (PFN)] identifying the page's physical address.
+% \end{description}
+\emph{Present bit (P)} to mark the PTE's validity;
+\emph{Protection bits (NX, R/W, U/S)} to restrict the type of
+access and the privilege level of the accessing code;
+\emph{Software-usable bits (SW1-SW4)} that are ignored by the MMU and used by the 
+operating system to store metadata; and
+\emph{Page Frame Number (PFN)} to identify the page's physical address.
 
 An access using a virtual address first reads the corresponding PTE's 
 present bit to check its validity. 
@@ -290,8 +300,8 @@ Generally, programs have write-execute exclusion which means that
 code pages cannot be written to and data pages cannot be executed.
 These permissions map directly to page-table bits.
 Pages in Linux may also be copy-on-write pages which are mapped read-only
-in multiple address spaces, but duplicated whenever any process writes
-to it, thereby requiring a separate copy.
+in multiple address spaces, but duplicated when any process writes
+to it, resulting in a separate copy.
 
 Linux maintains userspace and kernel mappings to memory in distinct 
 parts of the virtual address space. 
@@ -319,7 +329,7 @@ kernel addresses, and userspace programs using userspace addresses.
 Userspace pages not backed by a file are called anonymous pages.
 
 
-\subsection{Supervisor Memory Protection  and user-copy interfaces}
+\subsection{Supervisor Memory Protection} %  and user-copy interfaces}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Kernel accesses to userspace memory use userspace mappings, and 
@@ -348,7 +358,7 @@ On the OS side, all accesses to userspace memory are made explicit,
 using special functions to read from and write to userspace memory.
 Any unintended access, outside these functions, causes a 
 hardware fault, indicating either a kernel bug or an attack.
-Linux implements the functions \Code{copy_{from/to}_user} which 
+Linux implements the functions \Code{copy_\{from/to\}_user} which 
 use the access control instructions to disable SMAP before 
 accessing userspace data, and then re-enabling SMAP.
 Kernel accesses to userspace data therefore become explicit, allowing
@@ -390,15 +400,15 @@ boundaries~\cite{lu2018untrusted}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Attack vectors}
-\label{sec:threats}
+%\section{Attack vectors}
+%\label{sec:threats}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-In this section, we describe the threat model for exploiting double-fetch
-bugs in the kernel and classify the possible attacks based on how the 
-data is modified between vulnerable double-fetches.
+% In this section, we describe the threat model for exploiting double-fetch
+% bugs in the kernel and classify the possible attacks based on how the 
+% data is modified between vulnerable double-fetches.
 
-\subsection{Threat Model}
+\section{Threat Model}
 \label{sec:threatmodel}
 %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -408,8 +418,8 @@ The adversary has access to a user account on the target machine. They can
 execute arbitrary userspace code, including system calls. Some of the system 
 calls have double-fetch vulnerabilities, and the adversary wants to exploit them,
 e.g., for privilege escalation.
-The adversary may execute on multiple CPU cores and may execute an arbitrary 
-sequence of system calls. 
+The adversary may execute arbitrary sequences of system calls on multiple CPU
+cores concurrently.
 
 \tiktok mitigates any unintended corruption or information leakage \emph{in the kernel}
 or \emph{in other user processes} that arises through double-fetch bugs. 
@@ -419,7 +429,7 @@ attacks~\cite{payer2012protecting, pu2006methodical, wei2010modeling,
 tsafrir2008portably} are out of scope.
 
 
-\subsection{Attack Classification}
+\section{Attack Classification}
 \label{sec:attacks}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -470,22 +480,23 @@ Another example is \Code{rt_sigaction} where the kernel writes to
 a user buffer pointed to by the \Code{oldact} argument.
 In both of these attacks, the adversarial write uses a userspace
 mapping. 
-A protection mechanism must, therefore, account for all userspace 
+\emph{A protection mechanism must, therefore, account for all userspace 
 mappings to pages containing vulnerable data at the time of the 
-targeted syscall's first read.
+targeted syscall's first read.}
 
 Existing kernel mappings to a page also mapped in userspace can be 
 leveraged by an attacker in a confused-deputy attack.
 A file-backed page in the page-cache needs to be mapped in a
 userspace process and then passed as an argument to the targeted syscall.
 A concurrently executing \Code{write} syscall can modify the 
-vulnerable data using kernel mappings for the page-cache pages.
-This attack is called \emph{inception double fetch}~\cite{watson2007exploiting}.
-\mat{Did we call it inception double fetch?}
+vulnerable data using kernel mappings for the page-cache
+pages~\cite{watson2007exploiting}.
+% This attack is called \emph{inception double fetch}~\cite{watson2007exploiting}.
+% \mat{Did we call it inception double fetch?}
 The kernel does not explicitly track kernel addresses mapping to a page, 
 but the file-system driver does explicitly find the page before writing to it.
-A protection mechanism must, therefore, instrument file-system 
-drivers to account for writes via kernel mappings to vulnerable data.
+\emph{A protection mechanism must, therefore, instrument file-system 
+drivers to account for writes via kernel mappings to vulnerable data.}
 
 The kernel might create new mappings to the vulnerable data 
 between the double fetches by the target syscall, bypassing protection 
@@ -496,20 +507,22 @@ The first version is called a \emph{reflected double fetch}
 attack~\cite{watson2007exploiting}.
 The mapping might not be created at the time of the adversarial syscall, 
 but lazily when the attacker writes to the vulnerable data.
-In a more complicated variant, the adversary can use the kernel as a 
+In a more involved variant, the adversary can use the kernel as a 
 confused deputy which touches the unmapped page and maps it in, 
 then writes to the vulnerable data.
 In all of the above vectors, the function populating pages for a 
 process (\Code{mm_populate} for Linux) is creating the mapping.
-A protection mechanism must, therefore, instrument \Code{mm_populate}
+\emph{A protection mechanism must, therefore, instrument \Code{mm_populate}
 of the code of any other syscall which can lead to new mappings 
-being created.
+being created.}
+
 A new mapping might also be created due to swapping.
 If the adversary writes to a page that was previously swapped 
 to disk, but later swapped in to be read by the target syscall in 
 a different address space, the kernel might lazily reinstate its 
 mapping to the page.
-The swapping mechanism must, therefore, be protected.
+\emph{The swapping mechanism must, therefore, be protected.}
+
 \tiktok protects against all of the aforementioned attack vectors.
 In the absence of any other syscall which can create new userspace 
 mappings to vulnerable data, \tiktok's protection is complete 
@@ -526,8 +539,9 @@ address spaces.
 Such users are also disallowed from configuring DMA devices.
 Therefore, device modifications to vulnerable data fall outside 
 our threat model and are not protected by \tiktok.
-The superuser is able to load arbitrary kernel code via loadable
-modules and confused-deputy attacks leveraging a incompetent 
+The superuser may load arbitrary kernel code % via loadable
+% modules
+and confused-deputy attacks leveraging an incompetent 
 system administrator are also outside the purview of our threat model.
 However, on processors supporting IOMMUs, \tiktok can be extended 
 to protect against modifications by DMA devices.
