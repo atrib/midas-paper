@@ -95,14 +95,19 @@
 Double-fetch bugs are a plague across all major operating system kernels. They
 occur when data is fetched twice across the user/kernel trust-boundary while 
 allowing concurrent modification. Such bugs may allow an attacker to illegally 
-access memory, cause denial of service, or to escalate privileges.
+access memory, cause denial of service, or to escalate privileges. 
 %
 So far, the only protection against double-fetch bugs is to detect and fix them.
-However, they remain incredibly hard to find. Even worse, the bug may be in
-unchangeable code (e.g., a binary driver blob).
+However, they remain incredibly hard to find. 
+%
+Similarly,
+they fundamentally prohibit efficient, kernel-based stateful system call filtering.
+% Mat: not a key argument for TikTok
+% Even worse, the bug may be in
+% unchangeable code (e.g., a binary driver blob).
 %
 We propose \tiktok to mitigate double-fetch bugs. \tiktok creates on-demand
-snapshots and copies of the accessed data, enforcing the key invariant
+snapshots and copies of accessed data, enforcing our key invariant
 that through a syscall's lifetime, every read to a userspace object 
 will return the same value.
 
@@ -120,14 +125,14 @@ diverse workloads across two benchmark suites.
 
 The operating system (OS) kernel enables isolation between processes and is 
 a key trusted computing
-base in every system. Each \emph{untrusted} user-space process runs under a
+base. Each \emph{untrusted} userspace process runs under a
 dedicated user in its own address space and must request resources such as
 communication channels or changes to its address space from the \emph{trusted}
-kernel. The user-space/kernel-space interface forms an explicit trust barrier
+kernel. The userspace/kernel interface forms an explicit trust barrier
 and all data that crosses this boundary in either direction must be carefully 
 checked by the kernel.
 %
-User-space processes attack the kernel by issuing system calls that then trigger
+Userspace processes attack the kernel by issuing system calls that then trigger
 kernel bugs, elevating the privileges of the process.
 %
 A common class of kernel bugs are so-called \emph{double-fetch}
@@ -142,8 +147,8 @@ read is used to check a condition while the second read is used to modify
 state.
 %
 An example of a double fetch bug is when the kernel reads the length of a buffer
-from user-space, allocates a kernel buffer, then reads the length a second time
-to finally copy the data from user-space to kernel. An adversary may concurrently
+from userspace, allocates a kernel buffer, then reads the length a second time
+to finally copy the data from userspace to kernel. An adversary may concurrently
 overwrite the length of the buffer to a larger number after the kernel allocated
 its buffer, causing the memory copy to overflow it.
 %
@@ -163,7 +168,7 @@ To mitigate double-fetch bugs in the kernel, a system must prohibit
 \emph{concurrent changes} to memory accessed by the system call. Attackers may
 find thrifty ways to trigger such concurrent writes:
 \begin{inparaenum}[\itshape i\upshape)]
-\item  direct writes from user-space (e.g., from concurrent threads),
+\item  direct writes from userspace (e.g., from concurrent threads),
 \item  kernel writes from system calls (e.g., from concurrent system calls),
 \item  modifying address space mappings,
 \item  concurrent \texttt{write}s to a file that alters mapped
