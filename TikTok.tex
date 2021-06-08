@@ -93,9 +93,9 @@
 \begin{abstract}
 %-------------------------------------------------------------------------------
 Double-fetch bugs are a plague across all major operating system kernels. They
-occur when data is fetched twice without security check across the user/kernel
-trust-boundary. Such bugs may allow an attacker to illegally access memory,
-cause denial of service, or to escalate privileges.
+occur when data is fetched twice across the user/kernel trust-boundary while 
+allowing concurrent modification. Such bugs may allow an attacker to illegally 
+access memory, cause denial of service, or to escalate privileges.
 %
 So far, the only protection against double-fetch bugs is to detect and fix them.
 However, they remain incredibly hard to find. Even worse, the bug may be in
@@ -108,8 +108,9 @@ will return the same value.
 
 \tiktok shows no noticeable drop in performance when evaluated on CPU-bound
 workloads. On extremely system call heavy workloads, \tiktok shows
-\mat{TODO} overhead on the \mat{TODO benchmarks}, protecting the kernel against
-any \tocttou attacks.
+$18\%$ overhead for the nginx benchmark, while protecting the kernel against
+any \tocttou attacks. On average, \tiktok shows a $4.3\%$ overhead on 
+diverse workloads across two benchmark suites.
 
 \end{abstract}
 
@@ -188,11 +189,12 @@ applies to any modern operating system kernel.
 
 % TODO performance
 Our evaluation shows overall low performance overhead for our mitigation.
-\mat{TODO talk about benchmarks.}
+On parallel workloads from the NAS Parallel Benchmarks suite, \tiktok shows 
+an average overhead of $3.7\%$ while its overhead on more kernel-intensive 
+workloads from the Phoronix Test Suite is $5\%$.
 The security evaluation demonstrates how \tiktok successfully stops all attacks
 against vulnerable system calls, along with providing the developer with
 sufficient information about the location of the bug.
-
 
 The main contributions of this paper are:
 
@@ -1232,12 +1234,15 @@ involve parallelism.
 The Phoronix Test Suite (PTS)~\cite{pts} includes a large set ($>500$) of 
 open-source benchmarks, of which we have chosen a range of benchmarks 
 suitable for evaluating both desktop and server performance.
-\mat{How did we select the benchmarks? Why is this a good selection? And argue
-that it is common to NOT run all Phoronix benchmarks. --- Otherwise, we're
-hitting a benchmark crime of selecting only a subset of benchmarks.}
-These benchmarks complement those from NPB and range from single-threaded, 
-CPU-bound applications (OpenSSL) to multi-threaded, multi-process 
-programs, syscall-heavy server programs (Apache).
+The benchmarks were chosen to only include those that require kernel 
+activity, and therefore will test the overhead of \tiktok's instrumentation.
+A sole benchmark, OpenSSL, is chosen to represent single-threaded, 
+CPU-bound workloads for which kernel performance is irrelevant.
+The benchmarks are also varied, ranging from single-threaded (Pybench) to 
+multi-threaded, multi-process workloads (Apache).
+At the extreme, we have an IPC benchmark transferring small, 128-byte 
+buffers between processes which spends all of its time in syscalls
+and whose performance is entirely dependent on kernel IPC performance.
 
 We plot \tiktok's performance relative to the baseline kernel on
 these benchmarks in \autoref{fig:pts_performance}, roughly ordered 
