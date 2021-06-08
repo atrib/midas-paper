@@ -69,6 +69,7 @@
 
 \newcommand\mat[1]{\noindent{\color{blue} {\bf \fbox{Mat}} {\it#1}}}
 \newcommand\atri[1]{\noindent{\color{red} {\bf \fbox{AB}} {\it#1}}}
+\newcommand\UT[1]{\noindent{\color{green} {\bf \fbox{UT}} {\it#1}}}
 
 %don't want date printed
 \date{}
@@ -305,6 +306,7 @@ by code containing a \tocttou bug as vulnerable data.
   an I/O device. The device can initiate a DMA write, modifying the 
   vulnerable data. This avenue does not use store instructions in any 
   CPU core.
+  \UT{Memory mapped registers could also be changed asyncly}
   % device write -> kernel read
 
 \end{enumerate}
@@ -328,6 +330,9 @@ A comprehensive protection against \tocttou bugs must protect against
 all concurrent writes of these representative attack vectors.
 \mat{Are we sure these are complete? Can we make a stronger statement that a
 defense must enforce a generic property?}
+\UT{One can form two dimensional grid: page type x attack vector. Page types are
+anonymous, file-backed and device-backed page. Attack vectors are: userland writes, system-calls and devices.
+The attack types would then fit in the 3x3 grid, with the device attack vector potentially overwhelming TikTok (e.g. rogue peripheral), unless IOMMU is present.}
 Any protection mechanism must necessarily manage access control for pages
 mapped across multiple address spaces and also via file-system drivers.
 As shown above, an adversary can use its own mappings to try to modify the
@@ -399,7 +404,7 @@ a na\"ive design which blocks all other tasks writing to pages already
 read by a syscall until the syscall completes.
 The na\"ive design can deadlock because it introduces dependencies between
 tasks for forward progress, and we illustrate this in the following example
-of a system with two tasks, A and B.
+of a system with two tasks, A and B. \UT{Is there space to enumerate the steps? This section has always been a bit convoluted.}
 Task A issues a blocking system call which reads a user page and blocks. 
 Task B writes to the same user page before issuing a syscall which 
 resumes task A. 
@@ -886,7 +891,7 @@ reading from user memory.
 This function also uses the kernel's \Code{mark_page_accessed} 
 interface to move the page to the ``Active'' state for the 
 kernel's swapping mechanism, making the page ineligible for being 
-swapped out.
+swapped out. \UT{This also kills Fran}
 
 \paragraph{Exemptions}
 Our prototype \tiktok kernel exempts a couple of functions 
@@ -968,6 +973,10 @@ To prevent \autoref{attk:swap}, \tiktok checks if the page was already
 swapped in by any other task and is now in a protected state.
 For protected pages, \tiktok implements a state change based on 
 whether the access causing this fault was a read or a write.
+\UT{Attack 3 refers to swapping to disc and then you mentioned
+that another task swapped it in. What about the case where it is still on disc?
+Did you store information about the flags with the disc data in the PTE? I know 
+we prevent swapping out of marked pages, but at this point it is unclear.}
 
 In the remaining case, faults for a present page indicate a 
 permission fault (write to a read-only page).
@@ -1217,6 +1226,8 @@ as the baseline kernel.
 However, Redis' performance on initial, unoptimized prototypes showed
 significant degradation in performance (upto $69\%$).
 \mat{What key optimization enabled this good performance? And why?}
+\UT{Recording PTS with perf using the PTS flag and analyzing the graph could answer this, but it
+may take several hours to do correctly.}
 The webservers, Apache and Nginx require network and file-system I/O, 
 and rely heavily on syscall performance. 
 We see that Nginx, which is a higher-performance webserver, sees a larger
