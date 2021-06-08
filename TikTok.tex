@@ -622,7 +622,7 @@ introducing a circular dependency, leading to deadlock.
 The na\"ive design also introduces unnecessary delays in other cases, 
 such as the one described below, again with two tasks (C and D):
 \begin{inparaenum}[\itshape i\upshape)]
-  \item Task C reads from a page and sleeps for a long while, b
+  \item Task C reads from a page and sleeps for a long while,
         but does not read from the page a second time, then
   \item Task D writes to the same page after task C has read from it, 
         and blocks until Task C completes and is unnecessarily delayed.
@@ -643,7 +643,7 @@ If multiple snapshots are taken without intervening writes to the page,
 these snapshots will map to a single copy, reducing \tiktok's space overheads 
 and performance overheads for creating copies.
 \tiktok maintains a snapshot of every page when first read by a syscall.
-On a double fetch by the same syscall, the copy mapped to by the snapshot 
+On a double fetch by the same syscall, the copy mapped to the snapshot 
 is accessed, ensuring that the data read is the same as the first time.
 The latest copy of the page is used for all writes, by the syscall as 
 well as from concurrently running tasks, updating the page as seen 
@@ -700,7 +700,7 @@ copy}, which is mapped in process' address spaces.
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
-Knowing which state the page is allows \tiktok to differentiate faults due
+Knowing which state the page is in allows \tiktok to differentiate faults due
 to protecting pages from faults due to programs actually writing to an 
 originally read-only page.
 The latest copy $C_L$ of read-only pages remains read-only in both states.
@@ -714,7 +714,7 @@ syscall from \autoref{fig:doublefetch}.
 A page starts as \texttt{(unprotected, unduplicated)}.
 In this state, there is a single copy $C_L$ and a single ``snapshot'' $L$. 
 The snapshot $L$ refers to the latest version of the page which changes 
-with time, and is the only mutable snapshot.
+over time, and is the only mutable snapshot.
 All processes where this page is mapped have unrestricted userspace read and write 
 access, and unrestricted kernel write access.
 The remaining operation, a read from kernel code, triggers a transition to 
@@ -913,7 +913,7 @@ to after the double fetch reads.
 Certain syscalls such as \Code{futex} rely on user data changing between 
 double fetches to implement their functionality and cannot be protected by
 \tiktok.
-Such syscalls are listed in \autoref{tab:except_syscall}.
+These syscalls are listed in \autoref{tab:except_syscall}.
 The \Code{futex} syscall implements a fast synchronization mechanism
 for userspace and relies on atomic writes from concurrent userspace
 threads to update a condition the syscall is waiting for. 
@@ -936,7 +936,7 @@ then reads back the updated object cannot be protected using \tiktok.
 \tiktok's invariant will ensure that the second read is identical to the first,
 and does not reflect the intermediate write.
 Such syscalls must be exempted from \tiktok's instrumentation.
-During extensive tests, the authors did not find any syscall which exhibits this behavior in the Linux
+During extensive tests, we did not find any syscall which exhibits this behavior in the Linux
 kernel. 
 
 \paragraph{Syscalls with false sharing}
@@ -954,7 +954,7 @@ We believe that such a syscall, requiring concurrent modifications to its
 arguments, will likely exist to support some synchronization mechanism 
 similar to a \Code{futex} and can be safely exempt from \tiktok's invariant.
 %
-During extensive tests, the authors did not find any syscall which exhibits this behavior in the 
+During extensive tests, we did not find any syscall which exhibits this behavior in the 
 Linux kernel. 
 
 
@@ -995,8 +995,8 @@ This approach, however, is prone to false positives due to false sharing.
 The two reads might read from the same page, but might access entirely 
 disjoint bytes.
 So far, \tiktok reports double fetches at page granularity. 
-A more precise sanitizer could maintain a bitmask of accessed bytes to
-false positives.
+A precise sanitizer could maintain a bitmask of accessed bytes to
+prune false positives.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1031,7 +1031,7 @@ from states 2 and 4.
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/book-keeping.pdf}
-  \caption{Bookkeeping information for a page}
+  \caption{Bookkeeping information for a page.}
   \label{fig:tiktok_bookeeping}
 \end{figure}
 
@@ -1068,20 +1068,20 @@ efficiently determine if the fault was due to \tiktok's protection
 mechanisms, triggering a state change, or due to buggy software
 accessing a page with illegal permissions, triggering a signal to 
 the task.
-Other architectures might have a fewer number of software-usable 
+Other architectures might have fewer software-usable 
 bits in the page-table, and implementations of \tiktok would 
 require storing the protection status of pages in a separate data structure.
 The duplication status of the page is implicitly encoded in the 
 snapshots: the page is duplicated when any of its snapshots
 holds a pointer to a copy other than $C_L$.
 
-Changing the protection state of pages requires updates to 
-PTEs for the page in all address spaces where the page is mapped.
+Changing the protection state of pages requires PTE updates
+for the page in all address spaces where the page is mapped.
 The page's \Code{struct page} structure includes a reverse-map
-listing all of these address pages, and the corresponding virtual
+listing for all of these pages, and the corresponding virtual
 address in each.
 Our prototype uses this mapping to change PTE permissions across
-multiple address spaces for a page.
+all address spaces for a page.
 
 
 \subsection{Kernel reads from user memory}
@@ -1090,7 +1090,7 @@ multiple address spaces for a page.
 \begin{figure}[]
   \centering
   \includegraphics[width=0.8\linewidth]{img/copy_from_user.pdf}
-  \caption{Flowchart for syscall reading from userspace memory}
+  \caption{Flowchart for syscall reading from userspace.}
   \label{fig:copy_from_user}
 \end{figure}
 
@@ -1138,7 +1138,7 @@ the syscall only manages to change the contents written to
 file, which it could have done anyway since it has access to 
 this buffer.
 A kernel developer can similarly exempt other syscall which 
-they can prove to be secure from doublefetch bugs.
+they can prove to be secure from double-fetch bugs.
 
 
 \subsection{Handling Faults}
@@ -1273,12 +1273,16 @@ which are not distributed with the kernel if they do not use the
 A user with superuser privileges can load a module implementing a 
 different, insecure FS driver which does not implement \tiktok checks.
 A malicious superuser is, however, outside our threat model.
-A more reasonable threat involves a sysadmin unwittingly loading a 
-insecure driver which a non-privileged user can then use to 
-exploit a \tocttou bug. 
-One solution would be for the kernel to inspect the relocations table of 
-a new module while loading it to see if it uses \Code{generic_file_write_iter}
-and raising a warning if it does not.
+% Mat: IMO a very weak argument and always the case, so rather than waste
+% precious time here, I've commented out the below as it distracts from our key
+% argument IMO.
+%
+% A more reasonable threat involves a sysadmin unwittingly loading a 
+% insecure driver which a non-privileged user can then use to 
+% exploit a \tocttou bug. 
+% One solution would be for the kernel to inspect the relocations table of 
+% a new module while loading it to see if it uses \Code{generic_file_write_iter}
+% and raising a warning if it does not.
 
 
 \subsection{New mappings to protected pages}
@@ -1379,6 +1383,8 @@ with the mainline kernel v5.11 available from Ubuntu's package
 repository.
 The \emph{\tiktok} configuration runs our prototype \tiktok kernel 
 based on kernel v5.11.
+\mat{The extra configuration is only used in three locations. And we should call
+it -write, not -extra.}
 For particular benchmarks, we also run the \emph{\tiktok-extra}
 configuration which also runs our prototype \tiktok kernel
 but instruments all syscalls including \Code{write}.
@@ -1497,9 +1503,10 @@ to its high frequency of \Code{write} syscalls.
 With \tiktok-extra, the performance of the IPC benchmark falls to 
 $12.6\%$ of the baseline, a further degradation of $81\%$ compared 
 to \tiktok, showing that developer effort towards properly exempting 
-frequently called syscalls from \tiktok protections is crucial
+frequently called \emph{safe} syscalls from \tiktok protections is crucial
 towards for implementations to maintain competitive performance
 compared to the baseline.
+
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
@@ -1519,7 +1526,12 @@ easy-to-exploit double fetch bugs.
 
 The performance evaluation of our prototype implementation is promising.
 CPU-intensive benchmarks have negligible overhead and even syscall-intensive
-benchmarks exhibit low overhead. We will release the source code of our
+benchmarks exhibit low overhead. On one hand, \tiktok mitigates all double fetch
+bugs in the kernel and gives developers a tool to locate such bugs. On the other
+hand, \tiktok sets the foundation for efficient, stateful system call filtering
+and validation. 
+%
+We will release the source code of our
 prototype as open-source and continue our interaction with the Linux kernel
 community.
 
