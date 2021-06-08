@@ -104,7 +104,8 @@ base in every system. Each \emph{untrusted} user-space process runs under a
 dedicated user in its own address space and must request resources such as
 communication channels or changes to its address space from the \emph{trusted}
 kernel. The user-space/kernel-space interface forms an explicit trust barrier
-and all data that crosses this boundary must be carefully checked by the kernel.
+and all data that crosses this boundary in either direction must be carefully 
+checked by the kernel.
 %
 User-space processes attack the kernel by issuing system calls that then trigger
 kernel bugs, elevating the privileges of the process.
@@ -122,7 +123,7 @@ state.
 %
 An example of a double fetch bug is when the kernel reads the length of a buffer
 from user-space, allocates a kernel buffer, then reads the length a second time
-to finally copy the data from user-space to kernel. An attacker may concurrently
+to finally copy the data from user-space to kernel. An adversary may concurrently
 overwrite the length of the buffer to a larger number after the kernel allocated
 its buffer, causing the memory copy to overflow it.
 %
@@ -178,7 +179,7 @@ sufficient information about the location of the bug.
 The main contributions of this paper are:
 
 \begin{itemize}
-\item Distillation of \tocttou attack vectors into a core variant that protects
+\item Distillation of \tocttou attack vectors into a core invariant that protects
 the kernel against malicious concurrent modifications;
 \item \tiktok, a design that prohibits and detects
 \tocttou attacks against modern kernels, prohibiting their exploitation and
@@ -221,7 +222,7 @@ The adversary has access to a user account on the target machine. They can
 execute arbitrary userspace code, including system calls. Some of the system 
 calls have double-fetch vulnerabilities, and the adversary wants to exploit them,
 e.g., for privilege escalation.
-The attacker may execute on multiple CPU cores and may execute an arbitrary 
+The adversary may execute on multiple CPU cores and may execute an arbitrary 
 sequence of system calls. 
 
 \tiktok mitigates any unintended corruption or information leakage \emph{in the kernel}
@@ -361,9 +362,9 @@ incur performance overhead for false sharing on highly contended pages.
 For an object spanning multiple pages, \tiktok's design sequentially 
 protects each page before reading from it.
 The leading pages containing the object are protected before the
-later pages, allowing an attacker to potentially modify the later 
+later pages, allowing an adversary to potentially modify the later 
 pages before the syscall first reads them.
-However, the attacker is prevented from modifying any of these earlier pages
+However, the adversary is prevented from modifying any of these earlier pages
 after the syscall's first read, ensuring that double-fetches respect
 the invariant.
 If the syscall code contains a \tocttou bug, the modification will
@@ -523,7 +524,7 @@ up-to-date with all the writes to the page, from both user and kernel code.
 Further, \tiktok does not need to merge writes from userspace and syscall code
 on a syscall's completion, since both directly modify the same copy $C_L$.
 All other copies $C_i$ are immutable.
-When the attacker writes to the page in \autoref{fig:doublefetch_tiktok}, the
+When the adversary writes to the page in \autoref{fig:doublefetch_tiktok}, the
 page moves to state 2, linking the snapshot $S_0$ to a copy holding the 
 original value $42$.
 The writes from both the adversary and the syscall itself both affect 
@@ -862,23 +863,46 @@ allocation of a new snapshot.
 If the page is not protected (states 1 and 3), this also 
 triggers a state change where the kernel protects the page
 in all address space that it is mapped in. 
-\autoref{fig:copy_from_user} shows the flowchart implemented
-by the kernel function \Code{raw_copy_from_user} for reading
-from user memory.
+\autoref{fig:copy_from_user} shows the flowchart of the steps
+implemented by the kernel function \Code{raw_copy_from_user} for 
+reading from user memory.
 This function also uses the kernel's \Code{mark_page_accessed} 
 interface to move the page to the ``Active'' state for the 
 kernel's swapping mechanism, making the page ineligible for being 
 swapped out.
 
-\mat{Oddly phrased. What does "kernel has an exception" mean? Handles an
-exception? Special cases that exception?}
-The Linux kernel has an exception to the aforementioned method
-of handling kernel reads from user memory, namely
-\Code{raw_copy_from_user_inatomic}.
-This function is used by the kernel to read user memory in 
-special situations such as a kernel oops, where the kernel
-reads user memory to provide a backtrace and does not 
-care about \tocttou protection.
+\paragraph{Exemptions}
+Our prototype \tiktok kernel exempts a couple of functions 
+from \tiktok's invariant, and therefore are not instrumented 
+to follow the aforementioned steps while accessing userspace
+memory. 
+\Code{raw_copy_from_user_inatomic} is used by the kernel to 
+read user memory in special situations such as a kernel 
+oops\footnotemark 
+where the kernel reads user memory to provide a backtrace and 
+does not care about \tocttou protection.
+In our prototype, we also exempt the \Code{write} system 
+call's read from user memory from instrumentation.
+The \Code{write} system call takes three arguments: a 
+file-descriptor passed as a register, a pointer to a user 
+buffer and a count of bytes to be written to the file.
+While the write to the file's pages is sensitive, and 
+\tiktok takes care to ensure that it follows the page state 
+machine, the read from userspace is not. 
+The syscall reads from userspace only once, and its data 
+is only used for copying into the file.
+An adversary who modifies the user buffer concurrently with 
+the syscall only manages to change the contents written to 
+file, which it could have done anyway since it has access to 
+this buffer.
+A kernel developer can similarly exempt other syscall which 
+they can prove to be secure from doublefetch bugs.
+
+\footnotetext{A kernel oops is triggered when the kernel detects a 
+problem while running which can affect its proper functioning, such 
+as corrupted data structures. 
+A more severe version, a kernel panic, causes the kernel to stop 
+executing, expecting data loss or damage if it does.}
 
 \subsection{Handling Faults}
 
@@ -1094,8 +1118,8 @@ but instruments all syscalls including \Code{write}.
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/npb_performance.pdf}
-  \caption{\tiktok performance on NPB benchmarks relative to baseline with 
-          the same parallelization technique}
+  \caption{\tiktok performance on NPB benchmarks relative to the baseline 
+          system with the same parallelization technique}
   \label{fig:npb_performance}
 \end{figure}
 
@@ -1140,11 +1164,11 @@ involve parallelism.
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/pts_performance.pdf}
-  \caption{\tiktok performance on PTS benchmarks relative to baseline system}
+  \caption{\tiktok performance on PTS benchmarks relative to the baseline system}
   \label{fig:pts_performance}
 \end{figure}
 
-The Phoronix Test Suite (PTS)~\cite{pts} includes a large set of 
+The Phoronix Test Suite (PTS)~\cite{pts} includes a large set ($>500$) of 
 open-source benchmarks, of which we have chosen a range of benchmarks 
 suitable for evaluating both desktop and server performance.
 \mat{How did we select the benchmarks? Why is this a good selection? And argue
@@ -1194,9 +1218,9 @@ which also instruments these syscalls.
 To highlight the worst-case performance of the na\"ive approach, we 
 evaluate the performance of the IPC benchmark on \tiktok-extra due 
 to its high frequency of \Code{write} syscalls.
-From \autoref{fig:pts_performance}, we see that the benchmark's 
-performance is further degraded by $81\%$ compared to \tiktok, 
-showing that developer effort towards properly exempting 
+With \tiktok-extra, the performance of the IPC benchmark falls to 
+$12.6\%$ of the baseline, a further degradation of $81\%$ compared 
+to \tiktok, showing that developer effort towards properly exempting 
 frequently called syscalls from \tiktok protections is crucial
 towards for implementations to maintain competitive performance
 compared to the baseline.
