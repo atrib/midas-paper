@@ -303,8 +303,10 @@ by code containing a \tocttou bug as vulnerable data.
   \item \label{attk:devicefiles} \emph{Device double fetch}: The target 
   syscall is reading a page available for direct-memory access (DMA) by 
   an I/O device. The device can initiate a DMA write, modifying the 
-  vulnerable data. This avenue does not use store instructions in any 
-  CPU core.
+  vulnerable data. This attack does not use store instructions in any 
+  CPU core. Alternately, the page could be a device-backed page using 
+  memory-mapped I/O. In this case, the contents of the vulnerable 
+  data can change due to external changes to the device's state.
   % device write -> kernel read
 
 \end{enumerate}
@@ -692,7 +694,7 @@ correctness, because an equivalent, valid, safe non-\tiktok trace
 exists where all of the writes have been postponed, in the same order 
 to after the double fetch reads. 
 
-\paragraph{Exceptions}
+\paragraph{Exemptions}
 Certain syscalls such as \Code{futex} rely on user data changing between 
 double fetches to implement their functionality and cannot be protected by
 \tiktok.
@@ -703,7 +705,7 @@ threads to update a condition the syscall is waiting for.
 Subjecting a \Code{futex} syscall to \tiktok's invariants will prevent
 it from ever waking up the waiting task.
 Such syscalls cannot be protected by \tiktok, and we implement an 
-exception list to prevent transitions in the state machines of pages read 
+exemption list to prevent transitions in the state machines of pages read 
 by these syscalls.
 The code for these syscalls must be manually inspected for double-fetch 
 vulnerabilities.
@@ -839,7 +841,9 @@ Each pagetable entry for this page in different address spaces
 map the copy $C_L$, enabling userspace to directly access this
 copy with reads (and writes for writable pages).
 We use one software-controlled bit (SW3) in the pagetable entries 
-to track the protection status of the page, and another (SW2)\footnotemark
+to track the protection status of the page, and another 
+(SW2)\footnote{The SW2 bit is also used by the Software Dirty Pages feature of 
+Linux, and cannot be run alongside \tiktok in our prototype.}
 to track the original protections for the page. 
 SW3 is set whenever the page is in one of the two protected
 states (1 and 3).
@@ -854,9 +858,6 @@ require storing the protection status of pages in a separate data structure.
 The duplication status of the page is implicitly encoded in the 
 snapshots: the page is duplicated when any of its snapshots
 holds a pointer to a copy other than $C_L$.
-
-\footnotetext{The SW2 bit is also used by the Software Dirty Pages feature of 
-Linux, and cannot be run alongside \tiktok in our prototype.}
 
 Changing the protection state of pages requires updates to 
 PTEs for the page in all address spaces where the page is mapped.
@@ -895,10 +896,15 @@ to follow the aforementioned steps while accessing userspace
 memory. 
 \Code{raw_copy_from_user_inatomic} is used by the kernel to 
 read user memory in special situations such as a kernel 
-oops\footnotemark 
-where the kernel reads user memory to provide a backtrace. In this severe
-situation the goal of the kernel is to collect debug information before its
-imminent termination and no \tocttou protection is needed.
+oops\footnote{A kernel oops is triggered when the kernel detects a 
+problem while running which can affect its proper functioning, such 
+as corrupted data structures. 
+A more severe version, a kernel panic, causes the kernel to stop 
+executing, expecting data loss or damage if it does.}
+where the kernel reads user memory to provide a backtrace. 
+In this severe situation, the goal of the kernel is to collect debug 
+information before its imminent termination and no \tocttou protection 
+is needed.
 In our prototype, we also exempt the \Code{write} system 
 call's read from user memory from instrumentation.
 The \Code{write} system call takes three arguments: a 
@@ -915,12 +921,6 @@ file, which it could have done anyway since it has access to
 this buffer.
 A kernel developer can similarly exempt other syscall which 
 they can prove to be secure from doublefetch bugs.
-
-\footnotetext{A kernel oops is triggered when the kernel detects a 
-problem while running which can affect its proper functioning, such 
-as corrupted data structures. 
-A more severe version, a kernel panic, causes the kernel to stop 
-executing, expecting data loss or damage if it does.}
 
 \subsection{Handling Faults}
 
@@ -1037,7 +1037,11 @@ call a generic function (\Code{generic_file_write_iter}) to actually
 write the data into the page.
 Instrumenting this generic function, therefore, protects the kernel
 for a wide range of common file-systems (including ext4, nfs and 
-ntfs). \footnotemark
+ntfs). \footnote{A more comprehensive list of kernel-provided FS drivers 
+protected via \Code{generic_file_write_iter} includes v9fs, ADFS, AFFS, 
+AFS, BFS, CIFS, eCryptfs, extFAT, ext2, F2FS,  FAT, FUSE, HFS, HFS+, 
+hostfs, HPFS, JFS, JFFS2, Minix, NILFS2, OMFS, OrangeFS, ramfs, ReiserFS,
+SystemV, UBIFS, UDF, UFS, VboxSF, shmem.}
 The added instrumentation checks whether the target page is 
 protected, and if so, transitions it to the next state and 
 creates a copy of the page before writing to the latest copy.
@@ -1057,12 +1061,6 @@ One solution would be for the kernel to inspect the relocations table of
 a new module while loading it to see if it uses \Code{generic_file_write_iter}
 and raising a warning if it does not.
 
-\footnotetext{A more comprehensive list of kernel-provided FS drivers 
-protected via \Code{generic_file_write_iter} includes v9fs, ADFS, AFFS, 
-AFS, BFS, CIFS, eCryptfs, extFAT, ext2, F2FS,  FAT, FUSE, HFS, HFS+, 
-hostfs, HPFS, JFS, JFFS2, Minix, NILFS2, OMFS, OrangeFS, ramfs, ReiserFS,
-SystemV, UBIFS, UDF, UFS, VboxSF, shmem.}
-
 \subsection{New mappings to protected pages}
 
 Our \tiktok prototype preserves the state machine for user pages
@@ -1081,6 +1079,49 @@ when called without the \Code{CLONE_VM} flag creating new mappings
 to mapped pages. 
 We instrument this syscall to ensure that new mappings for protected 
 pages are also correctly protected.
+
+\subsection{Discussion}
+
+\paragraph{Protecting against device writes}
+Device-backed pages, or pages for which devices have DMA access can 
+change independently of software. 
+Specially, device-backed pages which are used with memory-mapped I/O 
+to control the device can change based on the device's state due to 
+external events, without user or kernel action.
+Our current implementation does not protect against either of these
+attack vectors.
+For device-backed pages, Discretionary Access Control (DAC) can 
+be used to prevent the mapping of such pages into the address 
+spaces of untrusted user-controlled processes.
+This is an unlikely situation since non-superuser users are not 
+allowed to access devices directly.
+Access to pages to which devices can DMA can be controlled for 
+devices and processors which supports IOMMUs.
+For such processors, updates to the IO page tables would prevent
+devices from writing to protected pages, preventing \autoref{attk:devicefiles}.
+
+\paragraph{Optimizations on capable hardware}
+To protect a page in an address space, a \tiktok implementation 
+needs to change the permissions in the page table for that page.
+Modern CPUs cache virtual memory translations in per-core 
+Translation Lookaside Buffers (TLBs) which need to be (partially) 
+flushed on page-table updates (TLB shootdown).
+On most CPUs, the core updating permissions will perform a global 
+shootdown to ensure that other TLBs for cores executing in the 
+same address space are also updated.
+Implemented with inter-processor interrupts, global shootdowns 
+are expensive. 
+A more efficient solution would be to have special hardware support
+for invalidating TLB entries globally, not just on the executing 
+core. 
+The AMD64 architecture manual~\cite{amd64prog} lists such an instruction 
+(\Code{INVLPGB}), though it is yet to be implemented in any commercially 
+available processors.
+Alternate architectures with a single, system-wide translation 
+table~\cite{guptarebooting,ChaseLFL94} 
+would also benefit \tiktok by having a single page table to 
+update instead of multiple page tables for each address space a page
+is mapped in.
 
 
 %%%%%%%%%%%%%%%%%%%%
@@ -1242,11 +1283,6 @@ to \tiktok, showing that developer effort towards properly exempting
 frequently called syscalls from \tiktok protections is crucial
 towards for implementations to maintain competitive performance
 compared to the baseline.
-
-% \todo{Discuss how Midgard would help}
-
-% \todo{In implementation, discuss how IOMMU's can be used to prevent devide writes,
-% but is currently unsupported.}
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
