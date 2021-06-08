@@ -250,7 +250,7 @@ by code containing a \tocttou bug as vulnerable data.
   as writable and modifies the vulnerable data using the new mappings.
   This approach attempts to bypass any protections set up by the kernel
   when first reading the vulnerable data by adding a new mapping to it later.
-  In a variant of this attack, the adversary runs forks the address space, 
+  In a variant of this attack, the adversary forks the address space, 
   creating a new address space from where it can try to modify the vulnerable 
   data.
   % mmap(): user write -> kernel read
@@ -870,6 +870,8 @@ interface to move the page to the ``Active'' state for the
 kernel's swapping mechanism, making the page ineligible for being 
 swapped out.
 
+\mat{Oddly phrased. What does "kernel has an exception" mean? Handles an
+exception? Special cases that exception?}
 The Linux kernel has an exception to the aforementioned method
 of handling kernel reads from user memory, namely
 \Code{raw_copy_from_user_inatomic}.
@@ -980,7 +982,7 @@ writes to copies of pages of the file stored in memory within
 a page cache.
 In the spirit of abstraction, the kernel does not directly write to 
 these pages, but calls the relevant file-system (FS) driver instead.
-When writing to pages in the page cache, FS driver will access the 
+When writing to pages in the page cache, the FS driver will access the 
 page using kernel mappings.
 Since \tiktok only protects userspace mappings for protected pages, 
 writes by FS drivers will not raise a fault.
@@ -1025,7 +1027,7 @@ Our \tiktok prototype preserves the state machine for user pages
 across operations which create new mappings to a page, as is 
 exploited in \autoref{attk:remapping}.
 The \Code{mmap} syscall is responsible for creating new virtual
-memory mappings for processes, and needs to be instrumented.
+memory mappings for processes, and requires instrumentation.
 When \Code{mmap} is called with the \Code{MAP_POPULATE} flag, or 
 on the first access to the page, the \Code{mm_populate} function 
 is responsible for actually mapping the correct page in the 
@@ -1037,6 +1039,7 @@ when called without the \Code{CLONE_VM} flag creating new mappings
 to mapped pages. 
 We instrument this syscall to ensure that new mappings for protected 
 pages are also correctly protected.
+
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
