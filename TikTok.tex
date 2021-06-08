@@ -107,10 +107,11 @@ that through a syscall's lifetime, every read to a userspace object
 will return the same value.
 
 \tiktok shows no noticeable drop in performance when evaluated on CPU-bound
-workloads. On extremely system call heavy workloads, \tiktok shows
-$18\%$ overhead for the nginx benchmark, while protecting the kernel against
-any \tocttou attacks. On average, \tiktok shows a $4.3\%$ overhead on 
+workloads. On extremely system call heavy workloads, \tiktok incurs $18\%$
+performance overhead for the nginx benchmark, while protecting the kernel
+against any \tocttou attacks. On average, \tiktok shows a $4.3\%$ overhead on
 diverse workloads across two benchmark suites.
+\mat{nginx may be a bad example due to high overhead.}
 
 \end{abstract}
 
@@ -188,11 +189,11 @@ the objects and therefore allow forward progress.
 We implement our invariant in \tiktok for the Linux kernel but the defense
 applies to any modern operating system kernel.
 
-% TODO performance
 Our evaluation shows overall low performance overhead for our mitigation.
 On parallel workloads from the NAS Parallel Benchmarks suite, \tiktok shows 
-an average overhead of $3.7\%$ while its overhead on more kernel-intensive 
-workloads from the Phoronix Test Suite is $5\%$.
+an average performance overhead of $3.7\%$ while its performance overhead on
+more kernel-intensive workloads from the Phoronix Test Suite is $5\%$.
+\mat{Can we say anything about memory overhead?}
 The security evaluation demonstrates how \tiktok successfully stops all attacks
 against vulnerable system calls, along with providing the developer with
 sufficient information about the location of the bug.
@@ -209,7 +210,9 @@ enabling developers to detect \tocttou bugs;
 \end{itemize}
 
 
+%%%%%%%%%%%%%%%%%%%%
 \section{Background}
+%%%%%%%%%%%%%%%%%%%%
 
 \tiktok orchestrates several mechanisms within the Linux memory subsystem 
 to provide its protection guarantees.
@@ -220,12 +223,17 @@ page tables.
 This section provides the background information necessary to reason about 
 why and how \tiktok protects syscalls from concurrent writes.
 
+
 \subsection{Page Tables and Memory Protection}
-Virtually all modern architectures (for e.g., x86, x86-64, ARM, SPARC and 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Virtually all modern architectures (e.g., x86, x86-64, ARM, SPARC and 
 RISC-V) implement separate virtual and physical
-address spaces based on fixed-size regions called pages. 
-\footnote{Some architectures also include segmentation-based protection 
-working in tandem with page tables, but are irrelevant for \tiktok.}
+address spaces based on fixed-size regions called pages.
+%
+Some architectures also include segmentation-based protection 
+working in tandem with page tables, but segmentation is irrelevant for \tiktok.
+%
 Programs execute in their virtual address space while caches and main memory
 are accessed using physical addresses.
 Architectures rely on page tables orchestrated by the operating system 
@@ -235,6 +243,7 @@ virtual address are used as indices into levels of the page table.
 At the leaf page table, a unique page-table entry (PTE) stores the 
 translation and protection information for a page.
 
+\mat{This can likely be shortened as we don't need most information.}
 A PTE in x86-64 is a 64-bit value holding the following metadata:
 \begin{description}[noitemsep]
   \item[Present bit (P)] which indicates that the PTE holds a valid entry
@@ -245,7 +254,7 @@ A PTE in x86-64 is a 64-bit value holding the following metadata:
         a supervisor page or accessible to userspace
   \item[Software-usable bits] (SW1-SW4) ignored by the MMU and used by the 
         operating system to store metadata
-  \item[Page Frame Number (PFN)] identifying the page's physical address
+  \item[Page Frame Number (PFN)] identifying the page's physical address.
 \end{description}
 
 An access using a virtual address first reads the corresponding PTE's 
@@ -265,8 +274,11 @@ On most architectures, the OS is responsible for keeping TLBs coherent with
 the page table, necessitating entries to be flushed from TLBs when the 
 corresponding PTE is updated.
 
+
 \subsection{Linux Memory Subsystem}
-Linux implements various abstractions, such as processes, files and shared
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Linux implements various abstractions, such as processes, files, and shared
 memory using the architecture's page tables.
 All threads within a Linux process share a single address space, and 
 consequently use the same page table for translation and protection.
@@ -304,7 +316,9 @@ Mapped file pages can therefore be accessed by the file-system using
 kernel addresses, and userspace programs using userspace addresses.
 Userspace pages not backed by a file are called anonymous pages.
 
+
 \subsection{Supervisor Memory Protection  and user-copy interfaces}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Kernel accesses to userspace memory use userspace mappings, and 
 come with the risk of the kernel confusing data structures 
@@ -330,7 +344,7 @@ The architecture also exposes privileged instructions
 control.
 On the OS side, all accesses to userspace memory are made explicit, 
 using special functions to read from and write to userspace memory.
-Any unintended access, outside these functions, cause a 
+Any unintended access, outside these functions, causes a 
 hardware fault, indicating either a kernel bug or an attack.
 Linux implements the functions \Code{copy_{from/to}_user} which 
 use the access control instructions to disable SMAP before 
@@ -341,6 +355,8 @@ and therefore protect them.
 
 
 \subsection{Double-fetch bugs}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \begin{figure}[]
   \centering
   \includegraphics[width=.8\linewidth]{img/doublefetch.pdf}
@@ -369,6 +385,7 @@ Wang et al.~\cite{wang2018survey} showed that double-fetches appear not only
 in kernels, but wherever there is a trust boundary to cross (e.g., kernel ---
 hypervisor~\cite{wilhelm2016xenpwn} and hardware---kernel
 boundaries~\cite{lu2018untrusted}). 
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Attack vectors}
@@ -930,10 +947,10 @@ sanitizer could, in detail, compare the differences of the two pages to rule out
 false positives.
 
 
-%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{\tiktok implementation}
 \label{sec:impl}
-%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 The \tiktok prototype implements the state machine described in 
 \autoref{sec:design} on Linux version 5.11, targeting the x86-64 
@@ -958,6 +975,7 @@ from states 2 and 4.
 
 
 \subsection{Tracking page state}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/book-keeping.pdf}
@@ -988,7 +1006,7 @@ map the copy $C_L$, enabling userspace to directly access this
 copy with reads (and writes for writable pages).
 We use one software-controlled bit (SW3) in the pagetable entries 
 to track the protection status of the page, and another 
-(SW2)\footnote{The SW2 bit is also used by the Software Dirty Pages feature of 
+(SW2)\footnote{The SW2 bit is alternatively used by the experimental Software Dirty Pages feature of 
 Linux, and cannot be run alongside \tiktok in our prototype.}
 to track the original protections for the page. 
 SW3 is set whenever the page is in one of the two protected
@@ -1013,7 +1031,9 @@ address in each.
 Our prototype uses this mapping to change PTE permissions across
 multiple address spaces for a page.
 
+
 \subsection{Kernel reads from user memory}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}[]
   \centering
@@ -1068,7 +1088,9 @@ this buffer.
 A kernel developer can similarly exempt other syscall which 
 they can prove to be secure from doublefetch bugs.
 
+
 \subsection{Handling Faults}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/pagefault.pdf}
@@ -1157,7 +1179,10 @@ Finally, this new page is transitioned to its next state to allow
 for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
 
+
 \subsection{Syscall completion}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 On syscall completion, \tiktok cleans up snapshots allocated for 
 the syscall by instrumenting the end of \Code{do_syscall_64}.
 \tiktok goes through the list of all the pages for which the 
@@ -1165,7 +1190,9 @@ executing syscall has a snapshot, and frees those snapshots.
 For snapshots which were the last to point to a copy, that 
 copy is also freed.
 
+
 \subsection{File system writes}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \tiktok instruments file-system writes to protect the kernel
 from \autoref{attk:writebuffers}.
@@ -1211,7 +1238,9 @@ One solution would be for the kernel to inspect the relocations table of
 a new module while loading it to see if it uses \Code{generic_file_write_iter}
 and raising a warning if it does not.
 
+
 \subsection{New mappings to protected pages}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Our \tiktok prototype preserves the state machine for user pages
 across operations which create new mappings to a page, as is 
@@ -1230,7 +1259,9 @@ to mapped pages.
 We instrument this syscall to ensure that new mappings for protected 
 pages are also correctly protected.
 
+
 \subsection{Discussion}
+%%%%%%%%%%%%%%%%%%%%%%%
 
 \paragraph{Protecting against device writes}
 Device-backed pages, or pages for which devices have DMA access can 
@@ -1260,7 +1291,8 @@ On most CPUs, the core updating permissions will perform a global
 shootdown to ensure that other TLBs for cores executing in the 
 same address space are also updated.
 Implemented with inter-processor interrupts, global shootdowns 
-are expensive. 
+are expensive and account for the majority of \tiktok overhead.
+
 A more efficient solution would be to have special hardware support
 for invalidating TLB entries globally, not just on the executing 
 core. 
@@ -1282,6 +1314,7 @@ is mapped in.
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
 %%%%%%%%%%%%%%%%%%%%
+
 In this section, we quantify \tiktok's overhead on workloads 
 with different characteristics, both compute-bound applications
 which rarely use syscalls and I/O-bound applications which 
@@ -1328,6 +1361,7 @@ but instruments all syscalls including \Code{write}.
 
 
 \subsection{NAS Parallel Benchmarks}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/npb_performance.pdf}
@@ -1374,6 +1408,7 @@ involve parallelism.
 
 
 \subsection{Phoronix Test Suite}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/pts_performance.pdf}
@@ -1384,13 +1419,13 @@ involve parallelism.
 The Phoronix Test Suite (PTS)~\cite{pts} includes a large set ($>500$) of 
 open-source benchmarks, of which we have chosen a range of benchmarks 
 suitable for evaluating both desktop and server performance.
-The benchmarks were chosen to only include those that require kernel 
-activity, and therefore will test the overhead of \tiktok's instrumentation.
+We biased the selection to benchmarks that require (heavy) kernel activity to
+test the overhead of \tiktok's instrumentation.
 A sole benchmark, OpenSSL, is chosen to represent single-threaded, 
-CPU-bound workloads for which kernel performance is irrelevant.
+CPU-bound workloads for which kernel performance is less relevant.
 The benchmarks are also varied, ranging from single-threaded (Pybench) to 
 multi-threaded, multi-process workloads (Apache).
-At the extreme, we have an IPC benchmark transferring small, 128-byte 
+At the extreme, we have an IPC benchmark transferring tiny, 128-byte 
 buffers between processes which spends all of its time in syscalls
 and whose performance is entirely dependent on kernel IPC performance.
 
