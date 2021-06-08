@@ -69,7 +69,7 @@
 
 \newcommand\mat[1]{\noindent{\color{blue} {\bf \fbox{Mat}} {\it#1}}}
 \newcommand\atri[1]{\noindent{\color{red} {\bf \fbox{AB}} {\it#1}}}
-\newcommand\UT[1]{\noindent{\color{green} {\bf \fbox{UT}} {\it#1}}}
+\newcommand\UT[1]{\noindent{\color{violet} {\bf \fbox{UT}} {\it#1}}}
 
 %don't want date printed
 \date{}
@@ -236,7 +236,7 @@ At the leaf page table, a unique page-table entry (PTE) stores the
 translation and protection information for a page.
 
 A PTE in x86-64 is a 64-bit value holding the following metadata:
-\begin{description}
+\begin{description}[noitemsep]
   \item[Present bit (P)] which indicates that the PTE holds a valid entry
   \item[Read/Write bit (R/W)] which is set if the page is writable
   \item[Not Executable bit (NX)] which is set if code stored on the page 
@@ -1406,18 +1406,17 @@ Accordingly, these benchmarks see a negligible overhead when running
 on our prototype kernel.
 The benchmark titled ``Linux'' represents compilation of the Linux kernel.
 While compilation is mostly CPU bound, compiling the Linux kernel requires 
-compilation of a large number of source files, resulting in the creation 
-of a large number of compiler processes each of which read different files. 
-\tiktok experiences a small, but non-negligible overhead on this workload.
+accessing a large number of source files, resulting in the creation 
+of a large number of compiler processes each of which read and create 
+different files. 
+\tiktok experiences a small, but non-negligible overhead of $4\%$ on this workload.
 Redis requires syscalls for receiving and replying to requests, but 
 processes its transaction entirely in-memory. 
-Our evaluation prototype version achieves almost identical performance
-as the baseline kernel.
-However, Redis' performance on initial, unoptimized prototypes showed
-significant degradation in performance (upto $69\%$).
-\mat{What key optimization enabled this good performance? And why?}
-\UT{Recording PTS with perf using the PTS flag and analyzing the graph could answer this, but it
-may take several hours to do correctly.}
+While early prototypes of our kernel caused significant degradation
+of Redis' throughput (upto $69\%$), demonstrating Redis' dependence 
+on kernel performance, 
+our evaluation prototype achieves almost identical results as the baseline, 
+highlighting the prototype's competitive performance.
 The webservers, Apache and Nginx require network and file-system I/O, 
 and rely heavily on syscall performance. 
 We see that Nginx, which is a higher-performance webserver, sees a larger
