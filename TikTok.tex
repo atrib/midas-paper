@@ -75,7 +75,7 @@
 \date{}
 
 % make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{\Large \bf \tiktok: \atri{Systematic?} Kernel TOCTTOU Protection}
+\title{\Large \bf \tiktok: Systematic Kernel TOCTTOU Protection}
 
 %for single author (just remove % characters)
 \author{
@@ -156,7 +156,8 @@ Furthermore, Watson~\cite{watson2007exploiting} blames an unfixable \tocttou
 constellation as a reason for the generic insecurity of \emph{system call
 wrappers}. For example, \tiktok enables deep argument inspection for 
 SecComp~\cite{seccomp_deep, seccomp}, dereferencing pointer arguments without introducing 
-\tocttou bugs.
+\tocttou bugs. Without \tiktok, such inspection is inherently impossible due to
+inherent \tocttou bugs.
 
 To mitigate double-fetch bugs in the kernel, a system must prohibit
 \emph{concurrent changes} to memory accessed by the system call. Attackers may
@@ -245,11 +246,11 @@ translation and protection information for a page.
 
 A PTE in x86-64 is a 64-bit value holding the following metadata:
 \begin{description}[noitemsep]
-  \item[Present bit (P)] which marks the PTE's validity
-  \item[Protection bits (NX, R/W, U/S)] which restricts the type of 
-        access and the privilege level of the accessing code
+  \item[Present bit (P)] which marks the PTE's validity;
+  \item[Protection bits (NX, R/W, U/S)] which restrict the type of;
+        access and the privilege level of the accessing code;
   \item[Software-usable bits] (SW1-SW4) ignored by the MMU and used by the 
-        operating system to store metadata
+        operating system to store metadata;
   \item[Page Frame Number (PFN)] identifying the page's physical address.
 \end{description}
 
@@ -394,6 +395,7 @@ data is modified between vulnerable double-fetches.
 
 \subsection{Threat Model}
 \label{sec:threatmodel}
+%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Nothing fancy -- the adversary is just trying to hack the system
 % No black magic allowed
@@ -411,8 +413,10 @@ or side-channels~\cite{kocher2019spectre}, and file-system TOCTTOU
 attacks~\cite{payer2012protecting, pu2006methodical, wei2010modeling,
 tsafrir2008portably} are out of scope.
 
-\subsection{Attacks Classification}
+
+\subsection{Attack Classification}
 \label{sec:attacks}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{table}
   \begin{center}
@@ -433,15 +437,15 @@ tsafrir2008portably} are out of scope.
   \label{tab:attack_class}
 \end{table}
 
-\tiktok guards data passed to the kernel against concurrent modification.
+\tiktok guards data processed during a syscall's execution against concurrent modification.
 We denote the data fetched twice as vulnerable data.
-In this section, we classify attacks based on two criterion: the 
+In this section, we classify attacks based on two criteria: the 
 privilege level of the writer, and whether the mapping used for writing 
 existed at the time of the first read (see \autoref{tab:attack_class}).
-This classification helps us understand existing attacks and how to 
-protect against them, and where future attacks can arise.
+This classification helps understand existing attacks and how to 
+protect against them, and where future attacks (bugs) may arise.
 The device column is for attacks where a device (any processing element 
-besides a CPU core, such as an attached I/O device like a network card or 
+besides a CPU core, such as an attached I/O device with direct memory access like a network card or 
 a coprocessor like a GPU) is responsible for modifying vulnerable data.
 
 Existing userspace mappings to a page can be used to modify 
@@ -467,12 +471,13 @@ mappings to pages containing vulnerable data at the time of the
 targeted syscall's first read.
 
 Existing kernel mappings to a page also mapped in userspace can be 
-leveraged by an attacker in another confused-deputy attack.
+leveraged by an attacker in a confused-deputy attack.
 A file-backed page in the page-cache needs to be mapped in a
 userspace process and then passed as an argument to the targeted syscall.
 A concurrently executing \Code{write} syscall can modify the 
 vulnerable data using kernel mappings for the page-cache pages.
 This attack is called \emph{inception double fetch}~\cite{watson2007exploiting}.
+\mat{Did we call it inception double fetch?}
 The kernel does not explicitly track kernel addresses mapping to a page, 
 but the file-system driver does explicitly find the page before writing to it.
 A protection mechanism must, therefore, instrument file-system 
@@ -522,6 +527,7 @@ modules and confused-deputy attacks leveraging a incompetent
 system administrator are also outside the purview of our threat model.
 However, on processors supporting IOMMUs, \tiktok can be extended 
 to protect against modifications by DMA devices.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{\tiktok Design} 
