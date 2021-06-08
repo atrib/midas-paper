@@ -890,14 +890,15 @@ swapped out.
 
 \paragraph{Exemptions}
 Our prototype \tiktok kernel exempts a couple of functions 
-from \tiktok's invariant, and therefore are not instrumented 
+from \tiktok's invariant, and they are therefore not instrumented 
 to follow the aforementioned steps while accessing userspace
 memory. 
 \Code{raw_copy_from_user_inatomic} is used by the kernel to 
 read user memory in special situations such as a kernel 
 oops\footnotemark 
-where the kernel reads user memory to provide a backtrace and 
-does not care about \tocttou protection.
+where the kernel reads user memory to provide a backtrace. In this severe
+situation the goal of the kernel is to collect debug information before its
+imminent termination and no \tocttou protection is needed.
 In our prototype, we also exempt the \Code{write} system 
 call's read from user memory from instrumentation.
 The \Code{write} system call takes three arguments: a 
