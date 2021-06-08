@@ -365,12 +365,12 @@ Double-fetch bugs occur when a privileged environment (such as the kernel)
 reads untrusted memory two or more times, and the read values are not 
 identical. 
 An example of such a situation is depicted in \autoref{fig:doublefetch}.
-In between two reads by the target thread, the value in memory is changed
-by an adversary.
+In between two reads by the target thread, the value of \Code{X} in memory 
+is changed by an adversary.
 The bug is a race condition since it requires accesses to memory in 
 a particular order across threads.
-The situation where the first fetch validates the value in memory and 
-the second fetch uses this value is called a 
+The situation where the first fetch validates an object's value in memory and 
+the second fetch uses the same object's value is called a 
 \emph{Time-of-check to time-of-use (\tocttou)} bug.
 \tocttou bugs have been widely studied in file systems, where the 
 API makes it possible to swap the file after validating the access 
@@ -459,9 +459,8 @@ vulnerable data in a confused-deputy attack.
 When the adversary passes a pointer to the vulnerable data to 
 the syscall as a user-buffer in which the syscall can return some 
 data, the kernel's write to the buffer can modify vulnerable data.
-An example of this is the \Code{read} system call where userspace 
-provides a pointer to a user buffer where the contents of a file 
-will be copied.
+For example, the \Code{read} system call takes an argument pointing 
+to a user buffer where the contents of a file will be copied to.
 Another example is \Code{rt_sigaction} where the kernel writes to 
 a user buffer pointed to by the \Code{oldact} argument.
 In both of these attacks, the adversarial write uses a userspace
@@ -561,7 +560,7 @@ a fault when they are not.
 Therefore, \tiktok implements its invariants at page-granularity, not object 
 granularity: when a syscall reads from userspace, every page touched by that 
 read is covered, not merely the bytes read.
-As a side-effect of this implementation, \tiktok does not distinguish
+As a side-effect of its implementation, \tiktok does not distinguish
 accesses to different parts of a page, and may incur performance overhead due
 to false sharing within a page. 
 Page-granularity protections are more conservative compared to byte-granularity
@@ -590,7 +589,7 @@ This requirement prevents deadlocks and improves performance vis-a-vis
 a na\"ive design which blocks all other tasks writing to pages already 
 read by a syscall until the syscall completes.
 The na\"ive design can deadlock because it introduces dependencies between
-tasks for forward progress, and we illustrate this in the following example
+tasks for forward progress, which we illustrate in the following example
 of a system with two tasks (A and B):
 \begin{inparaenum}[\itshape i\upshape)]
   \item Task A issues a blocking system call which reads a user page and blocks, then
@@ -734,8 +733,9 @@ Certain syscalls such as \Code{rt_sigaction} both read and write from
 the same user page. 
 A write by \Code{rt_sigaction} to the page it has previously read will update
 the page's latest copy $C_L$, but not the duplicate copy $C_0$.
-This ensures that the copy $C_L$ always holds the latest contents of the page, 
-up-to-date with all the writes to the page, from both user and kernel code. 
+\tiktok's write policy ensures that the copy $C_L$ always holds the latest 
+contents of the page, up-to-date with all the writes to the page, from both user 
+and kernel code. 
 Further, \tiktok does not need to merge writes from userspace and syscall code
 on a syscall's completion, since both directly modify the same copy $C_L$.
 All other copies $C_i$ are immutable.
@@ -774,7 +774,7 @@ If $S_i$ is mapped to any other duplicate $C_i$, \tiktok frees the copy along
 with the snapshot if $S_i$ is the last remaining snapshot mapped to $C_i$.
 If the page was in state 2, $C_L$ was writable and unmapped by any snapshot,
 so \tiktok changes the page to state 0.
-This transitions is shown in \autoref{fig:doublefetch_tiktok}, where the 
+This transition is shown in \autoref{fig:doublefetch_tiktok}, where the 
 snapshot $S_0$ and the copy $C_0$ are both discarded.
 If the page was in state 3, $C_L$ was read-only and mapped by some other
 snapshot, so \tiktok moves the page to state 1.
@@ -965,7 +965,7 @@ When a syscall first reads from a user page, it creates a snapshot
 of that page.
 On future reads, the snapshot is used in order to maintain the 
 invariant.
-This means that for reading from a page, implementations must check 
+While reading from a page, implementations must check 
 if a snapshot exists for the syscall: if yes, the snapshot is used
 for the read, otherwise a new snapshot is created and then used 
 for the read. 
@@ -975,8 +975,8 @@ fetch.
 This approach, however, is prone to false positives due to false sharing.
 The two reads might read from the same page, but might access entirely 
 disjoint bytes.
-So far, \tiktok reports double fetches at page granularity. A more precise
-sanitizer could, in detail, compare the differences of the two pages to rule out
+So far, \tiktok reports double fetches at page granularity. 
+A more precise sanitizer could maintain a bitmask of accessed bytes to
 false positives.
 
 
@@ -1022,7 +1022,7 @@ its snapshot and copy sets.
 track this state in our prototype.
 Linux maintains a \Code{struct page} object for every frame of 
 physical memory. 
-We augment this structure with a list holding the snapshots
+We augment \Code{struct page}  with a list holding the snapshots
 for this page, excluding the latest snapshot $L$.
 Each snapshot has a pointer to its copy. 
 In the figure, the snapshots $S_1$ and $S_0$ share the copy $C_0$.
@@ -1034,9 +1034,9 @@ map from a page's frame number to its snaphots list or
 reuse existing data members (e.g., \Code{struct list_head lru} which 
 can be used as a generic list by page owners).
 
-Each pagetable entry for this page in different address spaces 
-map the copy $C_L$, enabling userspace to directly access this
-copy with reads (and writes for writable pages).
+Each pagetable entry for a user page in different address spaces 
+maps the copy $C_L$, enabling userspace to directly access the page
+with reads (and writes for writable pages).
 We use one software-controlled bit (SW3) in the pagetable entries 
 to track the protection status of the page, and another 
 (SW2)\footnote{The SW2 bit is alternatively used by the experimental Software Dirty Pages feature of 
@@ -1077,7 +1077,7 @@ multiple address spaces for a page.
 
 Syscalls reading from user memory the first time triggers the 
 allocation of a new snapshot. 
-If the page is not protected (states 1 and 3), this also 
+If the page is not protected (states 1 and 3), the read also 
 triggers a state change where the kernel protects the page
 in all address space that it is mapped in. 
 \autoref{fig:copy_from_user} shows the flowchart of the steps
@@ -1163,11 +1163,11 @@ accessed.
 For non-NULL PTEs, the handler checks if the PTE indicates that the 
 page is present.
 Non-present pages are swapped-in as usual.
-Otherwise, \tiktok checks if the page was already swapped in by 
+Otherwise, \tiktok checks if the page was previously swapped in by 
 any other task and is now in a protected state.
 If not, the swap proceeds as usual.
 For protected pages, \tiktok implements a state change based on 
-whether the access causing this fault was a read or a write.
+whether the access causing the fault was a read or a write.
 
 In the remaining case, faults for a present page indicate a 
 permission fault (write to a read-only page).
@@ -1175,14 +1175,14 @@ If the page is not a COW-page, the handler then checks if the page
 is in a protected state by checking the SW3 bit.
 If the page was protected, a new copy is allocated and the page 
 transitions to the following state.
-For non-protected pages, however, this fault implies a real access
+For non-protected pages, however, the fault implies a real access
 violation, sending a signal to the process.
 
 COW pages represent separate virtual pages from different 
 address spaces mapped to the same physical page.
-This is illustrated in \autoref{fig:fault_handling_cow} where 
-logically separate pages A and B are actually mapped to the COW
-page.
+An example of a COW page protected by \tiktok is illustrated in 
+\autoref{fig:fault_handling_cow} where logically separate pages A and B 
+are actually mapped to the COW page.
 A COW page cannot be in states 2 or 3, since they cannot have multiple
 \tiktok copies.
 COW pages in state 0 can be dealt with by the kernel's standard
@@ -1196,11 +1196,11 @@ These snapshots correspond to different logical pages, but are
 all squashed into the snapshots list of the single COW page. 
 Therefore, after the kernel duplicates the COW page (new page
 B created, in \autoref{fig:fault_handling_cow}), \tiktok moves 
-the snapshots for the faulting process ($S_B$) to new page.
+the snapshots for the faulting process ($S_B$) to the new page.
 Here, \tiktok also updates the protected page list in the 
 affected syscalls' \Code{task_struct}s so that they point to the 
 new page.
-Finally, this new page is transitioned to its next state to allow 
+Finally, the new page is transitioned to its next state to allow 
 for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
 
@@ -1279,7 +1279,7 @@ and if so, correctly protect the new mapping too.
 Another syscall, \Code{clone}, duplicates a process' address space
 when called without the \Code{CLONE_VM} flag creating new mappings
 to mapped pages. 
-We instrument this syscall to ensure that new mappings for protected 
+We instrument \Code{clone} to ensure that new mappings for protected 
 pages are also correctly protected.
 
 
