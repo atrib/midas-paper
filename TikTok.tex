@@ -367,13 +367,13 @@ Kernel accesses to userspace data therefore become explicit, allowing
 and therefore protect them.
 
 
-\subsection{Double-fetch bugs}
+\subsection{Double-Fetch Bugs}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}[]
   \centering
   \includegraphics[width=.8\linewidth]{img/doublefetch.pdf}
-  \caption{Example of a double-fetch bug}
+  \caption{Example of a double-fetch bug.}
   \label{fig:doublefetch}
 \end{figure}
 
@@ -451,7 +451,7 @@ tsafrir2008portably} are out of scope.
   \bottomrule
   \end{tabular}
   \end{center}
-  \caption{Attack vector classification for \tocttou exploits}
+  \caption{Attack vector classification for \tocttou exploits.}
   \label{tab:attack_class}
 \end{table}
 
@@ -662,7 +662,7 @@ syscalls read from immutable versions to prevent \tocttou bugs and
 syscalls and userspace both write to a single mutable version 
 holding the latest state of the page.}
 
-\subsection{Page state machine}
+\subsection{Page State Machine}
 
 \begin{figure*}[]
   \centering
@@ -823,7 +823,7 @@ System Call & Exemption reason \\
 \Code{execve} & Remaps address space \\ \cline{1-2}
 \end{tabularx}
 \end{center}
-\caption{System calls uninstrumented by \tiktok}
+\caption{System calls uninstrumented by \tiktok.}
 \label{tab:except_syscall}
 \end{table}
 
@@ -1003,7 +1003,7 @@ prune false positives.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{\tiktok implementation}
+\section{\tiktok Implementation}
 \label{sec:impl}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1029,7 +1029,7 @@ Our prototype instruments the Linux' fault handler in the function
 from states 2 and 4.
 
 
-\subsection{Tracking page state}
+\subsection{Tracking Page State}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}[]
@@ -1087,7 +1087,7 @@ Our prototype uses this mapping to change PTE permissions across
 all address spaces for a page.
 
 
-\subsection{Kernel reads from user memory}
+\subsection{Kernel Reads from User Memory}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}[]
@@ -1156,7 +1156,7 @@ they can prove to be secure from double-fetch bugs.
 
 \begin{figure}[h]
   \includegraphics[width=\linewidth]{img/pagefault_cow.pdf}
-  \caption{Flowchart for handling a page fault to a COW page}
+  \caption{Flowchart for handling a page fault to a COW page.}
   \label{fig:fault_handling_cow}
 \end{figure}
 
@@ -1227,7 +1227,7 @@ for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
 
 
-\subsection{Syscall completion}
+\subsection{Syscall Completion}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 On syscall completion, \tiktok cleans up snapshots allocated for 
@@ -1238,7 +1238,7 @@ For snapshots which were the last to point to a copy, that
 copy is also freed.
 
 
-\subsection{File system writes}
+\subsection{File System Writes}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \tiktok instruments file-system writes to protect the kernel
@@ -1288,7 +1288,7 @@ A malicious superuser is, however, outside our threat model.
 % and raising a warning if it does not.
 
 
-\subsection{New mappings to protected pages}
+\subsection{New Mappings to Protected Pages}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Our \tiktok prototype preserves the state machine for user pages
@@ -1399,14 +1399,14 @@ but instruments all syscalls including \Code{write}.
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/npb_performance.pdf}
   \caption{\tiktok performance on NPB benchmarks relative to the baseline 
-          system with the same parallelization technique}
+          system with the same parallelization framework.}
   \label{fig:npb_performance}
 \end{figure}
 
 NAS Parallel Benchmarks (NPB)~\cite{npb} is a benchmark introduced by
 NASA. 
 NPB consists of several parallel programs using different communication
-patterns and is available for two technology stacks for parallel programming:
+patterns and is available for two frameworks for parallel programming:
 OpenMP and MPI.
 % Two variants that test either threads or processes
 OpenMP~\cite{dagum1998openmp} is a compiler extension that splits a 
@@ -1418,8 +1418,8 @@ The two technology stacks have different frequency of syscalls due to
 different communication methods.
 Communication through kernel syscalls for either stack will incur overhead
 due to \tiktok's protection.
-Additional global TLB shootdowns (for snapshot synchronization) added by \tiktok will also affect the 
-performance of such parallel benchmarks.
+Additional global TLB shootdowns (for snapshot synchronization) added by 
+\tiktok will also affect the performance of such parallel benchmarks.
 
 We evaluated NPB benchmarks of class A on our testbench, running 
 4 threads/processes in parallel.
@@ -1428,14 +1428,13 @@ and are all long enough for the kernel to reach equilibrium.
 Certain benchmarks require a parallelism number which is a perfect square.
 On our 8-core CPU, having 4 CPU-bound threads/processes instead of 16 allows 
 all of them to run without time-sharing.
-\autoref{fig:npb_performance} shows \tiktok's performance for both MPI and OpenMP 
+\autoref{fig:npb_performance} shows \tiktok's performance for both MPI and OpenMP,
 normalized to the performance of the baseline system with the same parallelization
-technique for the NPB benchmarks.
-On average, \tiktok achieved $96.3\%$ of the baseline system's performance with 
-both 
-On both systems, \tiktok's performance for the \Code{ep} (Embarrassingly Parallel)
-benchmark is closest to that of the baseline, since it has low 
-communication overheads.
+framework.
+On average, \tiktok achieved $96.3\%$ of the baseline system's performance on 
+both frameworks. 
+\tiktok's performance for the \Code{ep} (Embarrassingly Parallel) benchmark is 
+closest to that of the baseline, since it has low communication overheads.
 \tiktok shows negligible overhead ($3.7\%$) for CPU-bound workloads, even when they 
 involve parallelism.
 
@@ -1445,7 +1444,7 @@ involve parallelism.
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/pts_performance.pdf}
-  \caption{\tiktok performance on PTS benchmarks relative to the baseline system}
+  \caption{\tiktok performance on PTS benchmarks relative to the baseline system.}
   \label{fig:pts_performance}
 \end{figure}
 
