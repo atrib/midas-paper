@@ -806,8 +806,8 @@ This transition is shown in \autoref{fig:doublefetch_tiktok}, where the
 snapshot $S_0$ and the copy $C_0$ are both discarded.
 If the page was in State 3, $C_L$ was read-only and mapped by some other
 snapshot, so \tiktok moves the page to State 1.
-Recall that all snapshots $S_i$ (i.e. excepting snapshot $L$) are immutable.
-Any data written by the syscalls directly affect the snapshot $L$. 
+Recall that all snapshots $S_i$ except $L$ are immutable.
+Any data written by the syscalls directly affect $L$. 
 Therefore, dropping a snapshot $S_i$ is trivial and does not require 
 writes from the syscall to be merged into the latest copy.
 
