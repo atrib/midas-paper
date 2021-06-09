@@ -95,7 +95,7 @@
 %-------------------------------------------------------------------------------
 Double-fetch bugs are a plague across all major operating system kernels. They
 occur when data is fetched twice across the user/kernel trust-boundary while 
-allowing concurrent modification. Such bugs may allow an attacker to illegally 
+allowing concurrent modification. Such bugs enable an attacker to illegally 
 access memory, cause denial of service, or to escalate privileges. 
 %
 So far, the only protection against double-fetch bugs is to detect and fix them.
@@ -165,11 +165,11 @@ wrappers}. System call filtering requires that data read from userspace for the
 initial check remains the same when the kernel later uses it for computation. 
 For example, \tiktok enables deep argument inspection for 
 SecComp~\cite{seccomp_deep, seccomp}, dereferencing pointer arguments without introducing 
-\tocttou bugs. Without \tiktok, such inspection is inherently impossible due to
-inherent \tocttou bugs.
+\tocttou bugs. Without \tiktok, a safe inspection is impossible due to
+double fetches. %\tocttou bugs.
 
 To mitigate double-fetch bugs in the kernel, a system must prohibit
-\emph{concurrent changes} to memory accessed by the system call. Attackers may
+\emph{concurrent changes} to memory accessed by the system call. Adversaries may
 find thrifty ways to trigger such concurrent writes:
 \begin{inparaenum}[\itshape i\upshape)]
 \item  direct writes from userspace (e.g., from concurrent threads),
@@ -196,8 +196,8 @@ system calls that are in flight. All writes end up on the most recent version of
 the objects and therefore allow forward progress.
 % Mat: should we split it into security, correctness, and performance
 % properties, all driven by the core invariant?
-We implement our invariant in \tiktok for the Linux kernel, but the defense
-applies to any modern operating system kernel.
+We implement our invariant in our \tiktok prototype for the Linux kernel, but
+the defense applies to any modern operating system kernel.
 
 Our evaluation shows overall low performance overhead for our mitigation.
 On parallel workloads from the NAS Parallel Benchmarks suite, \tiktok shows 
@@ -214,8 +214,9 @@ The main contributions of this paper are:
 \item Distillation of \tocttou attack vectors into a core invariant that protects
 the kernel against malicious concurrent modifications;
 \item \tiktok, a design that prohibits and detects
-\tocttou attacks against modern kernels, prohibiting their exploitation and
-enabling developers to detect \tocttou bugs;
+\tocttou attacks against modern kernels, prohibiting their exploitation,
+enabling developers to detect \tocttou bugs, and providing the foundation for
+safe system call interposition and validation;
 \item An efficient implementation of \tiktok for the Linux kernel that exhibits
 low performance overhead.
 \end{itemize}
