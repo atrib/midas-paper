@@ -202,8 +202,8 @@ the defense applies to any modern operating system kernel.
 Our evaluation shows overall low performance overhead for our mitigation.
 On parallel workloads from the NAS Parallel Benchmarks suite, \tiktok shows 
 an average performance overhead of $3.7\%$ while its performance overhead on
-more kernel-intensive workloads from the Phoronix Test Suite is $5\%$.
-\mat{Can we say anything about memory overhead?}
+more kernel-intensive workloads from the Phoronix Test Suite is $5\%$ with 
+negligible memory overhead.
 The security evaluation demonstrates how \tiktok successfully stops all attacks
 against vulnerable system calls, along with providing the developer with
 sufficient information about the location of the bug.
@@ -228,7 +228,7 @@ low performance overhead.
 
 \tiktok orchestrates several mechanisms within the Linux memory subsystem 
 to provide its protection guarantees.
-Linux uses architecturally-defined per-address space page tables to define
+Linux uses architecturally defined per-address space page tables to define
 mappings to pages.
 \tiktok protects these pages by temporarily marking them read-only in the 
 page tables.
@@ -241,7 +241,7 @@ why and how \tiktok protects syscalls from concurrent writes.
 
 Virtually all modern architectures (e.g., x86, x86-64, ARM, SPARC, and 
 RISC-V) implement separate virtual and physical
-address spaces based on fixed-size regions called pages.
+address spaces (AS) based on fixed-size regions called pages.
 %
 Some architectures also include segmentation-based protection 
 working in tandem with page tables, but segmentation is irrelevant for \tiktok.
@@ -394,7 +394,7 @@ API makes it possible to swap the file after validating the access
 rights~\cite{payer2012protecting,
 pu2006methodical, wei2010modeling, tsafrir2008portably}.
 \tocttou bugs affect kernel code~\cite{jurczyk2013bochspwn, wang2018survey}
-as well as dynamically-loaded driver code~\cite{cve201812633,cve201812633fix}.
+as well as dynamically loaded driver code~\cite{cve201812633,cve201812633fix}.
 Wang et al.~\cite{wang2018survey} showed that double-fetches appear not only
 in kernels, but wherever there is a trust boundary to cross (e.g., kernel ---
 hypervisor~\cite{wilhelm2016xenpwn} and hardware---kernel
@@ -1388,9 +1388,7 @@ with the mainline kernel v5.11 available from Ubuntu's package
 repository.
 The \emph{\tiktok} configuration runs our prototype \tiktok kernel 
 based on kernel v5.11.
-\mat{The extra configuration is only used in three locations. And we should call
-it -write, not -extra.}
-For particular benchmarks, we also run the \emph{\tiktok-extra}
+For particular benchmarks, we also run the \emph{\tiktok{+}write}
 configuration which also runs our prototype \tiktok kernel
 but instruments all syscalls including \Code{write}.
 
@@ -1499,17 +1497,27 @@ Our prototype \tiktok kernel benefits significantly from
 exempting particular, proven-safe syscalls from instrumentation.
 While we exclude \Code{write}-like syscalls from \tiktok because they 
 are not vulnerable to double-fetch bugs, we also evaluated the
-performance cost of a na\"ive implementation (\tiktok-extra)
+performance cost of an unoptimized implementation (\tiktok{+}write)
 which also instruments these syscalls.
-To highlight the worst-case performance of the na\"ive approach, we 
-evaluate the performance of the IPC benchmark on \tiktok-extra due 
+To highlight the worst-case performance of the unoptimized implementation, 
+we evaluate the performance of the IPC benchmark on \tiktok{+}write due 
 to its high frequency of \Code{write} syscalls.
-With \tiktok-extra, the performance of the IPC benchmark falls to 
+With \tiktok{+}write, the performance of the IPC benchmark falls to 
 $12.6\%$ of the baseline, a further degradation of $81\%$ compared 
 to \tiktok, showing that developer effort towards properly exempting 
 frequently called \emph{safe} syscalls from \tiktok protections is crucial
 towards for implementations to maintain competitive performance
 compared to the baseline.
+
+Our prototype incurs memory overhead due to metadata tracking page snapshots
+and page copies. 
+At any instant, the memory overhead mainly depends on the number of executing 
+syscalls (limited by the core count) and the number of page copies for these 
+syscalls.
+On average, for every 1000 syscalls issued by the PTS benchmarks, our prototype
+created 236 snapshots (32B each) and 54 copies (4KB each).
+We can see that the occurence of copies is low, allowing \tiktok to have negligible 
+memory overhead.
 
 
 %%%%%%%%%%%%%%%%%%%%
