@@ -769,7 +769,7 @@ All other copies $C_i$ are immutable.
 When the adversary writes to the page in \autoref{fig:doublefetch_tiktok}, the
 page moves to State 2, linking the snapshot $S_0$ to a copy holding the 
 original value $42$.
-%\mat{State 2 above is suspicious. Is this correct?}
+\mat{State 2 above is suspicious. Is this correct?}
 The writes from both the adversary and the syscall itself both affect 
 the copy $C_L$, but the read from the syscall accesses the snapshot $S_0$
 and reads the same value as the first time.
@@ -847,7 +847,7 @@ writes from the syscall to be merged into the latest copy.
 % syscalls are also correct.
 update the latest copy of the page $C_L$ and this property maintains correctness 
 of system execution.
-In this paragraph, we shall show that there is a valid, safe %\footnotemark 
+We now show that there is a valid, safe %\footnotemark 
 execution trace of a system not protected by \tiktok which generates the same 
 sequence of writes to the page, and therefore generates the same contents
 of the page when the syscall ends.
@@ -960,8 +960,8 @@ the value of object $O_1$ read is the same as what was contained when it
 first read object $O_0$. 
 A syscall which requires the value of $O_1$ to change between these two 
 points in time would, therefore, not work with \tiktok protections. 
-We believe that such a syscall, requiring concurrent modifications to its 
-arguments, will likely exist to support some synchronization mechanism 
+Such a hypothetical syscall, requiring concurrent modifications to its 
+arguments, could exist to support some synchronization mechanism 
 similar to a \Code{futex} and can be safely exempt from \tiktok's invariant.
 %
 During extensive tests, we did not find any syscall which exhibits this behavior in the 
@@ -975,7 +975,7 @@ state-machine transitions.
 Userspace reads always succeed, using the latest copy $C_L$ of the
 accessed page.
 Writes from userspace and kernel code succeed directly if the 
-page is in states 0 or 2, and trigger a fault otherwise.
+page is in State 0 or 2, and trigger a fault otherwise.
 Handling these faults involves creating a new copy of the page and
 setting the page writable. 
 Reading from kernel code involves creating a new snapshot and 
