@@ -109,7 +109,7 @@ they fundamentally prohibit efficient, kernel-based stateful system call filteri
 %
 We propose \tiktok to mitigate double-fetch bugs. \tiktok creates on-demand
 snapshots and copies of accessed data, enforcing our key invariant
-that through a syscall's lifetime, every read to a userspace object 
+that throughout a syscall's lifetime, every read to a userspace object 
 will return the same value.
 
 \tiktok shows no noticeable drop in performance when evaluated on CPU-bound
@@ -151,7 +151,7 @@ An example of a double fetch bug is when the kernel reads the length of a buffer
 from userspace, allocates a kernel buffer, then reads the length a second time
 to finally copy the data from userspace to kernel. An adversary may concurrently
 overwrite the length of the buffer to a larger number after the kernel allocated
-its buffer, causing the memory copy to overflow it.
+its buffer, causing the memory copy to overflow the buffer.
 %
 Double-fetch bugs are a frequent problem in kernels and
 hypervisors~\cite{cve201812633, cve202012652, cve20131332, cve201920610,
@@ -161,12 +161,14 @@ cve20168438}.
 % systems with binary-only drivers cannot be patched, even if a bug is found.
 Watson~\cite{watson2007exploiting} blames an unfixable \tocttou
 constellation as a reason for the generic insecurity of \emph{system call
-wrappers}. System call filtering requires that data read from userspace for the
-initial check remains the same when the kernel later uses it for computation. 
-For example, \tiktok enables deep argument inspection for 
-SecComp~\cite{seccomp_deep, seccomp}, dereferencing pointer arguments without introducing 
-\tocttou bugs. Without \tiktok, a safe inspection is impossible due to
-double fetches. %\tocttou bugs.
+wrappers}. 
+System call filtering wrappers require that data read from userspace for the
+initial check remains the same when the kernel later uses it for computation, 
+and can currently only check arguments passed by value.
+\tiktok enables ``deep argument inspection'' for SecComp~\cite{seccomp_deep, seccomp}
+i.e., checks on arguments passed by reference.
+Without \tiktok, such inspection is inherently impossible since such checks 
+introduce double fetches, and consequently \tocttou bugs.
 
 To mitigate double-fetch bugs in the kernel, a system must prohibit
 \emph{concurrent changes} to memory accessed by the system call. Adversaries may
@@ -187,7 +189,7 @@ We base our defense on a single key invariant:
 \textbf{\emph{through a syscall's lifetime, every read to a userspace object 
 will return the same value}}. Based on this invariant we derive a \emph{security
 property} that ensures that every read during the execution of a system call is
-cached. Subsequent reads of the same address will always return the same value.
+tracked. Subsequent reads of the same address will always return the same value.
 For performance, multiple versions of an object may exist at the same time
 depending on when the system call was started and depending on how many
 concurrent system calls are in flight. Orthogonal, we derive a \emph{correctness
@@ -218,7 +220,7 @@ the kernel against malicious concurrent modifications;
 enabling developers to detect \tocttou bugs, and providing the foundation for
 safe system call interposition and validation;
 \item An efficient implementation of \tiktok for the Linux kernel that exhibits
-low performance overhead.
+low ($3.7\%$) performance overhead.
 \end{itemize}
 
 
@@ -239,7 +241,7 @@ why and how \tiktok protects syscalls from concurrent writes.
 \subsection{Page Tables and Memory Protection}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Virtually all modern architectures (e.g., x86, x86-64, ARM, SPARC, and 
+Virtually all modern architectures (e.g., x86, ARM, SPARC, and 
 RISC-V) implement separate virtual and physical
 address spaces (AS) based on fixed-size regions called pages.
 %
@@ -250,12 +252,12 @@ Programs execute in their virtual address space while caches and main memory
 are accessed using physical addresses.
 Architectures rely on page tables orchestrated by the operating system 
 to translate between these address spaces and to protect such accesses.
-Page tables are arranged as radix-trees where different bits of the 
+Page tables are arranged as radix trees where different bits of the 
 virtual address are used as indices into levels of the page table.
 At the leaf page table, a unique pagetable entry (PTE) stores the 
 translation and protection information for a page.
 
-A PTE in x86-64 is a 64-bit value holding, among other, the following metadata:
+A PTE in x86-64 is a 64-bit value holding, among others, the following metadata:
 % \begin{description}[noitemsep]
 %   \item[Present bit (P)] which marks the PTE's validity;
 %   \item[Protection bits (NX, R/W, U/S)] which restrict the type of
@@ -264,7 +266,7 @@ A PTE in x86-64 is a 64-bit value holding, among other, the following metadata:
 %         operating system to store metadata;
 %   \item[Page Frame Number (PFN)] identifying the page's physical address.
 % \end{description}
-\emph{Present bit (P)} to mark the PTE's validity;
+a \emph{Present bit (P)} to mark the PTE's validity;
 \emph{Protection bits (NX, R/W, U/S)} to restrict the type of
 access and the privilege level of the accessing code;
 \emph{Software-usable bits (SW1-SW4)} that are ignored by the MMU and used by the 
@@ -310,7 +312,7 @@ parts of the virtual address space.
 The top half of the address space holds kernel mappings, and the 
 PTE entries for such pages have the U/S bit set. 
 The kernel mappings are identical for all address spaces, and are 
-kept consistent across processes' page tables.
+kept consistent across the corresponding page tables.
 The bottom half of the address space is used for userspace mappings, 
 and the PTE entries have the U/S bit reset.
 A userspace page has at-least one userspace mapping, and at-least one
@@ -324,9 +326,9 @@ However, when files are read or written, parts of the file are cached
 in the kernel's page cache consisting of pages mapped in the kernel's 
 address space.
 Further, programs can explicitly map pages from a file, in which case 
-the corresponding pages from the page cache are mapped in userspace 
+the corresponding pages from the page cache are also mapped in userspace 
 addresses in the process' page table.
-Mapped file pages can therefore be accessed by the file-system using 
+Mapped file pages can therefore be accessed by the file-system driver using 
 kernel addresses, and userspace programs using userspace addresses.
 Userspace pages not backed by a file are called anonymous pages.
 
@@ -336,7 +338,7 @@ Userspace pages not backed by a file are called anonymous pages.
 
 Kernel accesses to userspace memory use userspace mappings, and 
 come with the risk of the kernel confusing data structures 
-stored in userspace memory as kernel data structures.
+stored in userspace memory for actual kernel data structures.
 A class of attacks can exploit this behavior via bugs in the 
 kernel.
 Essentially, the adversary needs to set up either data structures
@@ -347,7 +349,7 @@ this code.
 Architectures and OSs have mitigated this class of vulnerabilities
 by introducing Supervisor Memory Protection.
 Essentially, kernel read/write/execute access to userspace memory
-raises a fault depending on the state of a per-processor system 
+raises a fault depending on the state of a per-core system 
 register.
 On x86-64, these features are known as Supervisor Memory Access 
 Protection (SMAP) for data accesses and Supervisor Memory Execution 
@@ -362,7 +364,7 @@ Any unintended access, outside these functions, causes a
 hardware fault, indicating either a kernel bug or an attack.
 Linux implements the functions \Code{copy_\{from/to\}_user} which 
 use the access control instructions to disable SMAP before 
-accessing userspace data, and then re-enabling SMAP.
+accessing userspace data, and then re-enabling SMAP afterwards.
 Kernel accesses to userspace data therefore become explicit, allowing
 \tiktok to reliably track all kernel fetches from userspace memory, 
 and therefore protect them.
@@ -463,12 +465,8 @@ privilege level of the writer, and whether the mapping used for writing
 existed at the time of the first read (see \autoref{tab:attack_class}).
 This classification helps understand existing attacks and how to 
 protect against them, and where future attacks (bugs) may arise.
-The device column is for attacks where a device with direct memory access
-(e.g., a network card, GPU, or FPGA)
-%  (any processing element 
-% besides a CPU core, such as an attached I/O device with direct memory access like a network card or 
-% a coprocessor like a GPU)
-is responsible for modifying vulnerable data.
+The device column corresponds to attacks where a device 
+(e.g., a network card, GPU, or FPGA) is responsible for modifying vulnerable data.
 
 Existing userspace mappings to a page can be used to modify 
 vulnerable data which the targeted syscall is reading.
@@ -493,9 +491,10 @@ targeted syscall's first read.}
 
 Existing kernel mappings to a page also mapped in userspace can be 
 leveraged by an attacker in a confused-deputy attack.
-A file-backed page in the page-cache needs to be mapped in a
-userspace process and then passed as an argument to the targeted syscall.
-A concurrently executing \Code{write} syscall can modify the 
+The adversary maps a file-backed page from the page-cache in a
+userspace process and then passed as an argument in this page to the 
+targeted syscall.
+The adversary then triggers a concurrent \Code{write} syscall to modify the 
 vulnerable data using kernel mappings for the page-cache
 pages~\cite{watson2007exploiting}.
 % This attack is called \emph{inception double fetch}~\cite{watson2007exploiting}.
@@ -508,7 +507,7 @@ drivers to account for writes via kernel mappings to vulnerable data.}
 The kernel might create new mappings to the vulnerable data 
 between the double fetches by the target syscall, bypassing protection 
 mechanisms which instrument the first read to protect the accessed page.
-A user can call \Code{mmap} and \Code{clone} syscalls to create 
+An adversary can call \Code{mmap} and \Code{clone} syscalls to create 
 a new mapping to the vulnerable data before writing to it.
 The first version is called a \emph{reflected double fetch} 
 attack~\cite{watson2007exploiting}.
@@ -518,21 +517,21 @@ In a more involved variant, the adversary can use the kernel as a
 confused deputy which touches the unmapped page and maps it in, 
 then writes to the vulnerable data.
 In all of the above vectors, the function populating pages for a 
-process (\Code{mm_populate} for Linux) is creating the mapping.
+process (\Code{mm_populate} for Linux) is creating the new mapping.
 \emph{A protection mechanism must, therefore, instrument \Code{mm_populate}
 and the code of any other syscall which may create new mappings.}
 
 A new mapping might also be created due to swapping.
 If the adversary writes to a page that was previously swapped 
 to disk, but later swapped in to be read by the target syscall in 
-a different address space, the kernel might lazily reinstate its 
-mapping to the page.
+a different address space, the kernel might lazily reinstate 
+the adversary's mapping to the page.
 \emph{The swapping mechanism must, therefore, be protected.}
 
 \tiktok protects against all of the aforementioned attack vectors.
 In the absence of any other syscall which can create new userspace 
 mappings to vulnerable data, \tiktok's protection is complete 
-against writes from user and kernel code.
+against writes from both user and kernel code.
 
 Finally, a device might modify vulnerable data if it is either 
 allowed to DMA to the page, or if the page is memory-mapped and is 
@@ -582,9 +581,9 @@ existing virtual memory implementations.
 On modern platforms, virtual memory protection is set up by the OS at
 page-granularity by setting bits in pagetable entries (PTEs).
 These permission bits are checked by the hardware on memory access, 
-efficiently enforcing that the permissions are respected, or raising 
-a fault when they are not.
-Therefore, \tiktok implements its invariant at page-granularity, not object 
+efficiently enforcing the permissions, and raising a fault when they 
+are violated.
+For efficiency, \tiktok implements its invariant at page-granularity, not object 
 granularity: when a syscall reads from userspace, every page touched by that 
 read is covered, not merely the bytes read.
 As a side-effect of its implementation, \tiktok does not distinguish
@@ -599,14 +598,14 @@ protects each page before reading from it.
 The leading pages containing the object are protected before the
 later pages, allowing an adversary to potentially modify the later 
 pages before the syscall first reads them.
-However, the adversary is prevented from modifying any of these earlier pages
+However, the adversary is prevented from modifying any of these pages
 after the syscall's first read, ensuring that double-fetches respect
 the invariant.
 If the syscall code contains a \tocttou bug, the modification will
 be visible to the first fetch itself (which is used for checking for 
 validity of the data) and will lead to the data being rejected 
 straightaway.
-\tiktok's invariant therefore prevents exploitation of double-fetch
+\tiktok's invariant therefore prevent exploitation of double-fetch
 vulnerabilities even when the fetched objects span multiple pages.
 
 A major requirement for \tiktok is to allow concurrent access to pages
@@ -688,7 +687,7 @@ holding the latest state of the page.}
 To track multiple versions of the contents of a page when being concurrently 
 accessed by numerous tasks, from userspace or during a syscall,
 \tiktok implicitly maintains a per-user-page state machine.
-For each page, its corresponding state machine 
+For a page, its corresponding state machine 
 \begin{inparaenum}[\itshape i\upshape)]
   \item tracks snapshots for currently executing syscalls which have read it, 
   \item tracks copies of the page, and 
@@ -704,14 +703,15 @@ At every state, the page has two associated sets:
 \end{inparaenum}
 Reads from kernel code in a syscall use the \emph{snapshot's corresponding copy}.
 Writes from user/kernel code and reads from userspace access the \emph{latest 
-copy}, which is mapped in process' address spaces.
+copy} $C_L$, which is mapped in processes' address spaces.
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\tiktok systems.
 Knowing which state the page is in allows \tiktok to differentiate faults due
 to protecting pages from faults due to programs actually writing to an 
 originally read-only page.
-The latest copy $C_L$ of read-only pages remains read-only in both states.
+The latest copy $C_L$ of read-only pages remains read-only in both
+protected states (1 and 3).
 In the following paragraphs, we describe how the state machine for a single, 
 writable user page transitions between its states, what triggers each transition, 
 and what changes are made to the copies and snapshot sets on a transition.
