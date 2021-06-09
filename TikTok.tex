@@ -1396,14 +1396,14 @@ but instruments all syscalls including \Code{write}.
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/npb_performance.pdf}
   \caption{\tiktok performance on NPB benchmarks relative to the baseline 
-          system with the same parallelization technique.}
+          system with the same parallelization framework.}
   \label{fig:npb_performance}
 \end{figure}
 
 NAS Parallel Benchmarks (NPB)~\cite{npb} is a benchmark introduced by
 NASA. 
 NPB consists of several parallel programs using different communication
-patterns and is available for two technology stacks for parallel programming:
+patterns and is available for two frameworks for parallel programming:
 OpenMP and MPI.
 % Two variants that test either threads or processes
 OpenMP~\cite{dagum1998openmp} is a compiler extension that splits a 
@@ -1415,8 +1415,8 @@ The two technology stacks have different frequency of syscalls due to
 different communication methods.
 Communication through kernel syscalls for either stack will incur overhead
 due to \tiktok's protection.
-Additional global TLB shootdowns (for snapshot synchronization) added by \tiktok will also affect the 
-performance of such parallel benchmarks.
+Additional global TLB shootdowns (for snapshot synchronization) added by 
+\tiktok will also affect the performance of such parallel benchmarks.
 
 We evaluated NPB benchmarks of class A on our testbench, running 
 4 threads/processes in parallel.
@@ -1425,14 +1425,13 @@ and are all long enough for the kernel to reach equilibrium.
 Certain benchmarks require a parallelism number which is a perfect square.
 On our 8-core CPU, having 4 CPU-bound threads/processes instead of 16 allows 
 all of them to run without time-sharing.
-\autoref{fig:npb_performance} shows \tiktok's performance for both MPI and OpenMP 
+\autoref{fig:npb_performance} shows \tiktok's performance for both MPI and OpenMP,
 normalized to the performance of the baseline system with the same parallelization
-technique for the NPB benchmarks.
-On average, \tiktok achieved $96.3\%$ of the baseline system's performance with 
-both 
-On both systems, \tiktok's performance for the \Code{ep} (Embarrassingly Parallel)
-benchmark is closest to that of the baseline, since it has low 
-communication overheads.
+framework.
+On average, \tiktok achieved $96.3\%$ of the baseline system's performance on 
+both frameworks. 
+\tiktok's performance for the \Code{ep} (Embarrassingly Parallel) benchmark is 
+closest to that of the baseline, since it has low communication overheads.
 \tiktok shows negligible overhead ($3.7\%$) for CPU-bound workloads, even when they 
 involve parallelism.
 
