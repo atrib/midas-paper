@@ -692,7 +692,7 @@ For a page, its corresponding state machine
   \item tracks snapshots for currently executing syscalls which have read it, 
   \item tracks copies of the page, and 
   \item maintains the mapping between snapshots and copies necessary for providing 
-  the correct contents to subsequent reads by these syscalls.
+  the correct contents to subsequent reads. % by these syscalls.
 \end{inparaenum}
 
 \autoref{fig:tiktok_states} shows the state machine for a single page.
@@ -726,8 +726,8 @@ over time, and is the only mutable snapshot.
 All processes where this page is mapped have unrestricted userspace read and write 
 access, and unrestricted kernel write access.
 The remaining operation, a read from kernel code, triggers a transition to 
-the next state.
-In \autoref{fig:doublefetch_tiktok}, we see the snapshot $L$ initially containing 
+State 1.
+In \autoref{fig:doublefetch_tiktok}, the snapshot $L$ initially contains 
 the value $42$.
 
 \paragraph{State 1}
@@ -742,8 +742,8 @@ blue cross-thatch in \autoref{fig:tiktok_states}).
 Prior to any writes to this page, any other syscalls which also read the page  
 get their own snapshots (e.g., $S_1$) all pointing to the single copy $C_L$.
 The page's read-only status causes the hardware to fault on any write,
-notifying \tiktok to transition the page to the next state.
-In \autoref{fig:doublefetch_tiktok}, the page transitions to state 1 when 
+notifying \tiktok to transition the page to State 2.
+In \autoref{fig:doublefetch_tiktok}, the page transitions to State 1 when 
 the syscall first reads it, and adds a snapshot $S_0$.
 
 \paragraph{State 2}
@@ -767,8 +767,9 @@ Further, \tiktok does not need to merge writes from userspace and syscall code
 on a syscall's completion, since both directly modify the same copy $C_L$.
 All other copies $C_i$ are immutable.
 When the adversary writes to the page in \autoref{fig:doublefetch_tiktok}, the
-page moves to state 2, linking the snapshot $S_0$ to a copy holding the 
+page moves to State 2, linking the snapshot $S_0$ to a copy holding the 
 original value $42$.
+%\mat{State 2 above is suspicious. Is this correct?}
 The writes from both the adversary and the syscall itself both affect 
 the copy $C_L$, but the read from the syscall accesses the snapshot $S_0$
 and reads the same value as the first time.
@@ -776,15 +777,15 @@ and reads the same value as the first time.
 
 \paragraph{State 3}
 A separate syscall subsequently reading the page in State 2 transitions 
-it to \texttt{(protected, duplicated)} state. 
+it to the \texttt{(protected, duplicated)} state. 
 The new snapshot, $S_2$, points to the latest copy $C_L$.
-State 3 is similar to state 1, except that there are different copies of 
+State 3 is similar to State 1, except that there are different copies of 
 the page used for reading by different syscalls. 
 The syscall for which $S_0$ was allocated will read from the copy $C_0$,
 while the syscall for which $S_2$ was allocated will read from copy $C_L$.
-On a write, the page will transition to state 2 and will be duplicated again,
-creating another copy $C_1$: snapshot $S_2$ will map to $C_1$ while 
-snapshots $S_1$ and $S_0$ will continue to map to $C_0$. 
+On a write, the page transitions to State 2 and is duplicated again,
+creating another copy $C_1$: snapshot $S_2$ maps to $C_1$ while 
+snapshots $S_1$ and $S_0$ continue to map to $C_0$. 
 
 \paragraph{Releasing snapshots}
 \tiktok uses snapshots to enable a syscall to read the same data from a page 
@@ -793,18 +794,18 @@ Releasing a snapshot is possibly accompanied by a state transition
 and the release of the mapped copy.
 If $S_i$ mapped to the latest copy $C_L$, \tiktok cannot free the copy
 since userspace is using it.
-In this case, the page must be in state 1 or 3, and $C_L$ is read-only.
+In this case, the page must be in State 1 or 3, and $C_L$ is read-only.
 After removing $S_i$, if $L$ is the sole remaining snapshot mapped to $C_L$, 
-\tiktok makes the page writable, moving to states 0 or 2 from states 
+\tiktok makes the page writable, moving to State 0 or 2 from State
 1 or 3 respectively. 
 If $S_i$ is mapped to any other duplicate $C_i$, \tiktok frees the copy along
 with the snapshot if $S_i$ is the last remaining snapshot mapped to $C_i$.
-If the page was in state 2, $C_L$ was writable and unmapped by any snapshot,
-so \tiktok changes the page to state 0.
+If the page was in State 2, $C_L$ was writable and unmapped by any snapshot,
+so \tiktok changes the page to State 0.
 This transition is shown in \autoref{fig:doublefetch_tiktok}, where the 
 snapshot $S_0$ and the copy $C_0$ are both discarded.
-If the page was in state 3, $C_L$ was read-only and mapped by some other
-snapshot, so \tiktok moves the page to state 1.
+If the page was in State 3, $C_L$ was read-only and mapped by some other
+snapshot, so \tiktok moves the page to State 1.
 Recall that all snapshots $S_i$ (i.e. excepting snapshot $L$) are immutable.
 Any data written by the syscalls directly affect the snapshot $L$. 
 Therefore, dropping a snapshot $S_i$ is trivial and does not require 
