@@ -627,7 +627,7 @@ that no system call wrappers had successfully addressed this problem.
 \emph{System calls that depend on double-fetches} cannot be protected by
 \sysname{}, so they must be \emph{whitelisted} so that they do not mark
 pages. \autoref{table:whitelist} provides a list of these system calls and a
-reason why each system call needs whitelisting.. They
+reason why each system call needs whitelisting. They
 must be manually inspected for bugs. Whitelisting them does not diminish the protection
 of other calls. Whitelisted calls still stop before writing to marked pages.
 
