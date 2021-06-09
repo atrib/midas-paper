@@ -6,7 +6,7 @@ reworked the design to address the underlying issues that were pointed out by
 the reviews.
 
 The two key weaknesses, as observed by the Oakland reviewers, were the inherent
-deadlock proneness and the lack of clarity regarding whitelisting of system
+deadlock proneness and the lack of clarity regarding exemption of system
 calls.
 
 Overall, in this revision we have
@@ -16,11 +16,11 @@ Overall, in this revision we have
 * reengineered the TikTok design to remove deadlocks
 * extended the evaluation
 
-We provide more details on deadlock freedom and whitelisting, as requested by
-the reviewers below.
+We provide more details on deadlock freedom and syscall exemption, as 
+requested by the reviewers below.
 
 
-## Deadlock freedom in revision
+## Deadlock Freedom in Revision
 
 We have addressed the first by redesigning TikTok along our newly introduced
 core invariant of ensuring that each address that is read during the execution
@@ -28,10 +28,12 @@ of a system call remains constant across multiple reads. We have drawn
 inspiration from database design and transactional memory systems that had to
 solve similar challenges. 
 
-Our new design is now inherently deadlock free *by design*. 
+Our new design is now inherently deadlock free *by design*. We show how 
+our design lacks dependence between operations to different pages, and 
+between operations on the same page, and therefore can be serialized
+to preclude any deadlock.
 
-
-## Whitelisting of system calls
+## Exemption of System Calls
 
 We clarify why certain system calls (such as `futex`) need to be excluded from
 TikTok protection and define what these system calls are. We argue why the set
