@@ -84,3 +84,4 @@ dkms.conf
 *.synctex.gz
 *.fls
 *.fdb_latexmk
+diff.tex
