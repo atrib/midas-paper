@@ -51,6 +51,7 @@
 \let\paragraph\relax
 \newcommand{\paragraph}[1]{\textbf{#1.}}
 \newcolumntype{Q}{>{\centering\arraybackslash}X}
+\newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
 
 \newcommand\tocttou[0]{TOCTTOU\xspace}
 \newcommand\tiktok[0]{TikTok\xspace}
@@ -435,18 +436,20 @@ tsafrir2008portably} are out of scope.
 
 \begin{table}
   \begin{center}
-  \begin{tabularx}{\columnwidth} { | l | l | X | X |}
-  \hline
-   & Userspace & Kernel & Device \\ \hline
-  \hline
-  \multirow{2}{*}{\shortstack{Existing \\mapping}} 
-      & Intra AS      & User mapping   & Device page       \\ 
-      & Cross AS      & Kernel mapping & Device DMA page   \\ \cline{1-4}
-  \multirow{2}{*}{\shortstack{New \\mapping}} 
-      & mmap          & mm\_populate   & New device page   \\ 
-      & clone         &                & New device DMA    \\ 
-      & swap          &                & New device DMA    \\ \cline{1-4}
-  \end{tabularx}
+    \begin{tabular}{  l  M{12mm}  M{20mm}  M{20mm} }
+  \toprule
+      & \textbf{Userspace} & \textbf{Kernel} & \textbf{Device} \\ \cmidrule{1-2} \cmidrule{3-3} \cmidrule{4-4}
+
+      % Note: this is a manually tuned fixup. multirow just sucks.
+      \multirow{2}{*}[-.8em]{\shortstack{\textbf{Existing} \\\textbf{mapping}}} 
+      & Intra AS      & User mapping   & Device page       \\ \cmidrule{2-4}
+      & Cross AS      & Kernel mapping & Device DMA page   \\ \cmidrule{1-4}
+      \multirow{2}{*}[-2.4em]{\shortstack{\textbf{New} \\\textbf{mapping}}} 
+      & mmap          & mm\_populate   & New device page   \\ \cmidrule{2-4}
+      & clone         & --             & New device DMA    \\ \cmidrule{2-4}
+      & swap          & --             & New device DMA    \\ 
+  \bottomrule
+  \end{tabular}
   \end{center}
   \caption{Attack vector classification for \tocttou exploits}
   \label{tab:attack_class}
