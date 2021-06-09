@@ -584,14 +584,14 @@ page-granularity by setting bits in pagetable entries (PTEs).
 These permission bits are checked by the hardware on memory access, 
 efficiently enforcing that the permissions are respected, or raising 
 a fault when they are not.
-Therefore, \tiktok implements its invariants at page-granularity, not object 
+Therefore, \tiktok implements its invariant at page-granularity, not object 
 granularity: when a syscall reads from userspace, every page touched by that 
 read is covered, not merely the bytes read.
 As a side-effect of its implementation, \tiktok does not distinguish
 accesses to different parts of a page, and may incur performance overhead due
 to false sharing within a page. 
 Page-granularity protections are more conservative compared to byte-granularity
-protection and, therefore, \tiktok maintains its invariants nonetheless but may
+protection and, therefore, \tiktok maintains its invariant nonetheless but may
 incur performance overhead for false sharing on highly contended pages.
 
 For an object spanning multiple pages, \tiktok's design sequentially 
@@ -606,7 +606,7 @@ If the syscall code contains a \tocttou bug, the modification will
 be visible to the first fetch itself (which is used for checking for 
 validity of the data) and will lead to the data being rejected 
 straightaway.
-\tiktok's invariants therefore prevent exploitation of double-fetch
+\tiktok's invariant therefore prevents exploitation of double-fetch
 vulnerabilities even when the fetched objects span multiple pages.
 
 A major requirement for \tiktok is to allow concurrent access to pages
@@ -640,7 +640,7 @@ the copy is kept for task C for future fetches, and task D
 can write to the original and proceed without delays.
 
 \tiktok must maintain multiple versions of a page read by a syscall 
-to maintain its invariants in the face of concurrent writes.
+to maintain its invariant in the face of concurrent writes.
 \tiktok introduces \emph{snapshots} and \emph{copies} to keep track 
 of page versions. 
 Snapshots are logical views of the page's contents at a particular time,
@@ -926,7 +926,7 @@ These syscalls are listed in \autoref{tab:except_syscall}.
 The \Code{futex} syscall implements a fast synchronization mechanism
 for userspace and relies on atomic writes from concurrent userspace
 threads to update a condition the syscall is waiting for. 
-Subjecting a \Code{futex} syscall to \tiktok's invariants will prevent
+Subjecting a \Code{futex} syscall to \tiktok's invariant will prevent
 it from ever waking up the waiting task.
 Such syscalls cannot be protected by \tiktok, and we implement an 
 exemption list to prevent transitions in the state machines of pages read 
@@ -936,7 +936,7 @@ vulnerabilities.
 Crucially, exempting these syscalls from \tiktok's protection does not 
 affect the security of other syscalls. 
 Any writes from these syscalls are subject to the same rules described
-in the state machine, and cannot break \tiktok's invariants.
+in the state machine, and cannot break \tiktok's invariant.
 
 
 \paragraph{Syscalls with read-write-read patterns}
