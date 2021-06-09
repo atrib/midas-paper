@@ -207,7 +207,7 @@ negligible memory overhead.
 The security evaluation demonstrates how \tiktok successfully stops all attacks
 against vulnerable system calls, along with providing the developer with
 sufficient information about the location of the bug.
-
+%
 The main contributions of this paper are:
 
 \begin{itemize}[noitemsep]
@@ -321,7 +321,7 @@ one address space.
 Files in Linux occupy a separate namespace as that of virtual memory
 (rooted at \Code{/}).
 However, when files are read or written, parts of the file are cached
-in the kernel's page cache consisting pages mapped in the kernel's 
+in the kernel's page cache consisting of pages mapped in the kernel's 
 address space.
 Further, programs can explicitly map pages from a file, in which case 
 the corresponding pages from the page cache are mapped in userspace 
@@ -463,9 +463,12 @@ privilege level of the writer, and whether the mapping used for writing
 existed at the time of the first read (see \autoref{tab:attack_class}).
 This classification helps understand existing attacks and how to 
 protect against them, and where future attacks (bugs) may arise.
-The device column is for attacks where a device (any processing element 
-besides a CPU core, such as an attached I/O device with direct memory access like a network card or 
-a coprocessor like a GPU) is responsible for modifying vulnerable data.
+The device column is for attacks where a device with direct memory access
+(e.g., a network card, GPU, or FPGA)
+%  (any processing element 
+% besides a CPU core, such as an attached I/O device with direct memory access like a network card or 
+% a coprocessor like a GPU)
+is responsible for modifying vulnerable data.
 
 Existing userspace mappings to a page can be used to modify 
 vulnerable data which the targeted syscall is reading.
@@ -517,8 +520,7 @@ then writes to the vulnerable data.
 In all of the above vectors, the function populating pages for a 
 process (\Code{mm_populate} for Linux) is creating the mapping.
 \emph{A protection mechanism must, therefore, instrument \Code{mm_populate}
-of the code of any other syscall which can lead to new mappings 
-being created.}
+and the code of any other syscall which may create new mappings.}
 
 A new mapping might also be created due to swapping.
 If the adversary writes to a page that was previously swapped 
@@ -543,10 +545,12 @@ address spaces.
 Such users are also disallowed from configuring DMA devices.
 Therefore, device modifications to vulnerable data fall outside 
 our threat model and are not protected by \tiktok.
-The superuser may load arbitrary kernel code % via loadable
-% modules
-and confused-deputy attacks leveraging an incompetent 
-system administrator are also outside the purview of our threat model.
+As a superuser can modify kernel code, protecting against attacks from the
+superuser is outside of our threat model.
+% The superuser may load arbitrary kernel code % via loadable
+% % modules
+% and confused-deputy attacks leveraging an incompetent 
+% system administrator are also outside the purview of our threat model.
 However, on processors supporting IOMMUs, \tiktok can be extended 
 to protect against modifications by DMA devices.
 
