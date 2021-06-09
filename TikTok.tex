@@ -112,7 +112,7 @@ snapshots and copies of accessed data, enforcing our key invariant
 that throughout a syscall's lifetime, every read to a userspace object 
 will return the same value.
 
-\tiktok shows no noticeable drop in performance when evaluated on CPU-bound
+\tiktok shows no noticeable drop in performance when evaluated on compute-bound
 workloads. On system call heavy workloads, \tiktok incurs 0.2-18\%
 performance overhead, while protecting the kernel
 against any \tocttou attacks. On average, \tiktok shows a $4.3\%$ overhead on
@@ -1014,14 +1014,14 @@ prune false positives.
 \label{sec:impl}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-The \tiktok prototype implements the state machine described in 
+Our \tiktok prototype implements the state machine described in 
 \autoref{sec:design} on Linux version 5.11, targeting the x86-64 
 architecture. 
 A page protected by \tiktok transitions between states on 
 either a kernel read to user memory, or when user or kernel code
-writes to read-only memory (see \autoref{fig:tiktok_states}).
+writes to protected, read-only memory (see \autoref{fig:tiktok_states}).
 \tiktok can be implemented on any operating system kernel that uses 
-a defined interface for reading from userspace (\Code{read_in}) and
+a defined interface for reading from userspace and
 on any architecture which implements hardware-controlled access 
 control to memory through page tables. 
 The first requirement enables \tiktok to implement transitions on 
@@ -1031,7 +1031,7 @@ we instrument for our prototype.
 The second requirement causes the hardware to raise a faults, 
 directing execution on the processor to a pre-defined exception 
 handler in the OS.
-Our prototype instruments the Linux' fault handler in the function 
+Our prototype instruments Linux' fault handler in the function 
 \Code{handle_pte_fault} to implement the write-triggered transmissions 
 from states 2 and 4.
 
@@ -1055,7 +1055,7 @@ We augment \Code{struct page}  with a list holding the snapshots
 for this page, excluding the latest snapshot $L$.
 Each snapshot has a pointer to its copy. 
 In the figure, the snapshots $S_1$ and $S_0$ share the copy $C_0$.
-The authors are aware of the strong aversion of the 
+We are aware of the strong aversion of the 
 Linux kernel developer community towards increasing the size of 
 \Code{struct page}. 
 An alternate implementation can use a hashmap to
@@ -1167,7 +1167,6 @@ they can prove to be secure from double-fetch bugs.
   \label{fig:fault_handling_cow}
 \end{figure}
 
-\paragraph{Handling Faults}
 The memory management unit generates a fault when kernel or user code accesses
 a page without having the correct permission in the corresponding PTE.
 \tiktok marks writable pages read-only to protect them in 
@@ -1191,12 +1190,11 @@ accessed.
 
 For non-NULL PTEs, the handler checks if the PTE indicates that the 
 page is present.
-Non-present pages are swapped-in as usual.
-Otherwise, \tiktok checks if the page was previously swapped in by 
-any other task and is now in a protected state.
-If not, the swap proceeds as usual.
-For protected pages, \tiktok implements a state change based on 
-whether the access causing the fault was a read or a write.
+Non-present pages need to be swapped-in.
+After finding the page, \tiktok then checks if the page was previously 
+swapped in by any other task and is now in a protected state.
+For protected pages, \tiktok implements the required state change based 
+on whether the faullting access was a read or a write.
 
 In the remaining case, faults for a present page indicate a 
 permission fault (write to a read-only page).
@@ -1310,8 +1308,8 @@ page table.
 In our prototype, we check if the page being mapped is protected, 
 and if so, correctly protect the new mapping too.
 Another syscall, \Code{clone}, duplicates a process' address space
-when called without the \Code{CLONE_VM} flag creating new mappings
-to mapped pages. 
+when called without the \Code{CLONE_VM} flag, creating new mappings
+to pages. 
 We instrument \Code{clone} to ensure that new mappings for protected 
 pages are also correctly protected.
 
@@ -1342,8 +1340,9 @@ The ARM v8-A architecture manual~\cite{armv8a} lists similar instructions
 of a page within a cluster of cores but not for cores in other clusters
 (called an Inner Shareable Domain) and cores across clusters (called an 
 Outer Shareable Domain) respectively.
-Alternate architectures with a single, system-wide translation 
-table~\cite{guptarebooting,ChaseLFL94} 
+
+Alternate architectures~\cite{guptarebooting,ChaseLFL94} with a single, 
+system-wide translation table
 would also benefit \tiktok by having a single page table to 
 update instead of multiple page tables for each address space a page
 is mapped in.
@@ -1355,8 +1354,8 @@ is mapped in.
 
 In this section, we quantify \tiktok's overhead on workloads 
 with different characteristics, both compute-bound applications
-which rarely use syscalls and I/O-bound applications which 
-heavily rely on the kernel's I/O interface.
+which rarely use syscalls and syscall-heavy applications which 
+heavily rely on the kernel's interface.
 \tiktok's overhead depends on the number of address spaces 
 where protected pages are mapped. 
 Relevant benchmarks where we expect overhead therefore include multiprocessing,
@@ -1365,18 +1364,18 @@ parallel benchmarks.
 We evaluate \tiktok on two benchmark suites: the NAS Parallel 
 Benchmark (NPB)~\cite{npb} and select workloads from the 
 Phoronix Test Suite (PTS)~\cite{pts}. 
-NPB includes CPU-bound multiprocessing workloads with a 
+NPB includes compute-intensive multiprocessing workloads with a 
 low, but non-negligible syscall rate. 
 NPB therefore demonstrates the ability of \tiktok to 
 scale to systems where pages are protected across numerous 
 address spaces.
-PTS includes a variety of benchmarks, both CPU-bound and 
+PTS includes a variety of benchmarks, both compute bound and 
 I/O bound representative of both desktop and server workloads.
 PTS includes syscall-heavy applications with varying degrees 
 of parallelism.
 We do not include the SPEC CPU2017 benchmarks
-as they are heavily CPU bound and designed to isolate userspace 
-performance without syscalls, and therefore do not test kernel 
+as they are heavily compute bound and designed to isolate userspace 
+performance without syscalls, and are impervious to kernel 
 performance. SPEC CPU2017 benchmarks would unfairly bias performance in favor of
 \tiktok.
 
@@ -1392,7 +1391,7 @@ In the \emph{baseline} configuration, we run the testbench
 with the mainline kernel v5.11 available from Ubuntu's package 
 repository.
 The \emph{\tiktok} configuration runs our prototype \tiktok kernel 
-based on kernel v5.11.
+also based on kernel v5.11.
 For particular benchmarks, we also run the \emph{\tiktok{+}write}
 configuration which also runs our prototype \tiktok kernel
 but instruments all syscalls including \Code{write}.
@@ -1431,7 +1430,7 @@ We evaluated NPB benchmarks of class A on our testbench, running
 These benchmarks' runtime varies between 10 seconds and 8 minutes, 
 and are all long enough for the kernel to reach equilibrium.
 Certain benchmarks require a parallelism number which is a perfect square.
-On our 8-core CPU, having 4 CPU-bound threads/processes instead of 16 allows 
+On our 8-core CPU, having 4 compute-bound threads/processes instead of 16 allows 
 all of them to run without time-sharing.
 \autoref{fig:npb_performance} shows \tiktok's performance for both MPI and OpenMP,
 normalized to the performance of the baseline system with the same parallelization
@@ -1440,8 +1439,7 @@ On average, \tiktok achieved $96.3\%$ of the baseline system's performance on
 both frameworks. 
 \tiktok's performance for the \Code{ep} (Embarrassingly Parallel) benchmark is 
 closest to that of the baseline, since it has low communication overheads.
-\tiktok shows negligible overhead ($3.7\%$) for CPU-bound workloads, even when they 
-involve parallelism.
+\tiktok shows low overhead ($3.7\%$) for compute-intensive, parallel workloads.
 
 
 \subsection{Phoronix Test Suite}
@@ -1458,8 +1456,8 @@ open-source benchmarks, of which we have chosen a range of benchmarks
 suitable for evaluating both desktop and server performance.
 We biased the selection to benchmarks that require (heavy) kernel activity to
 test the overhead of \tiktok's instrumentation.
-A sole benchmark, OpenSSL, is chosen to represent single-threaded, 
-CPU-bound workloads for which kernel performance is less relevant.
+A sole benchmark, OpenSSL, is included to represent single-threaded, 
+compute-bound workloads for which kernel performance is less relevant.
 The benchmarks are also varied, ranging from single-threaded (Pybench) to 
 multi-threaded, multi-process workloads (Apache).
 At the extreme, we have an IPC benchmark transferring tiny, 128-byte 
@@ -1467,7 +1465,7 @@ buffers between processes which spends all of its time in syscalls
 and whose performance is entirely dependent on kernel IPC performance.
 
 We plot \tiktok's performance relative to the baseline kernel on
-these benchmarks in \autoref{fig:pts_performance}, roughly ordered 
+these benchmarks in \autoref{fig:pts_performance}, roughly ordering 
 workloads in increasing order of syscall dependence from left to right.
 For benchmarks for which PTS reports runtime, we compute the inverse 
 of the runtime as performance.
@@ -1476,10 +1474,10 @@ Pybench and Git have correspondingly low dependence on kernel performance.
 Accordingly, these benchmarks see a negligible overhead when running 
 on our prototype kernel.
 The benchmark titled ``Linux'' represents compilation of the Linux kernel.
-While compilation is mostly CPU bound, compiling the Linux kernel requires 
+While compilation is mostly compute bound, compiling the Linux kernel requires 
 accessing a large number of source files, resulting in the creation 
 of a large number of compiler processes each of which read and create 
-different files. 
+files. 
 \tiktok experiences a small, but non-negligible overhead of $4\%$ on this workload.
 Redis requires syscalls for receiving and replying to requests, but 
 processes its transaction entirely in-memory. 
@@ -1487,7 +1485,7 @@ While early prototypes of our kernel caused significant degradation
 of Redis' throughput (up to $69\%$), demonstrating Redis' dependence 
 on kernel performance, 
 our evaluation prototype achieves almost identical results as the baseline, 
-highlighting the prototype's competitive performance.
+highlighting the final prototype's competitive performance.
 The webservers, Apache and Nginx require network and file-system I/O, 
 and rely heavily on syscall performance. 
 We see that Nginx, which is a higher-performance webserver, sees a larger
@@ -1514,8 +1512,8 @@ frequently called \emph{safe} syscalls from \tiktok protections is crucial
 towards for implementations to maintain competitive performance
 compared to the baseline.
 
-Our prototype incurs memory overhead due to metadata tracking page snapshots
-and page copies. 
+Our prototype incurs memory overhead due to metadata, tracking page snapshots
+and copies. 
 At any instant, the memory overhead mainly depends on the number of executing 
 syscalls (limited by the core count) and the number of page copies for these 
 syscalls.
@@ -1542,7 +1540,7 @@ other kernels to protect themselves against notoriously hard-to-find and
 easy-to-exploit double fetch bugs.
 
 The performance evaluation of our prototype implementation is promising.
-CPU-intensive benchmarks have negligible overhead and even syscall-intensive
+Compute-bound benchmarks have negligible overhead and even syscall-intensive
 benchmarks exhibit low overhead. On one hand, \tiktok mitigates all double fetch
 bugs in the kernel and gives developers a tool to locate such bugs. On the other
 hand, \tiktok sets the foundation for efficient, stateful system call filtering
