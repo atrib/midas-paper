@@ -819,7 +819,6 @@ writes from the syscall to be merged into the latest copy.
     \textbf{System Call} & \textbf{Exemption reason} \\
   \midrule
     \Code{futex} & Relies on concurrent write \\
-    \Code{rt\_sigtimedwait} & Relies on concurrent write \\
     \Code{execve} & Remaps address space \\
   \bottomrule
   \end{tabular}
