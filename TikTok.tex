@@ -394,7 +394,7 @@ the second fetch uses the same object's value is called a
 \tocttou bugs have been widely studied in file systems, where the 
 API makes it possible to swap the file after validating the access 
 rights~\cite{payer2012protecting,
-pu2006methodical, wei2010modeling, tsafrir2008portably}.
+pu2006methodical, wei2010modeling, tsafrir2008portably,Garfinkel03}.
 \tocttou bugs affect kernel code~\cite{jurczyk2013bochspwn, wang2018survey}
 as well as dynamically loaded driver code~\cite{cve201812633,cve201812633fix}.
 Wang et al.~\cite{wang2018survey} showed that double-fetches appear not only
@@ -1335,6 +1335,9 @@ would also benefit \tiktok by having a single page table to
 update instead of multiple page tables for each address space a page
 is mapped in.
 
+\atri{Talk of proposals stated in the previous reviews: DFTinker, DropIt}
+\atri{Evaluate on CVEs}
+\atri{What to do with mprotect?}
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
