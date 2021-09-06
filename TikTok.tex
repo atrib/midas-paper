@@ -1515,6 +1515,52 @@ memory overhead.
 
 
 %%%%%%%%%%%%%%%%%%%%
+\section{Related Work}
+%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Static analysis}
+
+Uros: \cite{wang2017double} used pattern matching to find double fetch bugs.
+
+\cite{XuQL0K18} does not protect binary-only modules for which code is not 
+available. Tiktok protects all modules as long as the requirement to use the 
+userspace access interfaces are used. Plus limitations of symbolic execution, 
+such as manual writing of "library functions", assuming that argument pointers 
+do not alias, pre-conditions on setup structures, etc. Most importantly, it 
+is not guaranteed to protect every double fetch since the analysis is 
+incomplete, only ones which it detects and are correctly fixed. 
+
+Static analysis can detect, but not eliminate or mitigate double-fetches, 
+specially those by design such as in system call wrappers.
+
+Compiler optimization-related/introduced double fetches.
+\atri{Not an issue here. Compiler-double-fetches are due to implicit accesses
+to variables, not explicit copy\_from\_user calls.}
+
+\subsection{Dynamic Analysis}
+
+Google Project Zero Bochspwn~\cite{jurczyk2013bochspwn}.
+
+DFTracker~\cite{wang2019dftracker}
+
+\cite{schwartzDECAF} relies on CPU-specific behavior, which is sensitive to 
+CPU parameters, subject to changes generation to generation (or even from core 
+to core) and prone to noise and false-sharing. Future generations might entirely 
+close this channel, or introduce constraints that limits this information flow 
+(likely since these are extremely relevant to attacks too). Finally, 
+double-fetches can only be detected in triggered paths, leading to incompleteness. 
+It's a useful tool for today, but is not reliable in the longer term. The proposed 
+defense shares the extensive limitations of the tool it is built upon: Intel TSX. 
+Eg. cannot have a page-fault, cannot have a TLB miss, no L1 cache eviction allowed, 
+no concurrent access from other cores, etc.
+TSX is also extremely limited and is therefore liable to encounter false positives.
+
+
+PeriScope\cite{SongH0SNVVKSF19} is out of scope. 
+Devices are outside the scope of the current implementation of TikTok. Particularly, double-fetches from device backed memory is liable to change without any control, but already requires high privileges which the user does not have. DMA accesses to main memory, however, can be protected by the use of IOMMUs with very low overhead [4], and can take advantage of the same TikTok mechanisms. [4] Border Control: Sandboxing Accelerators.
+Overall comment: Tiktok does not seek to overthrow methods that seek to find double-fetches, and fix them. In fact, it also allows use as a sanitizer that flags such double-fetches. In the meanwhile, however, bugs do persist and are likely to persist in an environment incorporating third-party code in modules and a rapid pace of development. Here, TikTok provides a strong, principled guarantee which is also future-proof.
+
+%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
 %%%%%%%%%%%%%%%%%%%%
 
