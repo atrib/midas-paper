@@ -54,7 +54,7 @@
 \newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
 
 \newcommand\tocttou[0]{TOCTTOU\xspace}
-\newcommand\tiktok[0]{TikTok\xspace}
+\newcommand\tiktok[0]{Midas\xspace}
 
 \newrefformat{cha}{\hyperref[#1]{Chapter~\ref*{#1}}}
 \newrefformat{sec}{\hyperref[#1]{Section~\ref*{#1}}}
@@ -103,10 +103,6 @@ However, they remain incredibly hard to find.
 %
 Similarly,
 they fundamentally prohibit efficient, kernel-based stateful system call filtering.
-% Mat: not a key argument for TikTok
-% Even worse, the bug may be in
-% unchangeable code (e.g., a binary driver blob).
-%
 We propose \tiktok to mitigate double-fetch bugs. \tiktok creates on-demand
 snapshots and copies of accessed data, enforcing our key invariant
 that throughout a syscall's lifetime, every read to a userspace object 
@@ -820,6 +816,7 @@ writes from the syscall to be merged into the latest copy.
   \midrule
     \Code{futex} & Relies on concurrent write \\
     \Code{execve} & Remaps address space \\
+    \Code{write} & Invulnerable, improves performance \\
   \bottomrule
   \end{tabular}
 \end{center}
@@ -908,8 +905,8 @@ exists where all of the writes have been postponed, in the same order
 to after the double fetch reads. 
 
 \paragraph{Exemptions}
-Certain syscalls such as \Code{futex} rely on user data changing between 
-double fetches to implement their functionality and cannot be protected by
+Syscalls such as \Code{futex} rely on user data changing between double 
+fetches to implement their functionality and cannot be protected by
 \tiktok.
 These syscalls are listed in \autoref{tab:except_syscall}.
 The \Code{futex} syscall implements a fast synchronization mechanism
@@ -923,7 +920,7 @@ by these syscalls.
 The code for these syscalls must be manually inspected for double-fetch 
 vulnerabilities.
 Crucially, exempting these syscalls from \tiktok's protection does not 
-affect the security of other syscalls. 
+affect the security of other syscalls containing double fetches. 
 Any writes from these syscalls are subject to the same rules described
 in the state machine, and cannot break \tiktok's invariant.
 
@@ -1022,6 +1019,12 @@ handler in the OS.
 Our prototype instruments Linux' fault handler in the function 
 \Code{handle_pte_fault} to implement the write-triggered transmissions 
 from states 2 and 4.
+Overall, our prototype adds around $1,100$ lines of code and modifies 
+17. 
+Our design allows the changes to be mostly limited to the memory 
+subsystem (\Code{raw_copy_from_user}, \Code{handle_pte_fault} and 
+\Code{wp_page_copy}).
+We only modified a single syscall's code~(\Code{clone}).
 
 
 \subsection{Tracking Page State}
@@ -1104,6 +1107,8 @@ This function also uses the kernel's \Code{mark_page_accessed}
 interface to move the page to the ``Active'' state for the 
 kernel's swapping mechanism, making the page ineligible for being 
 swapped out. 
+We also implement \Code{get_user} (used by the kernel for small 
+reads) as a call to \Code{raw_copy_from_user}.
 
 \paragraph{Exemptions}
 Our prototype \tiktok kernel exempts a couple of functions 
@@ -1523,7 +1528,7 @@ memory overhead.
 Uros: \cite{wang2017double} used pattern matching to find double fetch bugs.
 
 \cite{XuQL0K18} does not protect binary-only modules for which code is not 
-available. Tiktok protects all modules as long as the requirement to use the 
+available. \tiktok protects all modules as long as the requirement to use the 
 userspace access interfaces are used. Plus limitations of symbolic execution, 
 such as manual writing of "library functions", assuming that argument pointers 
 do not alias, pre-conditions on setup structures, etc. Most importantly, it 
@@ -1557,8 +1562,8 @@ TSX is also extremely limited and is therefore liable to encounter false positiv
 
 
 PeriScope\cite{SongH0SNVVKSF19} is out of scope. 
-Devices are outside the scope of the current implementation of TikTok. Particularly, double-fetches from device backed memory is liable to change without any control, but already requires high privileges which the user does not have. DMA accesses to main memory, however, can be protected by the use of IOMMUs with very low overhead [4], and can take advantage of the same TikTok mechanisms. [4] Border Control: Sandboxing Accelerators.
-Overall comment: Tiktok does not seek to overthrow methods that seek to find double-fetches, and fix them. In fact, it also allows use as a sanitizer that flags such double-fetches. In the meanwhile, however, bugs do persist and are likely to persist in an environment incorporating third-party code in modules and a rapid pace of development. Here, TikTok provides a strong, principled guarantee which is also future-proof.
+Devices are outside the scope of the current implementation of \tiktok. Particularly, double-fetches from device backed memory is liable to change without any control, but already requires high privileges which the user does not have. DMA accesses to main memory, however, can be protected by the use of IOMMUs with very low overhead [4], and can take advantage of the same \tiktok mechanisms. [4] Border Control: Sandboxing Accelerators.
+Overall comment: \tiktok does not seek to overthrow methods that seek to find double-fetches, and fix them. In fact, it also allows use as a sanitizer that flags such double-fetches. In the meanwhile, however, bugs do persist and are likely to persist in an environment incorporating third-party code in modules and a rapid pace of development. Here, \tiktok provides a strong, principled guarantee which is also future-proof.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
@@ -1589,6 +1594,13 @@ community.
 
 \bibliographystyle{plain}
 \bibliography{TikTok}
+
+\appendix
+
+\section{Evaluation on CVEs}
+
+\tiktok guarantees protection to vulnerable double-fetches \emph{by design}.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \end{document}
