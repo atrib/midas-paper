@@ -1,12 +1,17 @@
-all: tiktok
+all: tiktok CRdiff
 
 clean:
-	rm -f *.aux *.bbl *.blg *.fdb_latexmk *.fls *.log *.out *.pdf *.synctex.gz *.dvi
+	rm -f *.aux *.bbl *.blg *.fdb_latexmk *.fls *.log *.out *.synctex.gz *.dvi
+	rm TikTok.pdf latexdiff.pdf
 
 .PHONY: all clean tiktok
 
 tiktok:
 	rubber --pdf TikTok.tex
+
+CRdiff:
+	latexdiff TikTok_usenix22.tex TikTok.tex  --exclude-textcmd="section,subsection,table,table*" --config="PICTUREENV=(?:picture|DIFnomarkup|align|tabular)[\w\d*@]*" > latexdiff.tex
+	-rubber --pdf latexdiff.tex
 
 .PHONY: revision
 revision: *.md
