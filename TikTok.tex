@@ -1,4 +1,4 @@
-\documentclass[letterpaper,twocolumn,10pt, anonymous]{article}
+\documentclass[letterpaper,twocolumn,10pt]{article}
 \usepackage{usenix2019_v3}
 
 \usepackage{amsmath}
@@ -21,11 +21,15 @@
 \usepackage{verbatim}
 \usepackage{balance}
 \usepackage{tabularx}
+\usepackage{algpseudocode}
 
 %-------------------------------------------------------------------------------
 \begin{document}
 %-------------------------------------------------------------------------------
 
+\newenvironment{minilisting}
+  {\minipage[b]{\linewidth}\verbatim}
+  {\endverbatim\endminipage}
 
 \lstdefinestyle{cstyle}{
   basicstyle=\footnotesize\ttfamily,
@@ -74,6 +78,15 @@
 \newcommand\atri[1]{\noindent{\color{red} {\bf \fbox{AB}} {\it#1}}}
 \newcommand\UT[1]{\noindent{\color{violet} {\bf \fbox{UT}} {\it#1}}}
 
+\newcommand{\footremember}[2]{%
+   \footnote{#2}
+    \newcounter{#1}
+    \setcounter{#1}{\value{footnote}}%
+}
+\newcommand{\footrecall}[1]{%
+    \footnotemark[\value{#1}]%
+} 
+
 %don't want date printed
 \date{}
 
@@ -82,14 +95,17 @@
 
 %for single author (just remove % characters)
 \author{
-{\rm Anonymous Submission \#94}
-%Your Institution
+{\rm Atri Bhattacharyya} \\
+EPFL
 % copy the following lines to add more authors
-% \and
-% {\rm Name}\\
-%Name Institution
+\and
+{\rm Uros Tesic} \thanks{This work was done during the author's time at EPFL.}\\
+NVidia
+\and
+{\rm Mathias Payer}\\
+EPFL
 } % end author
-
+% \thanks{asdf}
 \maketitle
 
 %-------------------------------------------------------------------------------
@@ -170,7 +186,7 @@ Without \tiktok, such inspection is inherently impossible since such checks
 introduce double fetches, and consequently \tocttou bugs.
 
 To mitigate double-fetch bugs in the kernel, a system must prohibit
-\emph{concurrent changes} to memory accessed by the system call. Adversaries may
+\emph{concurrent\footnotemark changes} to memory accessed by the system call. Adversaries may
 find thrifty ways to trigger such concurrent writes:
 \begin{inparaenum}[\itshape i\upshape)]
 \item  direct writes from userspace (e.g., from concurrent threads),
@@ -182,6 +198,8 @@ file pages, or
 concurrent writes.
 \end{inparaenum}
 To prevent attacks, all kinds of concurrent writes must be prohibited.
+\footnotetext{The actual attacker model includes both concurrent and parallel 
+writes.}
 
 % TODO key idea
 We base our defense on a single key invariant: 
@@ -422,7 +440,7 @@ execute arbitrary userspace code, including system calls. Some of the system
 calls have double-fetch vulnerabilities, and the adversary wants to exploit them,
 e.g., for privilege escalation.
 The adversary may execute arbitrary sequences of system calls on multiple CPU
-cores concurrently.
+cores in parallel or concurrently on the same core.
 
 \tiktok mitigates any unintended corruption or information leakage \emph{in the kernel}
 or \emph{in other user processes} that arises through double-fetch bugs. 
@@ -1217,7 +1235,7 @@ Non-present pages need to be swapped-in.
 After finding the page, \tiktok then checks if the page was previously 
 swapped in by any other task and is now in a protected state.
 For protected pages, \tiktok implements the required state change based 
-on whether the faullting access was a read or a write.
+on whether the faulting access was a read or a write.
 
 In the remaining case, faults for a present page indicate a 
 permission fault (write to a read-only page).
@@ -1583,6 +1601,81 @@ created 236 snapshots (32B each) and 54 copies (4KB each).
 We can see that the occurrence of copies is low, resulting in negligible 
 memory overhead.
 
+\subsection{Evaluation on CVEs}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{figure}[!t]
+  \centering
+    \begin{minilisting}
+Buggy code:
+  val0 = copy_from_user(); // First fetch
+  use(val0)
+  val0 = copy_from_user(); // Second fetch
+  use(val0)
+
+Fixed code:
+  val0 = copy_from_user();
+  use(val0)
+  use(val0)  // No double fetch
+
+Testing protection:
+  val0 = copy_from_user();
+  use(val0);
++ val1 = copy_from_user();
++ if(val0 != val1)
++   printk("Triggered bug\n");
+  use(val0);
+    \end{minilisting}
+\caption{Generic structure of vulnerable code with double fetches, 
+         patched code and a testing version which flags exploits 
+         without allowing it to propagate.}
+\label{fig:cve_test}
+\end{figure}
+\atri{Make it look like a git diff}
+
+In this section, we present emperical evaluation showing that \tiktok protects
+the kernel from \emph{known and fixed} double fetch vulnerabilities. 
+
+\paragraph{Methodology}
+For testing that \tiktok could protect against bugs, we 
+front-ported previously discovered vulnerabilities to the evaluation 
+version of Linux (5.11) and ran exploits against this kernel
+with and without \tiktok's protection.
+A particular challenge was finding bugs for testing: known double fetch 
+bugs have already been patched in the evaluated kernel.
+Our strategy has two advantages:
+\begin{inparaenum}[\itshape i\upshape)]
+  \item we know the exact bug cause, and can reintroduce it with minimal 
+        changes and effort,
+  \item we can reuse existing proofs-of-concept which trigger that bug,
+  \item we can detect when the bug is triggered, and revert to the correct 
+        value.
+\end{inparaenum}
+\autoref{fig:cve_test} shows the pseudocode for testing a particular 
+CVE, for which the patched code has eliminated the double fetch.
+We reintroduce the second fetch, checking the value versus the original
+fetch and posting a message on modification.
+Finally, the code continues to use the old value allowing testing to 
+continue without actually faulting.
+
+
+\begin{table}
+  \begin{center}
+    \begin{tabular}{ l M{18mm} M{18mm} }
+  \toprule
+                      & \multicolumn{2}{c}{\textbf{Average Triggered Count}} \\ \cmidrule{2-3}
+      \textbf{CVE}    & \textbf{baseline} & \textbf{\tiktok} \\  \cmidrule{1-3} 
+      2016-6516       & 10.9              & 0                \\  \cmidrule{1-3}
+      ???             & ???               & ???              \\ 
+  \bottomrule
+  \end{tabular}
+  \end{center}
+  \caption{Table listing CVEs, and the number of times the exploit successfully triggered the bug,
+           with and without \tiktok.}
+  \label{tab:cve_results}
+\end{table}
+
+CVE-2016-6516 PoC taken from \url{https://github.com/wpengfei/CVE-2016-6516-exploit}.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
@@ -1701,15 +1794,16 @@ We will release the source code of our
 prototype as open-source and continue our interaction with the Linux kernel
 community.
 
+%%%%%%%%%%%%%%%%%%%%
+\section*{Acknowledgements}
+%%%%%%%%%%%%%%%%%%%%
+People
+Grants
+
 \bibliographystyle{plain}
 \bibliography{TikTok}
 
 \appendix
-
-\section{Evaluation on CVEs}
-
-\tiktok guarantees protection to vulnerable double-fetches \emph{by design}.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \end{document}
