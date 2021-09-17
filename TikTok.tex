@@ -140,6 +140,7 @@ diverse workloads across two benchmark suites.
 %%%%%%%%%%%%%%%%%%%%%%
 
 \atri{In this paper, we mean "parallel" when we say "concurrent". Fix}
+\atri{Fix font sizes in figures}
 The operating system (OS) kernel enables isolation between processes and is 
 a key trusted computing
 base. Each \emph{untrusted} userspace process runs under a
@@ -1478,7 +1479,7 @@ the same value on every call.
                   captionpos=b,
                   label=lst:cve-2016-6516,
                   caption=CVE-2016-6516: Vulnerable double fetch in \Code{ioctl_file_dedupe_range}. 
-                          Lines in green show the fix and testing code]
+                          Lines in green show the fix and testing code.]
   //First fetch
   if(get_user(count,&argp->dest_count)) 
   {...}
@@ -1570,7 +1571,7 @@ but instruments all syscalls including \Code{write}.
     Mem alloc & \Code{brk} \\
     \bottomrule
   \end{tabular}
-  \caption{Prominent syscalls used by OSBench microbenchmarks}
+  \caption{Prominent syscalls used by OSBench microbenchmarks.}
   \label{tab:osbench_syscalls}
 \end{table}
 
@@ -1693,16 +1694,17 @@ We can see that the occurrence of copies is low, resulting in negligible
 memory overhead.
 
 \subsection{Overhead breakdown}
+%%%%%%%%%%%%%%%%%%%%
 
 \begin{figure}
   \includegraphics[width=\linewidth]{img/overhead.pdf}
-  \caption{Classification of overheads for }
+  \caption{Classification of overheads for various benchmarks due to \tiktok.}
   \label{fig:overhead_class}
 \end{figure}
 
 In this section, we explore the sources of \tiktok's overhead by analyzing 
 \Code{perf} traces for three workloads: thread creation (OSBench), linux 
-compilation and nginx. 
+compilation and Nginx. 
 We aim to classify overheads into the various kernel function we instrumented:
 \begin{inparaenum}[\itshape i\upshape)]
 \item user copy in transfer function,
@@ -1731,6 +1733,40 @@ of processes, of which the compiler accounts for less than 50\% of the
 total execution time.
 The reported breakdown accounts for overheads on the compiler, but not 
 all the other processes.
+
+\subsection{Case study: Nginx}
+%%%%%%%%%%%%%%%%%%%%
+
+\begin{figure}
+  \includegraphics[width=\linewidth]{img/nginx_performance.pdf}
+  \caption{Classification of overheads for various benchmarks due to \tiktok.}
+  \label{fig:nginx_perf}
+\end{figure}
+
+To better understand the \tiktok's behavior under varying syscall 
+rates and different core configurations, we studied Nginx's throughput
+while varying payload sizes and different worker counts.
+The server is loaded with requests from a separate machine running 
+a load generater (\Code{bombardier}) with 100 concurrent 
+connections (chosen to maximize throughput) over a 1Gbps link.
+The clients send http requests for files ranging between 20B and
+10000B.
+
+In \autoref{fig:nginx_perf}, we plot the request rate and throughput
+for Nginx servers running with one and eight workers.
+Each worker is single-threaded and uses one core.
+For all configurations, we can see that the rate of requests served 
+remains almost constant while increasing payload size until the network 
+link reaches saturation.
+Under a saturated network, the request rates with \tiktok match that 
+of the baseline system.
+With a single worker, \tiktok's overheads cause a consistent 13-14\% 
+overhead on request rate for small packet sizes.
+However, we see that \tiktok has practically no overhead when serving 
+requests with 8 workers even when packet sizes are too small to 
+saturate the network link.
+In this case, both \tiktok and the baseline system are limited by the
+scalability of Linux' networking stack.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
@@ -1817,11 +1853,6 @@ simultaneously-multithreaded (hyperthreading) core.
 Further, TSX is limited to specific processors, leaving the vast majority
 of computing devices~(mobile, IoT, AMD) unprotected.
 
-The proposed 
-defense shares the extensive limitations of the tool it is built upon: Intel TSX. 
-Eg. cannot have a page-fault, cannot have a TLB miss, no L1 cache eviction allowed, 
-no concurrent access from other cores, etc.
-
 %%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
 %%%%%%%%%%%%%%%%%%%%
@@ -1856,6 +1887,9 @@ community.
 
 \atri{Grants}
 
+%%%%%%%%%%%%%%%%%%%%
+% Bibliography
+%%%%%%%%%%%%%%%%%%%%
 \bibliographystyle{plain}
 \bibliography{TikTok}
 
