@@ -1681,6 +1681,7 @@ frequently called \emph{safe} syscalls from \tiktok protections is crucial
 towards for implementations to maintain competitive performance
 compared to the baseline.
 
+\paragraph{Memory overhead}
 Our prototype incurs memory overhead due to metadata, tracking page snapshots
 and copies. 
 At any instant, the memory overhead mainly depends on the number of executing 
@@ -1691,6 +1692,45 @@ created 236 snapshots (32B each) and 54 copies (4KB each).
 We can see that the occurrence of copies is low, resulting in negligible 
 memory overhead.
 
+\subsection{Overhead breakdown}
+
+\begin{figure}
+  \includegraphics[width=\linewidth]{img/overhead.pdf}
+  \caption{Classification of overheads for }
+  \label{fig:overhead_class}
+\end{figure}
+
+In this section, we explore the sources of \tiktok's overhead by analyzing 
+\Code{perf} traces for three workloads: thread creation (OSBench), linux 
+compilation and nginx. 
+We aim to classify overheads into the various kernel function we instrumented:
+\begin{inparaenum}[\itshape i\upshape)]
+\item user copy in transfer function,
+\item page duplication on page fault,
+\item metadata cleanup on syscall end, and
+\item filesystem operations.
+\end{inparaenum}
+
+To estimate the time spent in each function, we created FlameGraphs for 
+each workload\cite{GreggFlameGraph} using samples of processor state, including
+the call stack, collected over 30 second periods by \Code{perf record}.
+After identifying one binary for the workload from the FlameGraph, we estimate 
+the overhead for a function as the difference in execution time attributed to 
+that function between the baseline and \tiktok systems.
+The total overhead is estimated from the throughput figures obtained from the 
+previous section.
+
+\autoref{fig:overhead_class} shows the breakdown of overheads for three 
+workloads. 
+As expected, metadata tracking and duplication causes significant overheads
+for the user copy and fault handling functions respectively.
+The results for the Linux build breakdown differs in the large portion of 
+the unaccounted overhead (labelled 'Other').
+This stems for the fact that Linux' compilation runs a large number (1000s)
+of processes, of which the compiler accounts for less than 50\% of the 
+total execution time.
+The reported breakdown accounts for overheads on the compiler, but not 
+all the other processes.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
