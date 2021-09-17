@@ -92,6 +92,7 @@
 
 % make title bold and 14 pt font (Latex default is non-bold, 16 pt)
 \title{\Large \bf \tiktok: Systematic Kernel TOCTTOU Protection}
+% \title{TocSens: TOCTTOU-sensitive Sunglasses for user access}
 
 %for single author (just remove % characters)
 \author{
@@ -984,6 +985,7 @@ Linux kernel.
   of a double fetch of an object \Code{X} spanning two pages.}
   \label{fig:copy_two_pages}
 \end{figure}
+\atri{fix figure}
 
 \paragraph{Example: Objects spanning two pages}
 \autoref{fig:copy_two_pages} shows \tiktok protecting a syscall which
@@ -1424,25 +1426,84 @@ page's state.
 Such modifications are OS-specific, making it difficult to recommend
 a generic methodology.
 
-\atri{Evaluate on CVEs}
 \atri{What to do with mprotect?}
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
 %%%%%%%%%%%%%%%%%%%%
 
-In this section, we quantify \tiktok's overhead on workloads 
-with different characteristics, both compute-bound applications
-which rarely use syscalls and syscall-heavy applications which 
-heavily rely on the kernel's interface.
-\tiktok's overhead depends on the number of address spaces 
-where protected pages are mapped. 
-Relevant benchmarks where we expect overhead therefore include multiprocessing,
-parallel benchmarks.
+In this section, we emperically verify \tiktok's ability to mitigate 
+a known double fetch vulnerability, and quantify \tiktok's overhead on 
+workloads with different characteristics including both compute-bound 
+applications which rarely use syscalls and a mix of syscall-heavy applications 
+which heavily rely on the kernel's performance.
 
-We evaluate \tiktok on two benchmark suites: the NAS Parallel 
-Benchmark (NPB)~\cite{npb} and select workloads from the 
-Phoronix Test Suite (PTS)~\cite{pts}. 
+\subsection{Mitigation of CVE-2016-6516}
+%%%%%%%%%%%%%%%%%%%%
+
+CVE-2016-6516 is a known vulnerability in kernels prior to version
+4.7 in a file-system \Code{ioctl}. 
+The vulnerable code is shown in \autoref{lst:cve-2016-6516} and is 
+triggered when the value of the \Code{dest_count} object differs between 
+the two fetches (in lines 2 and 6).
+\Code{memdup_user} uses the value from the first fetch for allocating a buffer, 
+and copying in an array of descriptors from the user in line 6.
+\Code{memdup_user} also contains the second fetch of \Code{dest_count}
+which is later used in the function \Code{vfs_dedupe_file_range}.
+An attacker who increases the size of \Code{dest_count} between the 
+two fetches will cause the kernel to access the copied array out-of-bounds,
+causing a heap buffer overflow.
+
+For verifying \tiktok's defense, we introduce a check condition into the 
+function (lines 8-9) and run a known exploit.\footnote{Scott Bauer's exploit 
+from GitHub https://github.com/wpengfei/CVE-2016-6516-exploit}
+The condition checks whether the fetched value of the user object (\Code{dest_count})
+had changed, indicating a successful attack, and prints a message.
+Finally, we re-introduce the fix for the bug, changing the value of 
+\Code{dest_count} in \Code{same} to that from the first fetch.
+In this setup, we can detect when the conditions for triggering the bug are met, 
+but also revert the conditions to the safe state allowing the kernel to safely
+continue.
+
+Over 10 runs, the exploit was able to trigger the bug on the baseline kernel
+between 8 and 13 times per run. 
+With \tiktok enabled, the exploit was never triggered, i.e. both fetches returned
+the same value on every call.
+
+
+\definecolor{mygreen}{RGB}{62, 123, 49}
+\begin{minipage}{\linewidth}
+\begin{lstlisting}[language=C, escapeinside={<@}{@>}, 
+                  basicstyle=\ttfamily, frame=single, numbers=left, 
+                  captionpos=b,
+                  label=lst:cve-2016-6516,
+                  caption=CVE-2016-6516: Vulnerable double fetch in \Code{ioctl_file_dedupe_range}. 
+                          Lines in green show the fix and testing code]
+  //First fetch
+  if(get_user(count,&argp->dest_count)) 
+  {...}
+  //Using first fetch
+  size = offsetof(..., info[count]);
+  //Secong fetch
+  same = memdup_user(argp, size);
+<@\texttt{\color{mygreen}{+ \textit{//Added check for bug}}}@>
+<@\texttt{\color{mygreen}{+ \textbf{if}(same->dest\_count != count)}}@>
+<@\texttt{\color{mygreen}{+ \ \ printk("Bug triggered");}}@>
+<@\texttt{\color{mygreen}{+ \textit{// Fix: copy over original count}}}@>
+<@\texttt{\color{mygreen}{+ same->dest\_count = count;}}@>
+  //Using second fetch
+  ret = vfs_dedupe_file_range(file,same);
+\end{lstlisting}
+\end{minipage}
+
+
+\subsection{Performance evaluation}
+%%%%%%%%%%%%%%%%%%%%
+
+We evaluate \tiktok on microbenchmarks targeting specific 
+common syscalls, and workloads from two benchmark suites: the 
+NAS Parallel Benchmark (NPB)~\cite{npb} and select workloads 
+from the Phoronix Test Suite (PTS)~\cite{pts}. 
 NPB includes compute-intensive multiprocessing workloads with a 
 low, but non-negligible syscall rate. 
 NPB therefore demonstrates the ability of \tiktok to 
@@ -1454,8 +1515,8 @@ PTS includes syscall-heavy applications with varying degrees
 of parallelism.
 We do not include the SPEC CPU2017 benchmarks
 as they are heavily compute bound and designed to isolate userspace 
-performance without syscalls, and are impervious to kernel 
-performance. SPEC CPU2017 benchmarks would unfairly bias performance in favor of
+performance without syscalls, and are impervious to kernel performance.
+SPEC CPU2017 benchmarks would unfairly bias performance in favor of
 \tiktok.
 
 The testbench for the evaluation consists of a desktop machine 
@@ -1476,22 +1537,63 @@ configuration which also runs our prototype \tiktok kernel
 but instruments all syscalls including \Code{write}.
 
 
-\subsection{NAS Parallel Benchmarks}
+\begin{figure*}[!t]
+  \centering
+  \begin{subfigure}[b]{.33\textwidth}
+    \includegraphics[width=\linewidth]{img/ubench_performance.pdf}
+    \caption{Microbenchmarks}
+    \label{fig:ubench_performance}    
+  \end{subfigure}
+  \begin{subfigure}[b]{.33\textwidth}
+    \includegraphics[width=\linewidth]{img/npb_performance.pdf}
+    \caption{NPB workloads}
+    \label{fig:npb_performance}    
+  \end{subfigure}
+  \begin{subfigure}[b]{.33\textwidth}
+    \includegraphics[width=\linewidth]{img/pts_performance.pdf}
+    \caption{PTSS workloads}
+    \label{fig:pts_performance}    
+  \end{subfigure}
+  \caption{\tiktok's performance on microbenchmarks, NPB and PTS benchmarks 
+          relative to the baseline kernel.}
+\end{figure*}
+
+\begin{table}
+  \centering
+  \begin{tabular}{l l}
+    \toprule
+    \textbf{Microbenchmark} & \textbf{Top syscalls used} \\
+    \midrule
+    File creation & \Code{openat}, \Code{fstat}, \Code{write}, \Code{close} \\
+    Thread/Process creation & \Code{mmap}, \Code{clone}, \Code{exit}, \Code{wait} \\
+    Program launch & \Code{mmap}, \Code{execve}\Code{readlink}, \Code{openat} \\
+    Mem alloc & \Code{brk} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Prominent syscalls used by OSBench microbenchmarks}
+  \label{tab:osbench_syscalls}
+\end{table}
+
+\paragraph{Microbenchmarks}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+We tested \tiktok on microbenchmarks from 
+OSBench.~\footnote{https://github.com/mbitsnbites/osbench}
+The programs use \Code{libc} interfaces such as \Code{fopen}, 
+\Code{pthread_create}, \Code{fork} and \Code{malloc} for creating files, 
+threads, processes and for memory allocation respectively.  
+\autoref{tab:osbench_syscalls} lists the prominent syscall usage 
+for these workloads.
+\autoref{fig:npb_performance} shows \tiktok's performance (time/operation) 
+on OSBench relative to the baseline kernel, with overheads ranging from 
+zero to 5.3\%.
 
-\begin{figure}[]
-  \includegraphics[width=\linewidth]{img/npb_performance.pdf}
-  \caption{\tiktok performance on NPB benchmarks relative to the baseline 
-          system with the same parallelization framework.}
-  \label{fig:npb_performance}
-\end{figure}
-
+\paragraph{NAS Parallel Benchmarks}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 NAS Parallel Benchmarks (NPB)~\cite{npb} is a benchmark introduced by
 NASA. 
 NPB consists of several parallel programs using different communication
 patterns and is available for two frameworks for parallel programming:
 OpenMP and MPI.
-% Two variants that test either threads or processes
 OpenMP~\cite{dagum1998openmp} is a compiler extension that splits a 
 program's execution to multiple threads. 
 All threads still use the same address space, keeping the overhead minimal. 
@@ -1521,15 +1623,8 @@ closest to that of the baseline, since it has low communication overheads.
 \tiktok shows low overhead ($3.7\%$) for compute-intensive, parallel workloads.
 
 
-\subsection{Phoronix Test Suite}
+\paragraph{Phoronix Test Suite}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\begin{figure}[]
-  \includegraphics[width=\linewidth]{img/pts_performance.pdf}
-  \caption{\tiktok performance on PTS benchmarks relative to the baseline system.}
-  \label{fig:pts_performance}
-\end{figure}
-
 The Phoronix Test Suite (PTS)~\cite{pts} includes a large set ($>500$) of 
 open-source benchmarks, of which we have chosen a range of benchmarks 
 suitable for evaluating both desktop and server performance.
@@ -1557,23 +1652,18 @@ While compilation is mostly compute bound, compiling the Linux kernel requires
 accessing a large number of source files, resulting in the creation 
 of a large number of compiler processes each of which read and create 
 files. 
-\tiktok experiences a small, but non-negligible overhead of $4\%$ on this workload.
+\tiktok experiences a small, but non-negligible overhead of $3.5\%$ on this workload.
 Redis requires syscalls for receiving and replying to requests, but 
 processes its transaction entirely in-memory. 
-While early prototypes of our kernel caused significant degradation
-of Redis' throughput (up to $69\%$), demonstrating Redis' dependence 
-on kernel performance, 
-our evaluation prototype achieves almost identical results as the baseline, 
+Our evaluation prototype achieves practically identical results as the baseline, 
 highlighting the final prototype's competitive performance.
 The webservers, Apache and Nginx require network and file-system I/O, 
 and rely heavily on syscall performance. 
 We see that Nginx, which is a higher-performance webserver, sees a larger
 overhead.
-Fs-mark, which accesses a file system with 5000 files of 1MB concurrently
-from 4 threads, and IPC, which implements 128 byte transfers between 
-two processes over a TCP connection, are almost entirely bound by kernel 
-performance. 
-These benchmarks see a performance overhead of up to $10\%$ on \tiktok.
+IPC, which implements 128 byte transfers between 
+two processes over a TCP connection, is almost entirely bound by kernel 
+performance and sees a performance overhead of $3.4\%$ on \tiktok.
 
 Our prototype \tiktok kernel benefits significantly from 
 exempting particular, proven-safe syscalls from instrumentation.
@@ -1601,81 +1691,6 @@ created 236 snapshots (32B each) and 54 copies (4KB each).
 We can see that the occurrence of copies is low, resulting in negligible 
 memory overhead.
 
-\subsection{Evaluation on CVEs}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\begin{figure}[!t]
-  \centering
-    \begin{minilisting}
-Buggy code:
-  val0 = copy_from_user(); // First fetch
-  use(val0)
-  val0 = copy_from_user(); // Second fetch
-  use(val0)
-
-Fixed code:
-  val0 = copy_from_user();
-  use(val0)
-  use(val0)  // No double fetch
-
-Testing protection:
-  val0 = copy_from_user();
-  use(val0);
-+ val1 = copy_from_user();
-+ if(val0 != val1)
-+   printk("Triggered bug\n");
-  use(val0);
-    \end{minilisting}
-\caption{Generic structure of vulnerable code with double fetches, 
-         patched code and a testing version which flags exploits 
-         without allowing it to propagate.}
-\label{fig:cve_test}
-\end{figure}
-\atri{Make it look like a git diff}
-
-In this section, we present emperical evaluation showing that \tiktok protects
-the kernel from \emph{known and fixed} double fetch vulnerabilities. 
-
-\paragraph{Methodology}
-For testing that \tiktok could protect against bugs, we 
-front-ported previously discovered vulnerabilities to the evaluation 
-version of Linux (5.11) and ran exploits against this kernel
-with and without \tiktok's protection.
-A particular challenge was finding bugs for testing: known double fetch 
-bugs have already been patched in the evaluated kernel.
-Our strategy has two advantages:
-\begin{inparaenum}[\itshape i\upshape)]
-  \item we know the exact bug cause, and can reintroduce it with minimal 
-        changes and effort,
-  \item we can reuse existing proofs-of-concept which trigger that bug,
-  \item we can detect when the bug is triggered, and revert to the correct 
-        value.
-\end{inparaenum}
-\autoref{fig:cve_test} shows the pseudocode for testing a particular 
-CVE, for which the patched code has eliminated the double fetch.
-We reintroduce the second fetch, checking the value versus the original
-fetch and posting a message on modification.
-Finally, the code continues to use the old value allowing testing to 
-continue without actually faulting.
-
-
-\begin{table}
-  \begin{center}
-    \begin{tabular}{ l M{18mm} M{18mm} }
-  \toprule
-                      & \multicolumn{2}{c}{\textbf{Average Triggered Count}} \\ \cmidrule{2-3}
-      \textbf{CVE}    & \textbf{baseline} & \textbf{\tiktok} \\  \cmidrule{1-3} 
-      2016-6516       & 10.9              & 0                \\  \cmidrule{1-3}
-      ???             & ???               & ???              \\ 
-  \bottomrule
-  \end{tabular}
-  \end{center}
-  \caption{Table listing CVEs, and the number of times the exploit successfully triggered the bug,
-           with and without \tiktok.}
-  \label{tab:cve_results}
-\end{table}
-
-CVE-2016-6516 PoC taken from \url{https://github.com/wpengfei/CVE-2016-6516-exploit}.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
@@ -1797,8 +1812,9 @@ community.
 %%%%%%%%%%%%%%%%%%%%
 \section*{Acknowledgements}
 %%%%%%%%%%%%%%%%%%%%
-People
-Grants
+\atri{People}
+
+\atri{Grants}
 
 \bibliographystyle{plain}
 \bibliography{TikTok}
