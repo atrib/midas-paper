@@ -57,8 +57,8 @@
 \newcolumntype{Q}{>{\centering\arraybackslash}X}
 \newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
 
-\newcommand\tocttou[0]{TOCTTOU\xspace}
-\newcommand\tiktok[0]{Midas\xspace}
+\newcommand\tocttou{TOCTTOU\xspace}
+\newcommand\tiktok{Midas\xspace}
 
 \newrefformat{cha}{\hyperref[#1]{Chapter~\ref*{#1}}}
 \newrefformat{sec}{\hyperref[#1]{Section~\ref*{#1}}}
@@ -958,7 +958,7 @@ then reads back the updated object cannot be protected using \tiktok.
 \tiktok's invariant will ensure that the second read is identical to the first,
 and does not reflect the intermediate write.
 Such syscalls must be exempted from \tiktok's instrumentation.
-During extensive tests, we did not find any syscall which exhibits this behavior in the Linux
+During extensive tests, we did not find any other syscall which exhibits this behavior in the Linux
 kernel. 
 
 \paragraph{Syscalls with false sharing}
@@ -976,7 +976,7 @@ Such a hypothetical syscall, requiring concurrent modifications to its
 arguments, could exist to support some synchronization mechanism 
 similar to a \Code{futex} and can be safely exempt from \tiktok's invariant.
 %
-During extensive tests, we did not find any syscall which exhibits this behavior in the 
+During extensive tests, we did not find any other syscall which exhibits this behavior in the 
 Linux kernel. 
 
 
@@ -990,7 +990,7 @@ Linux kernel.
 
 \paragraph{Example: Objects spanning two pages}
 \autoref{fig:copy_two_pages} shows \tiktok protecting a syscall which
-has a double fetch for an object spanning multiple (e.g. two) pages.
+has a double fetch for an object spanning multiple (e.g., two) pages.
 Here, the two pages containing the object \Code{X} are acessed as 
 \Code{X[0]} and \Code{X[1]}. 
 The adversary tries to attack the syscall by changing the value of the 
@@ -1404,23 +1404,23 @@ would also benefit \tiktok by having a single page table to
 update instead of multiple page tables for each address space a page
 is mapped in.
 
-\paragraph{Implementations on other OSs}
+\paragraph{Porting to other OSs}
 
-\tiktok can provide \tocttou protection to other operating systems by 
+\tiktok can provide \tocttou protection on other operating systems by 
 tracking the states of each page and implementing state transitions 
 as required.
-Implementations can track page state in any per-page state structure, 
+Systems track page state in per-page state structures,
 such as \Code{vm_state_t} for BSD-based OSs (*BSD) such as FreeBSD and XNU.
-Implementations will instrument explicit userspace read interfaces 
+The prot must instrument explicit userspace read interfaces 
 (\Code{copyin} for *BSD) to transition to states 1 and 3.
 The OS' fault handler (\Code{vm_fault} on *BSD) will trap on writes to 
 protected pages, and needs to be modified to implement the required page 
 duplication and state change.
 
-The remaining OS modifications required to support \tiktok depend on 
-the OS' features. 
+The remaining OS modifications for \tiktok support depends on 
+the OS' features.
 If an OS allows userspace to map file pages, filesystem code to write 
-to these page must be modified.
+to these page needs to be modified.
 Other syscalls which create/modify mappings to userspace pages will 
 also have to be instrumented to ensure that the new mapping respects the
 page's state. 
@@ -1428,6 +1428,7 @@ Such modifications are OS-specific, making it difficult to recommend
 a generic methodology.
 
 \atri{What to do with mprotect?}
+
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
@@ -1455,7 +1456,7 @@ An attacker who increases the size of \Code{dest_count} between the
 two fetches will cause the kernel to access the copied array out-of-bounds,
 causing a heap buffer overflow.
 
-For verifying \tiktok's defense, we introduce a check condition into the 
+For verifying \tiktok's defense, we introduce a non-faulting assertion check into the 
 function (lines 8-9) and run a known exploit.\footnote{Scott Bauer's exploit 
 from GitHub https://github.com/wpengfei/CVE-2016-6516-exploit}
 The condition checks whether the fetched value of the user object (\Code{dest_count})
@@ -1468,7 +1469,9 @@ continue.
 
 Over 10 runs, the exploit was able to trigger the bug on the baseline kernel
 between 8 and 13 times per run. 
-With \tiktok enabled, the exploit was never triggered, i.e. both fetches returned
+\mat{How can we trigger the bug 13 times when the code is only executed 10
+times?}
+With \tiktok enabled, the exploit was never triggered, i.e., both fetches returned
 the same value on every call.
 
 
@@ -1724,7 +1727,7 @@ previous section.
 
 \autoref{fig:overhead_class} shows the breakdown of overheads for three 
 workloads. 
-As expected, metadata tracking and duplication causes significant overheads
+As expected, metadata tracking and duplication causes most overheads
 for the user copy and fault handling functions respectively.
 The results for the Linux build breakdown differs in the large portion of 
 the unaccounted overhead (labelled 'Other').
@@ -1743,7 +1746,7 @@ all the other processes.
   \label{fig:nginx_perf}
 \end{figure}
 
-To better understand the \tiktok's behavior under varying syscall 
+To better understand \tiktok's behavior under varying syscall 
 rates and different core configurations, we studied Nginx's throughput
 while varying payload sizes and different worker counts.
 The server is loaded with requests from a separate machine running 
@@ -1758,7 +1761,7 @@ Each worker is single-threaded and uses one core.
 For all configurations, we can see that the rate of requests served 
 remains almost constant while increasing payload size until the network 
 link reaches saturation.
-Under a saturated network, the request rates with \tiktok match that 
+Under a saturated network, the request rates for \tiktok match that 
 of the baseline system.
 With a single worker, \tiktok's overheads cause a consistent 13-14\% 
 overhead on request rate for small packet sizes.
@@ -1766,7 +1769,7 @@ However, we see that \tiktok has practically no overhead when serving
 requests with 8 workers even when packet sizes are too small to 
 saturate the network link.
 In this case, both \tiktok and the baseline system are limited by the
-scalability of Linux' networking stack.
+scalability of the Linux networking stack.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
