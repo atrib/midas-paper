@@ -21,7 +21,7 @@ diff:
 	sed -i 's/\\newcommandMidas/\%/g' midas.tex
 	latexdiff diff.tex midas.tex --disable-citation-markup --config="PICTUREENV=(?:picture|DIFnomarkup|align|tabular)[\w\d*@]*" > sec22mR_diff.tex
 	-rubber --unsafe --pdf sec22mR_diff.tex
-	#rm diff.tex midas.tex sec22mR_diff.tex
+	rm diff.tex midas.tex sec22mR_diff.tex
 
 .PHONY: revision
 revision: *.md
