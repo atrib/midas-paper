@@ -77,6 +77,9 @@
 \newcommand\mat[1]{\noindent{\color{blue} {\bf \fbox{Mat}} {\it#1}}}
 \newcommand\atri[1]{\noindent{\color{red} {\bf \fbox{AB}} {\it#1}}}
 \newcommand\UT[1]{\noindent{\color{violet} {\bf \fbox{UT}} {\it#1}}}
+% \newcommand\mat[1]{}
+% \newcommand\atri[1]{}
+% \newcommand\UT[1]{}
 
 \newcommand{\footremember}[2]{%
    \footnote{#2}
@@ -128,7 +131,7 @@ that throughout a syscall's lifetime, every read to a userspace object
 will return the same value.
 
 \tiktok shows no noticeable drop in performance when evaluated on compute-bound
-workloads. On system call heavy workloads, \tiktok incurs 0.2-18\%
+workloads. On system call heavy workloads, \tiktok incurs 0.2-14\%
 performance overhead, while protecting the kernel
 against any \tocttou attacks. On average, \tiktok shows a $4.3\%$ overhead on
 diverse workloads across two benchmark suites.
@@ -950,6 +953,13 @@ Crucially, exempting these syscalls from \tiktok's protection does not
 affect the security of other syscalls containing double fetches. 
 Any writes from these syscalls are subject to the same rules described
 in the state machine, and cannot break \tiktok's invariant.
+In general, a kernel's interface can contain any number of 
+syscalls which require exemption from \tiktok's protection, and 
+they all need to be properly added to the exemption list. 
+Finer grained exemptions based on syscall parameters can also be 
+implemented, but was found unnecessary for Linux.
+A kernel where a majority of syscalls require exemption might not 
+benefit from \tiktok's protection.
 
 
 \paragraph{Syscalls with read-write-read patterns}
@@ -986,7 +996,6 @@ Linux kernel.
   of a double fetch of an object \Code{X} spanning two pages.}
   \label{fig:copy_two_pages}
 \end{figure}
-\atri{fix figure}
 
 \paragraph{Example: Objects spanning two pages}
 \autoref{fig:copy_two_pages} shows \tiktok protecting a syscall which
@@ -999,8 +1008,11 @@ second page:
 \item Between the syscall's first reads of \Code{X[0]} and \Code{X[1]}, and
 \item Between the first and second fetches of X.
 \end{inparaenum}
-\tiktok ensures that both fetches return \Code{X=(42,0)}, preventing any 
-TOCTTOU bugs triggered by reading different values.
+\tiktok ensures that both fetches return \Code{X=(42,0)}.
+Critically, any existing TOCTTOU bugs are not triggered since both fetches 
+read the same, possibly invalid, value of the object.
+Note how the situation is identical to one where the adversarial write 
+to \Code{X[1]} happens before the syscall starts.
 
 \paragraph{Preventing deadlocks by design}
 \tiktok's design is free of deadlocks, and exempts syscalls which 
@@ -1466,13 +1478,10 @@ Finally, we re-introduce the fix for the bug, changing the value of
 In this setup, we can detect when the conditions for triggering the bug are met, 
 but also revert the conditions to the safe state allowing the kernel to safely
 continue.
-
-Over 10 runs, the exploit was able to trigger the bug on the baseline kernel
-between 8 and 13 times per run. 
-\mat{How can we trigger the bug 13 times when the code is only executed 10
-times?}
-With \tiktok enabled, the exploit was never triggered, i.e., both fetches returned
-the same value on every call.
+The exploit was able to successfully trigger the bug on the baseline kernel
+every time over 10 runs.
+With \tiktok enabled, the exploit was never triggered, i.e., both fetches 
+returned the same value on every call.
 
 
 \definecolor{mygreen}{RGB}{62, 123, 49}
