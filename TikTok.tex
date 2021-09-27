@@ -1549,26 +1549,12 @@ For particular benchmarks, we also run the \emph{\tiktok{+}write}
 configuration which also runs our prototype \tiktok kernel
 but instruments all syscalls including \Code{write}.
 
-
 \begin{figure*}[!t]
   \centering
-  \begin{subfigure}[b]{.33\textwidth}
-    \includegraphics[width=\linewidth]{img/ubench_performance.pdf}
-    \caption{Microbenchmarks}
-    \label{fig:ubench_performance}    
-  \end{subfigure}
-  \begin{subfigure}[b]{.33\textwidth}
-    \includegraphics[width=\linewidth]{img/npb_performance.pdf}
-    \caption{NPB workloads}
-    \label{fig:npb_performance}    
-  \end{subfigure}
-  \begin{subfigure}[b]{.33\textwidth}
-    \includegraphics[width=\linewidth]{img/pts_performance.pdf}
-    \caption{PTSS workloads}
-    \label{fig:pts_performance}    
-  \end{subfigure}
+  \includegraphics[width=\linewidth]{img/tiktok_performance.pdf}
   \caption{\tiktok's performance on microbenchmarks, NPB and PTS benchmarks 
           relative to the baseline kernel.}
+  \label{fig:tiktok_performance}
 \end{figure*}
 
 \begin{table}
@@ -1596,7 +1582,7 @@ The programs use \Code{libc} interfaces such as \Code{fopen},
 threads, processes and for memory allocation respectively.  
 \autoref{tab:osbench_syscalls} lists the prominent syscall usage 
 for these workloads.
-\autoref{fig:npb_performance} shows \tiktok's performance (time/operation) 
+\autoref{fig:tiktok_performance} shows \tiktok's performance (time/operation) 
 on OSBench relative to the baseline kernel, with overheads ranging from 
 zero to 5.3\%.
 
@@ -1626,7 +1612,7 @@ and are all long enough for the kernel to reach equilibrium.
 Certain benchmarks require a parallelism number which is a perfect square.
 On our 8-core CPU, having 4 compute-bound threads/processes instead of 16 allows 
 all of them to run without time-sharing.
-\autoref{fig:npb_performance} shows \tiktok's performance for both MPI and OpenMP,
+\autoref{fig:tiktok_performance} shows \tiktok's performance for both MPI and OpenMP,
 normalized to the performance of the baseline system with the same parallelization
 framework.
 On average, \tiktok achieved $96.3\%$ of the baseline system's performance on 
@@ -1652,7 +1638,7 @@ buffers between processes which spends all of its time in syscalls
 and whose performance is entirely dependent on kernel IPC performance.
 
 We plot \tiktok's performance relative to the baseline kernel on
-these benchmarks in \autoref{fig:pts_performance}, roughly ordering 
+these benchmarks in \autoref{fig:tiktok_performance}, roughly ordering 
 workloads in increasing order of syscall dependence from left to right.
 For benchmarks for which PTS reports runtime, we compute the inverse 
 of the runtime as performance.
