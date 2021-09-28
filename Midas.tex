@@ -224,7 +224,7 @@ the defense applies to any modern operating system kernel.
 Our evaluation shows overall low performance overhead for our mitigation.
 On parallel workloads from the NAS Parallel Benchmarks suite, \midas shows 
 an average performance overhead of $3.7\%$ while its performance overhead on
-more kernel-intensive workloads from the Phoronix Test Suite is $5\%$ with 
+more kernel-intensive workloads from the Phoronix Test Suite is $3.4\%$ with 
 negligible memory overhead.
 The security evaluation demonstrates how \midas successfully stops all attacks
 against vulnerable system calls, along with providing the developer with
@@ -240,7 +240,7 @@ the kernel against malicious concurrent modifications;
 enabling developers to detect \tocttou bugs, and providing the foundation for
 safe system call interposition and validation;
 \item An efficient implementation of \midas for the Linux kernel that exhibits
-low ($3.7\%$) performance overhead.
+low ($3.4\%$) performance overhead.
 \end{itemize}
 
 
@@ -478,6 +478,7 @@ tsafrir2008portably} are out of scope.
   \label{tab:attack_class}
 \end{table}
 
+\atri{\dots we could not tell if the contents of each row are related or not}
 \midas guards data processed during a syscall's execution against concurrent modification.
 We denote the data fetched twice as vulnerable data.
 In this section, we classify attacks based on two criteria: the 
@@ -1674,7 +1675,7 @@ To highlight the worst-case performance of the unoptimized implementation,
 we evaluate the performance of the IPC benchmark on \midas{+}write due 
 to its high frequency of \Code{write} syscalls.
 With \midas{+}write, the performance of the IPC benchmark falls to 
-$12.6\%$ of the baseline, a further degradation of $81\%$ compared 
+$12.6\%$ of the baseline, a further degradation of $84\%$ compared 
 to \midas, showing that developer effort towards properly exempting 
 frequently called \emph{safe} syscalls from \midas protections is crucial
 towards for implementations to maintain competitive performance
