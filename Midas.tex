@@ -133,7 +133,7 @@ will return the same value.
 \midas shows no noticeable drop in performance when evaluated on compute-bound
 workloads. On system call heavy workloads, \midas incurs 0.2-14\%
 performance overhead, while protecting the kernel
-against any \tocttou attacks. On average, \midas shows a $4.3\%$ overhead on
+against any \tocttou attacks. On average, \midas shows a $3.4\%$ overhead on
 diverse workloads across two benchmark suites.
 
 \end{abstract}
@@ -1152,7 +1152,9 @@ all address spaces for a page.
 \begin{figure}[]
   \centering
   \includegraphics[width=0.8\linewidth]{img/copy_from_user.pdf}
-  \caption{Flowchart for syscall reading from userspace.}
+  \caption{Flowchart for a syscall using the transfer function 
+          \Code{raw_copy_from_user}
+          for reading from userspace.}
   \label{fig:copy_from_user}
 \end{figure}
 
