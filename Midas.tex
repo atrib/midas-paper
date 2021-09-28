@@ -116,7 +116,7 @@ EPFL
 \begin{abstract}
 %-------------------------------------------------------------------------------
 Double-fetch bugs are a plague across all major operating system kernels. They
-occur when data is fetched twice across the user/kernel trust-boundary while 
+occur when data is fetched twice across the user/kernel trust boundary while 
 allowing concurrent modification. Such bugs enable an attacker to illegally 
 access memory, cause denial of service, or to escalate privileges. 
 %
@@ -143,7 +143,6 @@ diverse workloads across two benchmark suites.
 %%%%%%%%%%%%%%%%%%%%%%
 
 \atri{In this paper, we mean "parallel" when we say "concurrent". Fix}
-\atri{Fix font sizes in figures}
 The operating system (OS) kernel enables isolation between processes and is 
 a key trusted computing
 base. Each \emph{untrusted} userspace process runs under a
@@ -192,12 +191,12 @@ introduce double fetches, and consequently \tocttou bugs.
 
 To mitigate double-fetch bugs in the kernel, a system must prohibit
 \emph{concurrent\footnotemark changes} to memory accessed by the system call. Adversaries may
-find thrifty ways to trigger such concurrent writes:
+find crafty ways to trigger such concurrent writes:
 \begin{inparaenum}[\itshape i\upshape)]
 \item  direct writes from userspace (e.g., from concurrent threads),
 \item  kernel writes from system calls (e.g., from concurrent system calls),
 \item  modifying address space mappings,
-\item  concurrent \texttt{write}s to a file that alters mapped
+\item  concurrent \texttt{write} syscalls to a file that alters mapped
 file pages, or
 \item  storing arguments on device-backed pages, leveraging devices to trigger
 concurrent writes.
@@ -419,7 +418,7 @@ rights~\cite{payer2012protecting,
 pu2006methodical, wei2010modeling, tsafrir2008portably,Garfinkel03}.
 \tocttou bugs affect kernel code~\cite{jurczyk2013bochspwn, wang2018survey}
 as well as dynamically loaded driver code~\cite{cve201812633,cve201812633fix}.
-Wang et al.~\cite{wang2018survey} showed that double-fetches appear not only
+Wang et al.~\cite{wang2018survey} showed that double fetches appear not only
 in kernels, but wherever there is a trust boundary to cross (e.g., kernel ---
 hypervisor~\cite{wilhelm2016xenpwn} and hardware---kernel
 boundaries~\cite{lu2018untrusted}). 
@@ -432,7 +431,7 @@ boundaries~\cite{lu2018untrusted}).
 
 % In this section, we describe the threat model for exploiting double-fetch
 % bugs in the kernel and classify the possible attacks based on how the 
-% data is modified between vulnerable double-fetches.
+% data is modified between vulnerable double fetches.
 
 \section{Threat Model}
 \label{sec:threatmodel}
@@ -499,7 +498,7 @@ attacks~\cite{watson2007exploiting}.
 Alternatively, a concurrently executing syscall can also modify the 
 vulnerable data in a confused-deputy attack.
 When the adversary passes a pointer to the vulnerable data to 
-the syscall as a user-buffer in which the syscall can return some 
+the syscall as a user buffer in which the syscall can return some 
 data, the kernel's write to the buffer can modify vulnerable data.
 For example, the \Code{read} system call takes an argument pointing 
 to a user buffer where the contents of a file will be copied to.
@@ -513,11 +512,11 @@ targeted syscall's first read.}
 
 Existing kernel mappings to a page also mapped in userspace can be 
 leveraged by an attacker in a confused-deputy attack.
-The adversary maps a file-backed page from the page-cache in a
+The adversary maps a file-backed page from the page cache in a
 userspace process and then passed as an argument in this page to the 
 targeted syscall.
 The adversary then triggers a concurrent \Code{write} syscall to modify the 
-vulnerable data using kernel mappings for the page-cache
+vulnerable data using kernel mappings for the page cache
 pages~\cite{watson2007exploiting}.
 % This attack is called \emph{inception double fetch}~\cite{watson2007exploiting}.
 % \mat{Did we call it inception double fetch?}
@@ -556,7 +555,7 @@ mappings to vulnerable data, \midas's protection is complete
 against writes from both user and kernel code.
 
 Finally, a device might modify vulnerable data if it is either 
-allowed to DMA to the page, or if the page is memory-mapped and is 
+allowed to DMA to the page, or if the page is memory mapped and is 
 actually backed by the device.
 In the latter case, external factors can change the vulnerable 
 data.
@@ -602,11 +601,11 @@ code remains unaffected.
 \midas's implementation builds on the protection mechanisms provided by 
 existing virtual memory implementations.
 On modern platforms, virtual memory protection is set up by the OS at
-page-granularity by setting bits in pagetable entries (PTEs).
+page granularity by setting bits in pagetable entries (PTEs).
 These permission bits are checked by the hardware on memory access, 
 efficiently enforcing the permissions, and raising a fault when they 
 are violated.
-For performance, \midas implements its invariant at page-granularity, not object 
+For performance, \midas implements its invariant at page granularity, not object 
 granularity: when a syscall reads from userspace, every page touched by that 
 read is covered, not merely the bytes read.
 Page-granularity protections are conservative compared to byte-granularity
@@ -622,7 +621,7 @@ The leading pages containing the object are protected before the
 later pages, allowing an adversary to potentially modify the later 
 pages before the syscall first reads them.
 However, the adversary is prevented from modifying any of these pages
-after the syscall's first read, ensuring that double-fetches respect
+after the syscall's first read, ensuring that double fetches respect
 the invariant.
 If the syscall code contains a \tocttou bug, the modification will
 be visible to the first fetch itself (which is used for checking for 
@@ -711,7 +710,7 @@ holding the latest state of the page.}
 
 To track multiple versions of the contents of a page when being concurrently 
 accessed by numerous tasks, from userspace or during a syscall,
-\midas implicitly maintains a per-user-page state machine.
+\midas implicitly maintains a per-user page state machine.
 For a page, its corresponding state machine 
 \begin{inparaenum}[\itshape i\upshape)]
   \item tracks snapshots for currently executing syscalls which have read it, 
@@ -976,8 +975,8 @@ Another hypothetical type of syscall could struggle with \midas's
 instrumentation due to false sharing.
 Suppose a page contains two objects, $O_0$ and $O_1$, and a syscall  
 sequentially reads $O_0$ then $O_1$.
-Due to \midas's invariant being enforced at page-granularity and 
-false-sharing of the page between these objects, \midas guarantees that
+Due to \midas's invariant being enforced at page granularity and 
+false sharing of the page between these objects, \midas guarantees that
 the value of object $O_1$ read is the same as what was contained when it 
 first read object $O_0$. 
 A syscall which requires the value of $O_1$ to change between these two 
@@ -1027,7 +1026,7 @@ setting the page writable.
 Reading from kernel code involves creating a new snapshot and 
 setting the page read-only.
 None of the aforementioned operations relies on other operations 
-on the same page to complete and all are finite-time.
+on the same page to complete and all are finite time.
 None of the operations on a page rely on operations on other pages.
 A single, per-page lock can serialize operations on that page
 and assure forward progress.
@@ -1131,7 +1130,7 @@ mechanisms, triggering a state change, or due to buggy software
 accessing a page with illegal permissions, triggering a signal to 
 the task.
 Other architectures might have fewer software-usable 
-bits in the page-table, and implementations of \midas would 
+bits in the page table, and implementations of \midas would 
 require storing the protection status of pages in a separate data structure.
 The duplication status of the page is implicitly encoded in the 
 snapshots: the page is duplicated when any of its snapshots
@@ -1194,7 +1193,7 @@ is needed.
 In our prototype, we also exempt the \Code{write} system 
 call's read from user memory from instrumentation.
 The \Code{write} system call takes three arguments: a 
-file-descriptor passed as a register, a pointer to a user 
+file descriptor passed as a register, a pointer to a user 
 buffer and a count of bytes to be written to the file.
 While the write to the file's pages is sensitive, and 
 \midas takes care to ensure that it follows the page state 
@@ -1248,7 +1247,7 @@ accessed.
 
 For non-NULL PTEs, the handler checks if the PTE indicates that the 
 page is present.
-Non-present pages need to be swapped-in.
+Non-present pages need to be swapped in.
 After finding the page, \midas then checks if the page was previously 
 swapped in by any other task and is now in a protected state.
 For protected pages, \midas implements the required state change based 
@@ -1256,7 +1255,7 @@ on whether the faulting access was a read or a write.
 
 In the remaining case, faults for a present page indicate a 
 permission fault (write to a read-only page).
-If the page is not a COW-page, the handler then checks if the page
+If the page is not a COW page, the handler then checks if the page
 is in a protected state by checking the SW3 bit.
 If the page was protected, a new copy is allocated and the page 
 transitions to the following state.
@@ -1329,7 +1328,7 @@ page using kernel mappings.
 Since \midas only protects userspace mappings for protected pages, 
 writes by FS drivers will not raise a fault.
 To comprehensively protect the page, any implementation needs to 
-instrument FS-drivers' write functions.
+instrument FS drivers' write functions.
 Fortunately, FS drivers provided with the kernel follow a simple 
 recipe: for pages not in the page cache, the driver executes 
 FS-specific code to read the page into the page cache and then 
@@ -1599,7 +1598,7 @@ OpenMP~\cite{dagum1998openmp} is a compiler extension that splits a
 program's execution to multiple threads. 
 All threads still use the same address space, keeping the overhead minimal. 
 MPI~\cite{snir1998mpi} implements parallel execution by launching multiple
-processes which communicate by message-passing. 
+processes which communicate by message passing. 
 The two technology stacks have different frequency of syscalls due to 
 different communication methods.
 Communication through kernel syscalls for either stack will incur overhead
@@ -1613,7 +1612,7 @@ These benchmarks' runtime varies between 10 seconds and 8 minutes,
 and are all long enough for the kernel to reach equilibrium.
 Certain benchmarks require a parallelism number which is a perfect square.
 On our 8-core CPU, having 4 compute-bound threads/processes instead of 16 allows 
-all of them to run without time-sharing.
+all of them to run without time sharing.
 \autoref{fig:midas_performance} shows \midas's performance for both MPI and OpenMP,
 normalized to the performance of the baseline system with the same parallelization
 framework.
@@ -1755,7 +1754,7 @@ The clients send http requests for files ranging between 20B and
 
 In \autoref{fig:nginx_perf}, we plot the request rate and throughput
 for Nginx servers running with one and eight workers.
-Each worker is single-threaded and uses one core.
+Each worker is single threaded and uses one core.
 For all configurations, we can see that the rate of requests served 
 remains almost constant while increasing payload size until the network 
 link reaches saturation.
@@ -1822,7 +1821,7 @@ concurrent access to syscall parameters from userspace to detect kernel
 accesses to the same via a cache side-channel.
 A major limitation of DECAF is that it relies on CPU-specific behavior, which 
 is sensitive to CPU parameters, subject to changes generation to 
-generation (or even from core to core) and prone to noise and false-sharing. 
+generation (or even from core to core) and prone to noise and false sharing. 
 Following the discovery of transient-execution attacks~\cite{kocher18spectre},
 proposals such as InvisiSpec~\cite{YanInvisispec} have tried to prevent 
 information leakage via cache side-channels.
@@ -1835,8 +1834,8 @@ However, fuzzers are inherently incomplete, limiting the ability of dynamic
 analysis to find bugs.
 
 % PeriScope\cite{SongH0SNVVKSF19} is out of scope. 
-% Devices are outside the scope of the current implementation of \midas. Particularly, double-fetches from device backed memory is liable to change without any control, but already requires high privileges which the user does not have. DMA accesses to main memory, however, can be protected by the use of IOMMUs with very low overhead [4], and can take advantage of the same \midas mechanisms. [4] Border Control: Sandboxing Accelerators.
-% Overall comment: \midas does not seek to overthrow methods that seek to find double-fetches, and fix them. In fact, it also allows use as a sanitizer that flags such double-fetches. In the meanwhile, however, bugs do persist and are likely to persist in an environment incorporating third-party code in modules and a rapid pace of development. Here, \midas provides a strong, principled guarantee which is also future-proof.
+% Devices are outside the scope of the current implementation of \midas. Particularly, double fetches from device backed memory is liable to change without any control, but already requires high privileges which the user does not have. DMA accesses to main memory, however, can be protected by the use of IOMMUs with very low overhead [4], and can take advantage of the same \midas mechanisms. [4] Border Control: Sandboxing Accelerators.
+% Overall comment: \midas does not seek to overthrow methods that seek to find double fetches, and fix them. In fact, it also allows use as a sanitizer that flags such double fetches. In the meanwhile, however, bugs do persist and are likely to persist in an environment incorporating third-party code in modules and a rapid pace of development. Here, \midas provides a strong, principled guarantee which is also future-proof.
 
 \subsection{Mitigations}
 
