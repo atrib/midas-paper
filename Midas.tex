@@ -142,7 +142,6 @@ diverse workloads across two benchmark suites.
 \section{Introduction}
 %%%%%%%%%%%%%%%%%%%%%%
 
-\atri{In this paper, we mean "parallel" when we say "concurrent". Fix}
 The operating system (OS) kernel enables isolation between processes and is 
 a key trusted computing
 base. Each \emph{untrusted} userspace process runs under a
@@ -202,7 +201,7 @@ file pages, or
 concurrent writes.
 \end{inparaenum}
 To prevent attacks, all kinds of concurrent writes must be prohibited.
-\footnotetext{The actual attacker model includes both concurrent and parallel 
+\footnotetext{The attacker model includes both concurrent and parallel 
 writes.}
 
 % TODO key idea
@@ -274,7 +273,7 @@ are accessed using physical addresses.
 Architectures rely on page tables orchestrated by the operating system 
 to translate between these address spaces and to protect such accesses.
 Page tables are arranged as radix trees where different bits of the 
-virtual address are used as indices into levels of the page table.
+virtual address are used as indices into successive levels of the page table.
 At the leaf page table, a unique pagetable entry (PTE) stores the 
 translation and protection information for a page.
 
@@ -380,7 +379,7 @@ The architecture also exposes privileged instructions
 \Code{stac}/\Code{clac} to quickly disable and enable this access 
 control.
 On the OS side, all accesses to userspace memory are made explicit, 
-using special functions to read from and write to userspace memory.
+using special \emph{transfer functions} to read from and write to userspace memory.
 Any unintended access, outside these functions, causes a 
 hardware fault, indicating either a kernel bug or an attack.
 Linux implements the functions \Code{copy_\{from/to\}_user} which 
@@ -444,7 +443,7 @@ execute arbitrary userspace code, including system calls. Some of the system
 calls have double-fetch vulnerabilities, and the adversary wants to exploit them,
 e.g., for privilege escalation.
 The adversary may execute arbitrary sequences of system calls on multiple CPU
-cores in parallel or concurrently on the same core.
+cores in parallel, or concurrently on the same core.
 
 \midas mitigates any unintended corruption or information leakage \emph{in the kernel}
 or \emph{in other user processes} that arises through double-fetch bugs. 
@@ -1577,7 +1576,7 @@ but instruments all syscalls including \Code{write}.
 \paragraph{Microbenchmarks}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 We tested \midas on microbenchmarks from 
-OSBench.~\footnote{https://github.com/mbitsnbites/osbench}
+OSBench~\cite{osbench}.
 The programs use \Code{libc} interfaces such as \Code{fopen}, 
 \Code{pthread_create}, \Code{fork} and \Code{malloc} for creating files, 
 threads, processes and for memory allocation respectively.  
