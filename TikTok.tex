@@ -58,7 +58,7 @@
 \newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
 
 \newcommand\tocttou[0]{TOCTTOU\xspace}
-\newcommand\tiktok[0]{Midas\xspace}
+\newcommand\midas[0]{Midas\xspace}
 
 \newrefformat{cha}{\hyperref[#1]{Chapter~\ref*{#1}}}
 \newrefformat{sec}{\hyperref[#1]{Section~\ref*{#1}}}
@@ -94,7 +94,7 @@
 \date{}
 
 % make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{\Large \bf \tiktok: Systematic Kernel TOCTTOU Protection}
+\title{\Large \bf \midas: Systematic Kernel TOCTTOU Protection}
 % \title{TocSens: TOCTTOU-sensitive Sunglasses for user access}
 
 %for single author (just remove % characters)
@@ -125,15 +125,15 @@ However, they remain incredibly hard to find.
 %
 Similarly,
 they fundamentally prohibit efficient, kernel-based stateful system call filtering.
-We propose \tiktok to mitigate double-fetch bugs. \tiktok creates on-demand
+We propose \midas to mitigate double-fetch bugs. \midas creates on-demand
 snapshots and copies of accessed data, enforcing our key invariant
 that throughout a syscall's lifetime, every read to a userspace object 
 will return the same value.
 
-\tiktok shows no noticeable drop in performance when evaluated on compute-bound
-workloads. On system call heavy workloads, \tiktok incurs 0.2-14\%
+\midas shows no noticeable drop in performance when evaluated on compute-bound
+workloads. On system call heavy workloads, \midas incurs 0.2-14\%
 performance overhead, while protecting the kernel
-against any \tocttou attacks. On average, \tiktok shows a $4.3\%$ overhead on
+against any \tocttou attacks. On average, \midas shows a $4.3\%$ overhead on
 diverse workloads across two benchmark suites.
 
 \end{abstract}
@@ -185,9 +185,9 @@ wrappers}.
 System call filtering wrappers require that data read from userspace for the
 initial check remains the same when the kernel later uses it for computation, 
 and can currently only check arguments passed by value.
-\tiktok enables ``deep argument inspection'' for SecComp~\cite{seccomp_deep, seccomp}
+\midas enables ``deep argument inspection'' for SecComp~\cite{seccomp_deep, seccomp}
 i.e., checks on arguments passed by reference.
-Without \tiktok, such inspection is inherently impossible since such checks 
+Without \midas, such inspection is inherently impossible since such checks 
 introduce double fetches, and consequently \tocttou bugs.
 
 To mitigate double-fetch bugs in the kernel, a system must prohibit
@@ -220,15 +220,15 @@ system calls that are in flight. All writes end up on the most recent version of
 the objects and therefore allow forward progress.
 % Mat: should we split it into security, correctness, and performance
 % properties, all driven by the core invariant?
-We implement our invariant in our \tiktok prototype for the Linux kernel, but
+We implement our invariant in our \midas prototype for the Linux kernel, but
 the defense applies to any modern operating system kernel.
 
 Our evaluation shows overall low performance overhead for our mitigation.
-On parallel workloads from the NAS Parallel Benchmarks suite, \tiktok shows 
+On parallel workloads from the NAS Parallel Benchmarks suite, \midas shows 
 an average performance overhead of $3.7\%$ while its performance overhead on
 more kernel-intensive workloads from the Phoronix Test Suite is $5\%$ with 
 negligible memory overhead.
-The security evaluation demonstrates how \tiktok successfully stops all attacks
+The security evaluation demonstrates how \midas successfully stops all attacks
 against vulnerable system calls, along with providing the developer with
 sufficient information about the location of the bug.
 %
@@ -237,11 +237,11 @@ The main contributions of this paper are:
 \begin{itemize}[noitemsep]
 \item Distillation of \tocttou attack vectors into a core invariant that protects
 the kernel against malicious concurrent modifications;
-\item \tiktok, a design that prohibits and detects
+\item \midas, a design that prohibits and detects
 \tocttou attacks against modern kernels, prohibiting their exploitation,
 enabling developers to detect \tocttou bugs, and providing the foundation for
 safe system call interposition and validation;
-\item An efficient implementation of \tiktok for the Linux kernel that exhibits
+\item An efficient implementation of \midas for the Linux kernel that exhibits
 low ($3.7\%$) performance overhead.
 \end{itemize}
 
@@ -250,14 +250,14 @@ low ($3.7\%$) performance overhead.
 \section{Background}
 %%%%%%%%%%%%%%%%%%%%
 
-\tiktok orchestrates several mechanisms within the Linux memory subsystem 
+\midas orchestrates several mechanisms within the Linux memory subsystem 
 to provide its protection guarantees.
 Linux uses architecturally defined per-address space page tables to define
 mappings to pages.
-\tiktok protects these pages by temporarily marking them read-only in the 
+\midas protects these pages by temporarily marking them read-only in the 
 page tables.
 This section provides the background information necessary to reason about 
-why and how \tiktok protects syscalls from concurrent writes.
+why and how \midas protects syscalls from concurrent writes.
 
 
 \subsection{Page Tables and Memory Protection}
@@ -268,7 +268,7 @@ RISC-V) implement separate virtual and physical
 address spaces (AS) based on fixed-size regions called pages.
 %
 Some architectures also include segmentation-based protection 
-working in tandem with page tables, but segmentation is irrelevant for \tiktok.
+working in tandem with page tables, but segmentation is irrelevant for \midas.
 %
 Programs execute in their virtual address space while caches and main memory
 are accessed using physical addresses.
@@ -388,7 +388,7 @@ Linux implements the functions \Code{copy_\{from/to\}_user} which
 use the access control instructions to disable SMAP before 
 accessing userspace data, and then re-enabling SMAP afterwards.
 Kernel accesses to userspace data therefore become explicit, allowing
-\tiktok to reliably track all kernel fetches from userspace memory, 
+\midas to reliably track all kernel fetches from userspace memory, 
 and therefore protect them.
 
 
@@ -447,7 +447,7 @@ e.g., for privilege escalation.
 The adversary may execute arbitrary sequences of system calls on multiple CPU
 cores in parallel or concurrently on the same core.
 
-\tiktok mitigates any unintended corruption or information leakage \emph{in the kernel}
+\midas mitigates any unintended corruption or information leakage \emph{in the kernel}
 or \emph{in other user processes} that arises through double-fetch bugs. 
 Hardware attacks such as Rowhammer~\cite{mutlu2019rowhammer}
 or side-channels~\cite{kocher2019spectre}, and file-system TOCTTOU
@@ -480,7 +480,7 @@ tsafrir2008portably} are out of scope.
   \label{tab:attack_class}
 \end{table}
 
-\tiktok guards data processed during a syscall's execution against concurrent modification.
+\midas guards data processed during a syscall's execution against concurrent modification.
 We denote the data fetched twice as vulnerable data.
 In this section, we classify attacks based on two criteria: the 
 privilege level of the writer, and whether the mapping used for writing 
@@ -550,9 +550,9 @@ a different address space, the kernel might lazily reinstate
 the adversary's mapping to the page.
 \emph{The swapping mechanism must, therefore, be protected.}
 
-\tiktok protects against all of the aforementioned attack vectors.
+\midas protects against all of the aforementioned attack vectors.
 In the absence of any other syscall which can create new userspace 
-mappings to vulnerable data, \tiktok's protection is complete 
+mappings to vulnerable data, \midas's protection is complete 
 against writes from both user and kernel code.
 
 Finally, a device might modify vulnerable data if it is either 
@@ -565,7 +565,7 @@ except a superuser from mapping device-backed pages into their
 address spaces.
 Such users are also disallowed from configuring DMA devices.
 Therefore, device modifications to vulnerable data fall outside 
-our threat model and are not protected by \tiktok.
+our threat model and are not protected by \midas.
 As a superuser can modify kernel code, protecting against attacks from the
 superuser is outside of our threat model.
 % The superuser may load arbitrary kernel code % via loadable
@@ -573,21 +573,21 @@ superuser is outside of our threat model.
 % and confused-deputy attacks leveraging an incompetent 
 % system administrator are also outside the purview of our threat model.
 However, on processors supporting IOMMUs or similar methods for 
-access control~\cite{olsonbordercontrol}, \tiktok can be extended 
+access control~\cite{olsonbordercontrol}, \midas can be extended 
 to protect against modifications by DMA devices.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{\tiktok Design} 
+\section{\midas Design} 
 \label{sec:design}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\tiktok maintains a single core \emph{invariant}:
+\midas maintains a single core \emph{invariant}:
 \textbf{\emph{Through a syscall's lifetime, every read to a userspace object 
 will return the same value}}.
 By construction, the invariant guarantees that double-fetches in syscall
 code will read the same data, \emph{eliminating \tocttou bugs}.
-\tiktok maintains the invariant by tracking \emph{snapshots} of objects
+\midas maintains the invariant by tracking \emph{snapshots} of objects
 when first accessed, lazily making \emph{copies} when the object is concurrently 
 written and accessing the correct copy on subsequent reads.
 Copies are only maintained during syscalls' lifetimes, and are released as 
@@ -599,24 +599,24 @@ need to be protected.
 Accesses to userspace objects from userspace and kernel objects by kernel 
 code remains unaffected.
 
-\tiktok's implementation builds on the protection mechanisms provided by 
+\midas's implementation builds on the protection mechanisms provided by 
 existing virtual memory implementations.
 On modern platforms, virtual memory protection is set up by the OS at
 page-granularity by setting bits in pagetable entries (PTEs).
 These permission bits are checked by the hardware on memory access, 
 efficiently enforcing the permissions, and raising a fault when they 
 are violated.
-For performance, \tiktok implements its invariant at page-granularity, not object 
+For performance, \midas implements its invariant at page-granularity, not object 
 granularity: when a syscall reads from userspace, every page touched by that 
 read is covered, not merely the bytes read.
 Page-granularity protections are conservative compared to byte-granularity
-protection and \tiktok maintains its invariant.
-As a side-effect of its implementation, \tiktok does not distinguish
+protection and \midas maintains its invariant.
+As a side-effect of its implementation, \midas does not distinguish
 accesses to different parts of a page (intra-page false sharing).
 False sharing leads to unnecessary page duplications, incurring performance 
 overhead on highly shared pages, but does not affect correctness.
 
-For an object spanning multiple pages, \tiktok's design sequentially 
+For an object spanning multiple pages, \midas's design sequentially 
 protects each page before reading from it.
 The leading pages containing the object are protected before the
 later pages, allowing an adversary to potentially modify the later 
@@ -628,11 +628,11 @@ If the syscall code contains a \tocttou bug, the modification will
 be visible to the first fetch itself (which is used for checking for 
 validity of the data) and will lead to the data being rejected 
 straightaway.
-\tiktok's invariant therefore prevent exploitation of double-fetch
+\midas's invariant therefore prevent exploitation of double-fetch
 vulnerabilities even when the fetched objects span multiple pages.
 We elaborate on this case with an example in \autoref{sec:design:discussion}.
 
-A major requirement for \tiktok is to allow concurrent access to pages
+A major requirement for \midas is to allow concurrent access to pages
 by user/kernel code running in parallel with a syscall which reads from 
 the same pages.
 This requirement prevents deadlocks and improves performance vis-a-vis
@@ -662,30 +662,30 @@ A more performant approach is to duplicate the concurrently accessed page:
 the copy is kept for task C for future fetches, and task D
 can write to the original and proceed without delays.
 
-\tiktok must maintain multiple versions of a page read by a syscall 
+\midas must maintain multiple versions of a page read by a syscall 
 to maintain its invariant in the face of concurrent writes.
-\tiktok introduces \emph{snapshots} and \emph{copies} to keep track 
+\midas introduces \emph{snapshots} and \emph{copies} to keep track 
 of page versions. 
 Snapshots are logical views of the page's contents at a particular time,
 while the actual contents are stored in one of many copies. 
 Each snapshot maps to a copy, allowing the contents of the page at the 
 time of creating the snapshot to be read. 
 If multiple snapshots are taken without intervening writes to the page, 
-these snapshots will map to a single copy, reducing \tiktok's space overheads 
+these snapshots will map to a single copy, reducing \midas's space overheads 
 and performance overheads for creating copies.
-\tiktok maintains a snapshot of every page when first read by a syscall.
+\midas maintains a snapshot of every page when first read by a syscall.
 On a double fetch by the same syscall, the copy mapped to the snapshot 
 is accessed, ensuring that the data read is the same as the first time.
 The latest copy of the page is used for all writes, by the syscall as 
 well as from concurrently running tasks, updating the page as seen 
 from userspace.
 %
-\tiktok's design draws parallels to multi-version concurrency control 
+\midas's design draws parallels to multi-version concurrency control 
 methods for databases based on snapshot isolation~\cite{0001MK15}.
 Transactions read from a snapshot of the database state from when 
 they started, and writes update the up-to-date state of the database.
 %
-\emph{Essentially, \tiktok is a multi-versioning system for pages where 
+\emph{Essentially, \midas is a multi-versioning system for pages where 
 syscalls read from immutable versions to prevent \tocttou bugs and
 syscalls and userspace both write to a single mutable version 
 holding the latest state of the page.}
@@ -694,24 +694,24 @@ holding the latest state of the page.}
 
 \begin{figure*}[]
   \centering
-  \includegraphics[width=0.9\linewidth]{img/tiktok_states.pdf}
-  \caption{State diagram for a page in \tiktok. Reads/writes from userspace/syscall 
+  \includegraphics[width=0.9\linewidth]{img/midas_states.pdf}
+  \caption{State diagram for a page in \midas. Reads/writes from userspace/syscall 
           code are marked (u)/(s) respectively. Shading is used to represent the 
           mapping from snapshots to copies.}
-  \label{fig:tiktok_states}
+  \label{fig:midas_states}
 \end{figure*}
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\linewidth]{img/doublefetch_tiktok.pdf}
-  \caption{Diagram illustrating \tiktok preventing exploitation of a 
+  \includegraphics[width=\linewidth]{img/doublefetch_midas.pdf}
+  \caption{Diagram illustrating \midas preventing exploitation of a 
   double fetch of object \Code{X}.}
-  \label{fig:doublefetch_tiktok}
+  \label{fig:doublefetch_midas}
 \end{figure}
 
 To track multiple versions of the contents of a page when being concurrently 
 accessed by numerous tasks, from userspace or during a syscall,
-\tiktok implicitly maintains a per-user-page state machine.
+\midas implicitly maintains a per-user-page state machine.
 For a page, its corresponding state machine 
 \begin{inparaenum}[\itshape i\upshape)]
   \item tracks snapshots for currently executing syscalls which have read it, 
@@ -720,7 +720,7 @@ For a page, its corresponding state machine
   the correct contents to subsequent reads. % by these syscalls.
 \end{inparaenum}
 
-\autoref{fig:tiktok_states} shows the state machine for a single page.
+\autoref{fig:midas_states} shows the state machine for a single page.
 At every state, the page has two associated sets:
 \begin{inparaenum}[\itshape i\upshape)]
   \item the copies set $C = \{C_L, C_0, \dots\}$ holds multiple copies of the page over time, and
@@ -731,8 +731,8 @@ Writes from user/kernel code and reads from userspace access the \emph{latest
 copy} $C_L$, which is mapped in processes' address spaces.
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
-as they do on non-\tiktok systems.
-Knowing which state the page is in allows \tiktok to differentiate faults due
+as they do on non-\midas systems.
+Knowing which state the page is in allows \midas to differentiate faults due
 to protecting pages from faults due to programs actually writing to an 
 originally read-only page.
 The latest copy $C_L$ of read-only pages remains read-only in both
@@ -740,7 +740,7 @@ protected states (1 and 3).
 In the following paragraphs, we describe how the state machine for a single, 
 writable user page transitions between its states, what triggers each transition, 
 and what changes are made to the copies and snapshot sets on a transition.
-In \autoref{fig:doublefetch_tiktok}, we illustrate how the state machine protects the 
+In \autoref{fig:doublefetch_midas}, we illustrate how the state machine protects the 
 syscall from \autoref{fig:doublefetch}.
 
 \paragraph{State 0}
@@ -752,30 +752,30 @@ All processes where this page is mapped have unrestricted userspace read and wri
 access, and unrestricted kernel write access.
 The remaining operation, a read from kernel code, triggers a transition to 
 State 1.
-In \autoref{fig:doublefetch_tiktok}, the snapshot $L$ initially contains 
+In \autoref{fig:doublefetch_midas}, the snapshot $L$ initially contains 
 the value $42$.
 
 \paragraph{State 1}
 The page in State 0 transitions to the \texttt{(protected, unduplicated)} state as soon as a syscall 
 reads from it.
-\tiktok first marks the page's latest copy $C_L$ read-only in all processes, 
+\midas first marks the page's latest copy $C_L$ read-only in all processes, 
 trapping writes to the page but allowing concurrent userspace reads to continue.
 A new snapshot, $S_0$ linked to this syscall is allocated for this page.
 For the rest of its lifetime, this syscall will only read this page from this snapshot.
 Both snapshots $S_0$ and $L$ refer to the same copy $C_L$ (shown by the 
-blue cross-thatch in \autoref{fig:tiktok_states}).
+blue cross-thatch in \autoref{fig:midas_states}).
 Prior to any writes to this page, any other syscalls which also read the page  
 get their own snapshots (e.g., $S_1$) all pointing to the single copy $C_L$.
 The page's read-only status causes the hardware to fault on any write,
-notifying \tiktok to transition the page to State 2.
-In \autoref{fig:doublefetch_tiktok}, the page transitions to State 1 when 
+notifying \midas to transition the page to State 2.
+In \autoref{fig:doublefetch_midas}, the page transitions to State 1 when 
 the syscall first reads it, and adds a snapshot $S_0$.
 
 \paragraph{State 2}
 A page in State 1 transitions to the \texttt{(unprotected, duplicated)} state 
 on any write from user or kernel code.
-\tiktok duplicates the old contents of the page from copy $C_L$, creating a 
-read-only copy $C_0$ (shown by green shading in \autoref{fig:tiktok_states}).
+\midas duplicates the old contents of the page from copy $C_L$, creating a 
+read-only copy $C_0$ (shown by green shading in \autoref{fig:midas_states}).
 Snapshots except $L$ (i.e. $S_0$ and $S_1$) previously mapping to $C_L$ are 
 mapped to the copy $C_0$.
 The write then modifies the latest copy $C_L$, which is made writable again.
@@ -785,13 +785,13 @@ Certain syscalls such as \Code{rt_sigaction} both read and write from
 the same user page. 
 A write by \Code{rt_sigaction} to the page it has previously read will update
 the page's latest copy $C_L$, but not the duplicate copy $C_0$.
-\tiktok's write policy ensures that the copy $C_L$ always holds the latest 
+\midas's write policy ensures that the copy $C_L$ always holds the latest 
 contents of the page, up-to-date with all the writes to the page, from both user 
 and kernel code. 
-Further, \tiktok does not need to merge writes from userspace and syscall code
+Further, \midas does not need to merge writes from userspace and syscall code
 on a syscall's completion, since both directly modify the same copy $C_L$.
 All other copies $C_i$ are immutable.
-When the adversary writes to the page in \autoref{fig:doublefetch_tiktok}, the
+When the adversary writes to the page in \autoref{fig:doublefetch_midas}, the
 page moves to State 2, linking the snapshot $S_0$ to a copy holding the 
 original value $42$.
 The writes from both the adversary and the syscall itself both affect 
@@ -812,24 +812,24 @@ creating another copy $C_1$: snapshot $S_2$ maps to $C_1$ while
 snapshots $S_1$ and $S_0$ continue to map to $C_0$. 
 
 \paragraph{Releasing snapshots}
-\tiktok uses snapshots to enable a syscall to read the same data from a page 
+\midas uses snapshots to enable a syscall to read the same data from a page 
 during its lifetime and releases snapshots when syscalls complete. 
 Releasing a snapshot is possibly accompanied by a state transition
 and the release of the mapped copy.
-If $S_i$ mapped to the latest copy $C_L$, \tiktok cannot free the copy
+If $S_i$ mapped to the latest copy $C_L$, \midas cannot free the copy
 since userspace is using it.
 In this case, the page must be in State 1 or 3, and $C_L$ is read-only.
 After removing $S_i$, if $L$ is the sole remaining snapshot mapped to $C_L$, 
-\tiktok makes the page writable, moving to State 0 or 2 from State
+\midas makes the page writable, moving to State 0 or 2 from State
 1 or 3 respectively. 
-If $S_i$ is mapped to any other duplicate $C_i$, \tiktok frees the copy along
+If $S_i$ is mapped to any other duplicate $C_i$, \midas frees the copy along
 with the snapshot if $S_i$ is the last remaining snapshot mapped to $C_i$.
 If the page was in State 2, $C_L$ was writable and unmapped by any snapshot,
-so \tiktok changes the page to State 0.
-This transition is shown in \autoref{fig:doublefetch_tiktok}, where the 
+so \midas changes the page to State 0.
+This transition is shown in \autoref{fig:doublefetch_midas}, where the 
 snapshot $S_0$ and the copy $C_0$ are both discarded.
 If the page was in State 3, $C_L$ was read-only and mapped by some other
-snapshot, so \tiktok moves the page to State 1.
+snapshot, so \midas moves the page to State 1.
 Recall that all snapshots $S_i$ except $L$ are immutable.
 Any data written by the syscalls directly affect $L$. 
 Therefore, dropping a snapshot $S_i$ is trivial and does not require 
@@ -851,16 +851,16 @@ writes from the syscall to be merged into the latest copy.
   \end{tabular}
 \end{center}
 
-\caption{System calls uninstrumented by \tiktok.}
+\caption{System calls uninstrumented by \midas.}
 \label{tab:except_syscall}
 \end{table}
 
 \paragraph{Correctness of syscalls directly updating snapshot $L$}
-\tiktok's design lets all writes, including those from syscalls, to directly 
+\midas's design lets all writes, including those from syscalls, to directly 
 update the latest copy of the page $C_L$ and this property maintains correctness 
 of system execution.
 We now show that there is a valid, safe %\footnotemark 
-execution trace of a system not protected by \tiktok which generates the same 
+execution trace of a system not protected by \midas which generates the same 
 sequence of writes to the page, and therefore generates the same contents
 of the page when the syscall ends.
 %
@@ -868,10 +868,10 @@ We define a \emph{safe} trace as one that has no writes to vulnerable data betwe
 double fetches by the kernel, and therefore does not trigger any existing
 \tocttou bugs.
 %
-By showing that the final contents of memory after a \tiktok syscall has a 
-corresponding execution without \tiktok (which we assume to be correct)
+By showing that the final contents of memory after a \midas syscall has a 
+corresponding execution without \midas (which we assume to be correct)
 leading to the same contents, 
-we can conclude that the execution of the \tiktok syscall is also correct.
+we can conclude that the execution of the \midas syscall is also correct.
 For this proof, we assume that no syscall reads the same object after writing 
 to it (r-w-r pattern). 
 Such syscalls do not exist in the Linux kernel, and are discussed below.
@@ -882,7 +882,7 @@ of that object.
 % by the kernel, and therefore does not trigger any existing \tocttou bugs.}
 
 Let us consider a page holding a single-byte object $O_0$, and the 
-sequence of operations to this byte during a \tiktok syscall be 
+sequence of operations to this byte during a \midas syscall be 
 $Ops = \{Op_0, Op_1, \dots \}$. 
 Each operation is a tuple $(r/w, k/u)$ specifying whether the 
 operation was a read or a write, and whether the operation was due to 
@@ -894,9 +894,9 @@ this object.
 % In case of the above mentioned scenario (1), which covers no concurrent
 % writes, there are no writes to this object between any two read operations by
 % the same syscall.
-In this case, \tiktok reads the same value from its snapshot of the 
+In this case, \midas reads the same value from its snapshot of the 
 object as is present on the latest version. 
-The same sequence of operations on a non-\tiktok system would be valid and
+The same sequence of operations on a non-\midas system would be valid and
 safe, since the object value does not change between the kernel's double 
 fetch and the syscall reads the same value on this system.
 
@@ -907,84 +907,84 @@ Let us now
 %
 assume that there was an attempt to exploit a \tocttou bug:
 a write $Op_1$ exists between two syscall reads $Op_0$ and $Op_2$.
-\tiktok protects the syscall ensuring that $Op_2$ does not see the 
+\midas protects the syscall ensuring that $Op_2$ does not see the 
 effect of $Op_1$ by reading from a snapshot instead of the latest 
 copy $C_L$. 
 Since our syscalls are assumed to not contain any r-w-r pattern, 
 any writes by the syscall happen after $Op_2$.
 Let us assume that the syscall's write is $Op_3$.
-We can generate a valid, safe execution on a non-\tiktok system 
+We can generate a valid, safe execution on a non-\midas system 
 by moving the adversary's write to after the last read by the 
 syscall, i.e., $Ops = \{Op_0, Op_2, Op_1, Op_3\}$.
 The syscall in this system reads the same value both times, and 
-hence has the same execution as that in the \tiktok case.
+hence has the same execution as that in the \midas case.
 The value of the object when the syscall completes is that 
 written by $Op_3$ in both cases (or that written by $Op_1$ in 
 case the syscall does not have a final write).
 Since the syscall has the same execution and the final value of 
-the object is the same, the execution of the \tiktok system 
-is the same as that of the non-\tiktok system.
-In general, any trace of operations on a \tiktok system can 
-be translated  to a valid, safe trace on a non-\tiktok system 
+the object is the same, the execution of the \midas system 
+is the same as that of the non-\midas system.
+In general, any trace of operations on a \midas system can 
+be translated  to a valid, safe trace on a non-\midas system 
 by moving adversarial writes to an object to just after the last
 double fetch of that object.
-Multiple syscalls in \tiktok can therefore write to the same object 
+Multiple syscalls in \midas can therefore write to the same object 
 without affecting 
-correctness, because an equivalent, valid, safe non-\tiktok trace 
+correctness, because an equivalent, valid, safe non-\midas trace 
 exists where all of the writes have been postponed, in the same order 
 to after the double fetch reads. 
 
 \paragraph{Exemptions}
 Syscalls such as \Code{futex} rely on user data changing between double 
 fetches to implement their functionality and cannot be protected by
-\tiktok.
+\midas.
 These syscalls are listed in \autoref{tab:except_syscall}.
 The \Code{futex} syscall implements a fast synchronization mechanism
 for userspace and relies on atomic writes from concurrent userspace
 threads to update a condition the syscall is waiting for. 
-Subjecting a \Code{futex} syscall to \tiktok's invariant will prevent
+Subjecting a \Code{futex} syscall to \midas's invariant will prevent
 it from ever waking up the waiting task.
-Such syscalls cannot be protected by \tiktok, and we implement an 
+Such syscalls cannot be protected by \midas, and we implement an 
 exemption list to prevent transitions in the state machines of pages read 
 by these syscalls.
 The code for these syscalls must be manually inspected for double-fetch 
 vulnerabilities.
-Crucially, exempting these syscalls from \tiktok's protection does not 
+Crucially, exempting these syscalls from \midas's protection does not 
 affect the security of other syscalls containing double fetches. 
 Any writes from these syscalls are subject to the same rules described
-in the state machine, and cannot break \tiktok's invariant.
+in the state machine, and cannot break \midas's invariant.
 In general, a kernel's interface can contain any number of 
-syscalls which require exemption from \tiktok's protection, and 
+syscalls which require exemption from \midas's protection, and 
 they all need to be properly added to the exemption list. 
 Finer grained exemptions based on syscall parameters can also be 
 implemented, but was found unnecessary for Linux.
 A kernel where a majority of syscalls require exemption might not 
-benefit from \tiktok's protection.
+benefit from \midas's protection.
 
 
 \paragraph{Syscalls with read-write-read patterns}
 A hypothetical syscall which reads from an object, writes to it, and
-then reads back the updated object cannot be protected using \tiktok.
-\tiktok's invariant will ensure that the second read is identical to the first,
+then reads back the updated object cannot be protected using \midas.
+\midas's invariant will ensure that the second read is identical to the first,
 and does not reflect the intermediate write.
-Such syscalls must be exempted from \tiktok's instrumentation.
+Such syscalls must be exempted from \midas's instrumentation.
 During extensive tests, we did not find any other syscall which exhibits this behavior in the Linux
 kernel. 
 
 \paragraph{Syscalls with false sharing}
-Another hypothetical type of syscall could struggle with \tiktok's 
+Another hypothetical type of syscall could struggle with \midas's 
 instrumentation due to false sharing.
 Suppose a page contains two objects, $O_0$ and $O_1$, and a syscall  
 sequentially reads $O_0$ then $O_1$.
-Due to \tiktok's invariant being enforced at page-granularity and 
-false-sharing of the page between these objects, \tiktok guarantees that
+Due to \midas's invariant being enforced at page-granularity and 
+false-sharing of the page between these objects, \midas guarantees that
 the value of object $O_1$ read is the same as what was contained when it 
 first read object $O_0$. 
 A syscall which requires the value of $O_1$ to change between these two 
-points in time would, therefore, not work with \tiktok protections. 
+points in time would, therefore, not work with \midas protections. 
 Such a hypothetical syscall, requiring concurrent modifications to its 
 arguments, could exist to support some synchronization mechanism 
-similar to a \Code{futex} and can be safely exempt from \tiktok's invariant.
+similar to a \Code{futex} and can be safely exempt from \midas's invariant.
 %
 During extensive tests, we did not find any other syscall which exhibits this behavior in the 
 Linux kernel. 
@@ -992,13 +992,13 @@ Linux kernel.
 
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/copy_two_pages.pdf}
-  \caption{Diagram illustrating \tiktok preventing exploitation 
+  \caption{Diagram illustrating \midas preventing exploitation 
   of a double fetch of an object \Code{X} spanning two pages.}
   \label{fig:copy_two_pages}
 \end{figure}
 
 \paragraph{Example: Objects spanning two pages}
-\autoref{fig:copy_two_pages} shows \tiktok protecting a syscall which
+\autoref{fig:copy_two_pages} shows \midas protecting a syscall which
 has a double fetch for an object spanning multiple (e.g., two) pages.
 Here, the two pages containing the object \Code{X} are acessed as 
 \Code{X[0]} and \Code{X[1]}. 
@@ -1008,14 +1008,14 @@ second page:
 \item Between the syscall's first reads of \Code{X[0]} and \Code{X[1]}, and
 \item Between the first and second fetches of X.
 \end{inparaenum}
-\tiktok ensures that both fetches return \Code{X=(42,0)}.
+\midas ensures that both fetches return \Code{X=(42,0)}.
 Critically, any existing TOCTTOU bugs are not triggered since both fetches 
 read the same, possibly invalid, value of the object.
 Note how the situation is identical to one where the adversarial write 
 to \Code{X[1]} happens before the syscall starts.
 
 \paragraph{Preventing deadlocks by design}
-\tiktok's design is free of deadlocks, and exempts syscalls which 
+\midas's design is free of deadlocks, and exempts syscalls which 
 require violation of its invariant from triggering particular 
 state-machine transitions.
 Userspace reads always succeed, using the latest copy $C_L$ of the
@@ -1033,7 +1033,7 @@ A single, per-page lock can serialize operations on that page
 and assure forward progress.
 
 \paragraph{Detecting double fetches}
-\tiktok's state machine for pages enables the precise detection of double fetch
+\midas's state machine for pages enables the precise detection of double fetch
 bugs, turning it into an effective sanitizer and developer debugging tool in
 addition to being an efficient mitigation.
 When a syscall first reads from a user page, it creates a snapshot 
@@ -1050,27 +1050,27 @@ fetch.
 This approach, however, is prone to false positives due to false sharing.
 The two reads might read from the same page, but access entirely 
 disjoint bytes.
-So far, \tiktok reports double fetches at page granularity. 
+So far, \midas reports double fetches at page granularity. 
 A precise sanitizer could maintain a bitmask of accessed bytes to
 prune false positives.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{\tiktok Implementation}
+\section{\midas Implementation}
 \label{sec:impl}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Our \tiktok prototype implements the state machine described in 
+Our \midas prototype implements the state machine described in 
 \autoref{sec:design} on Linux version 5.11, targeting the x86-64 
 architecture. 
-A page protected by \tiktok transitions between states on 
+A page protected by \midas transitions between states on 
 either a kernel read to user memory, or when user or kernel code
-writes to protected, read-only memory (see \autoref{fig:tiktok_states}).
-\tiktok can be implemented on any operating system kernel that uses 
+writes to protected, read-only memory (see \autoref{fig:midas_states}).
+\midas can be implemented on any operating system kernel that uses 
 a defined interface for reading from userspace and
 on any architecture which implements hardware-controlled access 
 control to memory through page tables. 
-The first requirement enables \tiktok to implement transitions on 
+The first requirement enables \midas to implement transitions on 
 kernel reads from user memory.
 The Linux kernel uses the \Code{raw_copy_from_user} interface which 
 we instrument for our prototype.
@@ -1094,12 +1094,12 @@ We only modified a single syscall's code~(\Code{clone}).
 \begin{figure}[]
   \includegraphics[width=\linewidth]{img/book-keeping.pdf}
   \caption{Bookkeeping information for a page.}
-  \label{fig:tiktok_bookeeping}
+  \label{fig:midas_bookeeping}
 \end{figure}
 
-\tiktok needs to track the state for every userspace page, including
+\midas needs to track the state for every userspace page, including
 its snapshot and copy sets.
-\autoref{fig:tiktok_bookeeping} shows the data structures used to
+\autoref{fig:midas_bookeeping} shows the data structures used to
 track this state in our prototype.
 Linux maintains a \Code{struct page} object for every frame of 
 physical memory. 
@@ -1121,17 +1121,17 @@ with reads (and writes for writable pages).
 We use one software-controlled bit (SW3) in the pagetable entries 
 to track the protection status of the page, and another 
 (SW2)\footnote{The SW2 bit is alternatively used by the experimental Software Dirty Pages feature of 
-Linux, and cannot be run alongside \tiktok in our prototype.}
+Linux, and cannot be run alongside \midas in our prototype.}
 to track the original protections for the page. 
 SW3 is set whenever the page is in one of the two protected
 states (1 and 3).
 On a write-triggered protection fault, SW3 can be read to 
-efficiently determine if the fault was due to \tiktok's protection 
+efficiently determine if the fault was due to \midas's protection 
 mechanisms, triggering a state change, or due to buggy software
 accessing a page with illegal permissions, triggering a signal to 
 the task.
 Other architectures might have fewer software-usable 
-bits in the page-table, and implementations of \tiktok would 
+bits in the page-table, and implementations of \midas would 
 require storing the protection status of pages in a separate data structure.
 The duplication status of the page is implicitly encoded in the 
 snapshots: the page is duplicated when any of its snapshots
@@ -1174,8 +1174,8 @@ reads) as a call to \Code{raw_copy_from_user}.
 \atri{What about unsafe\_get\_user, copy\_in\_user, copy\_user, copy\_user\_zeroing}
 
 \paragraph{Exemptions}
-Our prototype \tiktok kernel exempts a couple of functions 
-from \tiktok's invariant, and they are therefore not instrumented 
+Our prototype \midas kernel exempts a couple of functions 
+from \midas's invariant, and they are therefore not instrumented 
 to follow the aforementioned steps while accessing userspace
 memory. 
 \Code{raw_copy_from_user_inatomic} is used by the kernel to 
@@ -1195,7 +1195,7 @@ The \Code{write} system call takes three arguments: a
 file-descriptor passed as a register, a pointer to a user 
 buffer and a count of bytes to be written to the file.
 While the write to the file's pages is sensitive, and 
-\tiktok takes care to ensure that it follows the page state 
+\midas takes care to ensure that it follows the page state 
 machine, the read from userspace is not. 
 The syscall reads from userspace only once, and its data 
 is only used for copying into the file.
@@ -1225,7 +1225,7 @@ they can prove to be secure from double-fetch bugs.
 
 The memory management unit generates a fault when kernel or user code accesses
 a page without having the correct permission in the corresponding PTE.
-\tiktok marks writable pages read-only to protect them in 
+\midas marks writable pages read-only to protect them in 
 states 1 and 3, allowing the kernel to detect writes to these pages.
 A common OS mechanism, copy-on-write (COW) pages, also uses 
 permissions in the PTE to detect when COW pages need to be copied.
@@ -1247,9 +1247,9 @@ accessed.
 For non-NULL PTEs, the handler checks if the PTE indicates that the 
 page is present.
 Non-present pages need to be swapped-in.
-After finding the page, \tiktok then checks if the page was previously 
+After finding the page, \midas then checks if the page was previously 
 swapped in by any other task and is now in a protected state.
-For protected pages, \tiktok implements the required state change based 
+For protected pages, \midas implements the required state change based 
 on whether the faulting access was a read or a write.
 
 In the remaining case, faults for a present page indicate a 
@@ -1263,13 +1263,13 @@ violation, sending a signal to the process.
 
 COW pages represent separate virtual pages from different 
 address spaces mapped to the same physical page.
-An example of a COW page protected by \tiktok is illustrated in 
+An example of a COW page protected by \midas is illustrated in 
 \autoref{fig:fault_handling_cow} where logically separate pages A and B 
 are actually mapped to the COW page.
 A COW page cannot be in states 2 or 3, since they cannot have multiple
-\tiktok copies.
+\midas copies.
 COW pages in state 0 can be dealt with by the kernel's standard
-duplication method (not \tiktok's duplication).
+duplication method (not \midas's duplication).
 For a COW page in state 1, its list of snapshots can correspond to 
 reads from syscalls for threads in different address spaces.
 In \autoref{fig:fault_handling_cow}, we show snapshots $S_A$ and 
@@ -1278,16 +1278,16 @@ spaces (containing A and B respectively).
 These snapshots correspond to different logical pages, but are 
 all squashed into the snapshots list of the single COW page. 
 Therefore, after the kernel duplicates the COW page (new page
-B created, in \autoref{fig:fault_handling_cow}), \tiktok moves 
+B created, in \autoref{fig:fault_handling_cow}), \midas moves 
 the snapshots for the faulting process ($S_B$) to the new page.
-Here, \tiktok also updates the protected page list in the 
+Here, \midas also updates the protected page list in the 
 affected syscalls' \Code{task_struct}s so that they point to the 
 new page.
 Finally, the new page is transitioned to its next state to allow 
 for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
 
-We ensure that \tiktok's modifications to the fault handler 
+We ensure that \midas's modifications to the fault handler 
 correctly handle concurrent faults and do not cause additional 
 nested faults. 
 During concurrent faults for the same page, only one thread 
@@ -1299,14 +1299,14 @@ We also ensure that the only additional accesses to user memory
 within the handler (used for duplication) happen when the page 
 is assured to be in memory and correctly mapped.
 All nested faults are therefore caused by existing kernel code
-and do not interact with \tiktok.
+and do not interact with \midas.
 
 \subsection{Syscall Completion}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-On syscall completion, \tiktok cleans up snapshots allocated for 
+On syscall completion, \midas cleans up snapshots allocated for 
 the syscall by instrumenting the end of \Code{do_syscall_64}.
-\tiktok goes through the list of all the pages for which the 
+\midas goes through the list of all the pages for which the 
 executing syscall has a snapshot, and frees those snapshots.
 For snapshots which were the last to point to a copy, that 
 copy is also freed.
@@ -1315,7 +1315,7 @@ copy is also freed.
 \subsection{File System Writes}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\tiktok instruments file-system writes to protect the kernel
+\midas instruments file-system writes to protect the kernel
 from modifications via kernel mappings.
 When a \Code{write} syscall writes to a file, it actually
 writes to copies of pages of the file stored in memory within 
@@ -1324,7 +1324,7 @@ In the spirit of abstraction, the kernel does not directly write to
 these pages, but calls the relevant file-system (FS) driver instead.
 When writing to pages in the page cache, the FS driver will access the 
 page using kernel mappings.
-Since \tiktok only protects userspace mappings for protected pages, 
+Since \midas only protects userspace mappings for protected pages, 
 writes by FS drivers will not raise a fault.
 To comprehensively protect the page, any implementation needs to 
 instrument FS-drivers' write functions.
@@ -1348,7 +1348,7 @@ Our current prototype does not, however, protect out-of-tree drivers
 which are not distributed with the kernel if they do not use the 
 \Code{generic_file_write_iter} function.
 A user with superuser privileges can load a module implementing a 
-different, insecure FS driver which does not implement \tiktok checks.
+different, insecure FS driver which does not implement \midas checks.
 A malicious superuser is, however, outside our threat model.
 % Mat: IMO a very weak argument and always the case, so rather than waste
 % precious time here, I've commented out the below as it distracts from our key
@@ -1365,7 +1365,7 @@ A malicious superuser is, however, outside our threat model.
 \subsection{New Mappings to Protected Pages}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Our \tiktok prototype preserves the state machine for user pages
+Our \midas prototype preserves the state machine for user pages
 across operations which create new mappings to a page to prevent 
 attacks which rely on mappings being created between double fetches.
 The \Code{mmap} syscall is responsible for creating new virtual
@@ -1387,7 +1387,7 @@ pages are also correctly protected.
 %%%%%%%%%%%%%%%%%%%%%%%
 
 \paragraph{Optimizations on capable hardware}
-To protect a page in an address space, a \tiktok implementation 
+To protect a page in an address space, a \midas implementation 
 needs to change the permissions in the page table for that page.
 Modern CPUs cache virtual memory translations in per-core 
 Translation Lookaside Buffers (TLBs) which need to be (partially) 
@@ -1396,7 +1396,7 @@ On most CPUs, the core updating permissions will perform a global
 shootdown to ensure that other TLBs for cores executing in the 
 same address space are also updated.
 Implemented with inter-processor interrupts, global shootdowns 
-are expensive and account for the majority of \tiktok overhead.
+are expensive and account for the majority of \midas overhead.
 
 A more efficient solution would be to have special hardware support
 for invalidating TLB entries globally, not just on the executing 
@@ -1412,13 +1412,13 @@ Outer Shareable Domain) respectively.
 
 Alternate architectures~\cite{guptarebooting,ChaseLFL94} with a single, 
 system-wide translation table
-would also benefit \tiktok by having a single page table to 
+would also benefit \midas by having a single page table to 
 update instead of multiple page tables for each address space a page
 is mapped in.
 
 \paragraph{Porting to other OSs}
 
-\tiktok can provide \tocttou protection on other operating systems by 
+\midas can provide \tocttou protection on other operating systems by 
 tracking the states of each page and implementing state transitions 
 as required.
 Systems track page state in per-page state structures,
@@ -1429,7 +1429,7 @@ The OS' fault handler (\Code{vm_fault} on *BSD) will trap on writes to
 protected pages, and needs to be modified to implement the required page 
 duplication and state change.
 
-The remaining OS modifications for \tiktok support depends on 
+The remaining OS modifications for \midas support depends on 
 the OS' features.
 If an OS allows userspace to map file pages, filesystem code to write 
 to these page needs to be modified.
@@ -1446,8 +1446,8 @@ a generic methodology.
 \section{Evaluation}
 %%%%%%%%%%%%%%%%%%%%
 
-In this section, we emperically verify \tiktok's ability to mitigate 
-a known double fetch vulnerability, and quantify \tiktok's overhead on 
+In this section, we emperically verify \midas's ability to mitigate 
+a known double fetch vulnerability, and quantify \midas's overhead on 
 workloads with different characteristics including both compute-bound 
 applications which rarely use syscalls and a mix of syscall-heavy applications 
 which heavily rely on the kernel's performance.
@@ -1468,7 +1468,7 @@ An attacker who increases the size of \Code{dest_count} between the
 two fetches will cause the kernel to access the copied array out-of-bounds,
 causing a heap buffer overflow.
 
-For verifying \tiktok's defense, we introduce a non-faulting assertion check into the 
+For verifying \midas's defense, we introduce a non-faulting assertion check into the 
 function (lines 8-9) and run a known exploit.\footnote{Scott Bauer's exploit 
 from GitHub https://github.com/wpengfei/CVE-2016-6516-exploit}
 The condition checks whether the fetched value of the user object (\Code{dest_count})
@@ -1480,7 +1480,7 @@ but also revert the conditions to the safe state allowing the kernel to safely
 continue.
 The exploit was able to successfully trigger the bug on the baseline kernel
 every time over 10 runs.
-With \tiktok enabled, the exploit was never triggered, i.e., both fetches 
+With \midas enabled, the exploit was never triggered, i.e., both fetches 
 returned the same value on every call.
 
 
@@ -1513,13 +1513,13 @@ returned the same value on every call.
 \subsection{Performance evaluation}
 %%%%%%%%%%%%%%%%%%%%
 
-We evaluate \tiktok on microbenchmarks targeting specific 
+We evaluate \midas on microbenchmarks targeting specific 
 common syscalls, and workloads from two benchmark suites: the 
 NAS Parallel Benchmark (NPB)~\cite{npb} and select workloads 
 from the Phoronix Test Suite (PTS)~\cite{pts}. 
 NPB includes compute-intensive multiprocessing workloads with a 
 low, but non-negligible syscall rate. 
-NPB therefore demonstrates the ability of \tiktok to 
+NPB therefore demonstrates the ability of \midas to 
 scale to systems where pages are protected across numerous 
 address spaces.
 PTS includes a variety of benchmarks, both compute bound and 
@@ -1530,7 +1530,7 @@ We do not include the SPEC CPU2017 benchmarks
 as they are heavily compute bound and designed to isolate userspace 
 performance without syscalls, and are impervious to kernel performance.
 SPEC CPU2017 benchmarks would unfairly bias performance in favor of
-\tiktok.
+\midas.
 
 The testbench for the evaluation consists of a desktop machine 
 with an 8-core Intel i7-9700 processor and 16GB DRAM running 
@@ -1543,18 +1543,18 @@ frequency of 3.0GHz which is this model's base frequency.
 In the \emph{baseline} configuration, we run the testbench 
 with the mainline kernel v5.11 available from Ubuntu's package 
 repository.
-The \emph{\tiktok} configuration runs our prototype \tiktok kernel 
+The \emph{\midas} configuration runs our prototype \midas kernel 
 also based on kernel v5.11.
-For particular benchmarks, we also run the \emph{\tiktok{+}write}
-configuration which also runs our prototype \tiktok kernel
+For particular benchmarks, we also run the \emph{\midas{+}write}
+configuration which also runs our prototype \midas kernel
 but instruments all syscalls including \Code{write}.
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\linewidth]{img/tiktok_performance.pdf}
-  \caption{\tiktok's performance on microbenchmarks, NPB and PTS benchmarks 
+  \includegraphics[width=\linewidth]{img/midas_performance.pdf}
+  \caption{\midas's performance on microbenchmarks, NPB and PTS benchmarks 
           relative to the baseline kernel.}
-  \label{fig:tiktok_performance}
+  \label{fig:midas_performance}
 \end{figure*}
 
 \begin{table}
@@ -1575,14 +1575,14 @@ but instruments all syscalls including \Code{write}.
 
 \paragraph{Microbenchmarks}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-We tested \tiktok on microbenchmarks from 
+We tested \midas on microbenchmarks from 
 OSBench.~\footnote{https://github.com/mbitsnbites/osbench}
 The programs use \Code{libc} interfaces such as \Code{fopen}, 
 \Code{pthread_create}, \Code{fork} and \Code{malloc} for creating files, 
 threads, processes and for memory allocation respectively.  
 \autoref{tab:osbench_syscalls} lists the prominent syscall usage 
 for these workloads.
-\autoref{fig:tiktok_performance} shows \tiktok's performance (time/operation) 
+\autoref{fig:midas_performance} shows \midas's performance (time/operation) 
 on OSBench relative to the baseline kernel, with overheads ranging from 
 zero to 5.3\%.
 
@@ -1601,9 +1601,9 @@ processes which communicate by message-passing.
 The two technology stacks have different frequency of syscalls due to 
 different communication methods.
 Communication through kernel syscalls for either stack will incur overhead
-due to \tiktok's protection.
+due to \midas's protection.
 Additional global TLB shootdowns (for snapshot synchronization) added by 
-\tiktok will also affect the performance of such parallel benchmarks.
+\midas will also affect the performance of such parallel benchmarks.
 
 We evaluated NPB benchmarks of class A on our testbench, running 
 4 threads/processes in parallel.
@@ -1612,14 +1612,14 @@ and are all long enough for the kernel to reach equilibrium.
 Certain benchmarks require a parallelism number which is a perfect square.
 On our 8-core CPU, having 4 compute-bound threads/processes instead of 16 allows 
 all of them to run without time-sharing.
-\autoref{fig:tiktok_performance} shows \tiktok's performance for both MPI and OpenMP,
+\autoref{fig:midas_performance} shows \midas's performance for both MPI and OpenMP,
 normalized to the performance of the baseline system with the same parallelization
 framework.
-On average, \tiktok achieved $96.3\%$ of the baseline system's performance on 
+On average, \midas achieved $96.3\%$ of the baseline system's performance on 
 both frameworks. 
-\tiktok's performance for the \Code{ep} (Embarrassingly Parallel) benchmark is 
+\midas's performance for the \Code{ep} (Embarrassingly Parallel) benchmark is 
 closest to that of the baseline, since it has low communication overheads.
-\tiktok shows low overhead ($3.7\%$) for compute-intensive, parallel workloads.
+\midas shows low overhead ($3.7\%$) for compute-intensive, parallel workloads.
 
 
 \paragraph{Phoronix Test Suite}
@@ -1628,7 +1628,7 @@ The Phoronix Test Suite (PTS)~\cite{pts} includes a large set ($>500$) of
 open-source benchmarks, of which we have chosen a range of benchmarks 
 suitable for evaluating both desktop and server performance.
 We biased the selection to benchmarks that require (heavy) kernel activity to
-test the overhead of \tiktok's instrumentation.
+test the overhead of \midas's instrumentation.
 A sole benchmark, OpenSSL, is included to represent single-threaded, 
 compute-bound workloads for which kernel performance is less relevant.
 The benchmarks are also varied, ranging from single-threaded (Pybench) to 
@@ -1637,8 +1637,8 @@ At the extreme, we have an IPC benchmark transferring tiny, 128-byte
 buffers between processes which spends all of its time in syscalls
 and whose performance is entirely dependent on kernel IPC performance.
 
-We plot \tiktok's performance relative to the baseline kernel on
-these benchmarks in \autoref{fig:tiktok_performance}, roughly ordering 
+We plot \midas's performance relative to the baseline kernel on
+these benchmarks in \autoref{fig:midas_performance}, roughly ordering 
 workloads in increasing order of syscall dependence from left to right.
 For benchmarks for which PTS reports runtime, we compute the inverse 
 of the runtime as performance.
@@ -1651,7 +1651,7 @@ While compilation is mostly compute bound, compiling the Linux kernel requires
 accessing a large number of source files, resulting in the creation 
 of a large number of compiler processes each of which read and create 
 files. 
-\tiktok experiences a small, but non-negligible overhead of $3.5\%$ on this workload.
+\midas experiences a small, but non-negligible overhead of $3.5\%$ on this workload.
 Redis requires syscalls for receiving and replying to requests, but 
 processes its transaction entirely in-memory. 
 Our evaluation prototype achieves practically identical results as the baseline, 
@@ -1662,21 +1662,21 @@ We see that Nginx, which is a higher-performance webserver, sees a larger
 overhead.
 IPC, which implements 128 byte transfers between 
 two processes over a TCP connection, is almost entirely bound by kernel 
-performance and sees a performance overhead of $3.4\%$ on \tiktok.
+performance and sees a performance overhead of $3.4\%$ on \midas.
 
-Our prototype \tiktok kernel benefits significantly from 
+Our prototype \midas kernel benefits significantly from 
 exempting particular, proven-safe syscalls from instrumentation.
-While we exclude \Code{write}-like syscalls from \tiktok because they 
+While we exclude \Code{write}-like syscalls from \midas because they 
 are not vulnerable to double-fetch bugs, we also evaluated the
-performance cost of an unoptimized implementation (\tiktok{+}write)
+performance cost of an unoptimized implementation (\midas{+}write)
 which also instruments these syscalls.
 To highlight the worst-case performance of the unoptimized implementation, 
-we evaluate the performance of the IPC benchmark on \tiktok{+}write due 
+we evaluate the performance of the IPC benchmark on \midas{+}write due 
 to its high frequency of \Code{write} syscalls.
-With \tiktok{+}write, the performance of the IPC benchmark falls to 
+With \midas{+}write, the performance of the IPC benchmark falls to 
 $12.6\%$ of the baseline, a further degradation of $81\%$ compared 
-to \tiktok, showing that developer effort towards properly exempting 
-frequently called \emph{safe} syscalls from \tiktok protections is crucial
+to \midas, showing that developer effort towards properly exempting 
+frequently called \emph{safe} syscalls from \midas protections is crucial
 towards for implementations to maintain competitive performance
 compared to the baseline.
 
@@ -1696,11 +1696,11 @@ memory overhead.
 
 \begin{figure}
   \includegraphics[width=\linewidth]{img/overhead.pdf}
-  \caption{Classification of overheads for various benchmarks due to \tiktok.}
+  \caption{Classification of overheads for various benchmarks due to \midas.}
   \label{fig:overhead_class}
 \end{figure}
 
-In this section, we explore the sources of \tiktok's overhead by analyzing 
+In this section, we explore the sources of \midas's overhead by analyzing 
 \Code{perf} traces for three workloads: thread creation (OSBench), linux 
 compilation and Nginx. 
 We aim to classify overheads into the various kernel function we instrumented:
@@ -1716,7 +1716,7 @@ each workload\cite{GreggFlameGraph} using samples of processor state, including
 the call stack, collected over 30 second periods by \Code{perf record}.
 After identifying one binary for the workload from the FlameGraph, we estimate 
 the overhead for a function as the difference in execution time attributed to 
-that function between the baseline and \tiktok systems.
+that function between the baseline and \midas systems.
 The total overhead is estimated from the throughput figures obtained from the 
 previous section.
 
@@ -1737,11 +1737,12 @@ all the other processes.
 
 \begin{figure}
   \includegraphics[width=\linewidth]{img/nginx_performance.pdf}
-  \caption{Classification of overheads for various benchmarks due to \tiktok.}
+  \caption{Request rates and throughput served by the Nginx server for 
+          static pages.}
   \label{fig:nginx_perf}
 \end{figure}
 
-To better understand \tiktok's behavior under varying syscall 
+To better understand \midas's behavior under varying syscall 
 rates and different core configurations, we studied Nginx's throughput
 while varying payload sizes and different worker counts.
 The server is loaded with requests from a separate machine running 
@@ -1756,14 +1757,14 @@ Each worker is single-threaded and uses one core.
 For all configurations, we can see that the rate of requests served 
 remains almost constant while increasing payload size until the network 
 link reaches saturation.
-Under a saturated network, the request rates for \tiktok match that 
+Under a saturated network, the request rates for \midas match that 
 of the baseline system.
-With a single worker, \tiktok's overheads cause a consistent 13-14\% 
+With a single worker, \midas's overheads cause a consistent 13-14\% 
 overhead on request rate for small packet sizes.
-However, we see that \tiktok has practically no overhead when serving 
+However, we see that \midas has practically no overhead when serving 
 requests with 8 workers even when packet sizes are too small to 
 saturate the network link.
-In this case, both \tiktok and the baseline system are limited by the
+In this case, both \midas and the baseline system are limited by the
 scalability of the Linux networking stack.
 
 %%%%%%%%%%%%%%%%%%%%
@@ -1782,7 +1783,7 @@ generalize the analysis by leveraging symbolic execution.
 However, static analysis is severely limited by its requirement for
 source code, which eliminates possibility of protecting of analyzing 
 binary-only modules for which code is not available. 
-In contrast, \tiktok can also protect such modules since well-behaving
+In contrast, \midas can also protect such modules since well-behaving
 module use the kernel transfer functions to access user memory.
 Symbolic execution solves the generality problem of pattern-matching 
 approaches but has its limitations (path explosion, function pointers, 
@@ -1794,10 +1795,10 @@ wilfully be violated by our adversarial model.
 Additionally, the protection allowed by static analysis methods are 
 limited: only the bugs which are detected can be fixed, and static 
 analyses are necessarily incomplete.
-In contrast, \tiktok mitigates \emph{all} \tocttou vulnerabilities.
+In contrast, \midas mitigates \emph{all} \tocttou vulnerabilities.
 Further, specific cases of double fetches, such as in system call wrappers
 cannot be fixed in code, and require a versioning system such as 
-\tiktok in order to enable deep argument inspection.
+\midas in order to enable deep argument inspection.
 
 \subsection{Dynamic Analysis}
 
@@ -1814,7 +1815,7 @@ these access logs, but suffered from a high rate of false positives.
 Another major shortcoming of Bochspwn was its low execution throughput
 of 40-80MIPS which limited its ability to explore code paths.
 
-DECAF~\cite{schwartzDECAF} reverses \tiktok's adversarial model, leveraging 
+DECAF~\cite{schwartzDECAF} reverses \midas's adversarial model, leveraging 
 concurrent access to syscall parameters from userspace to detect kernel 
 accesses to the same via a cache side-channel.
 A major limitation of DECAF is that it relies on CPU-specific behavior, which 
@@ -1832,8 +1833,8 @@ However, fuzzers are inherently incomplete, limiting the ability of dynamic
 analysis to find bugs.
 
 % PeriScope\cite{SongH0SNVVKSF19} is out of scope. 
-% Devices are outside the scope of the current implementation of \tiktok. Particularly, double-fetches from device backed memory is liable to change without any control, but already requires high privileges which the user does not have. DMA accesses to main memory, however, can be protected by the use of IOMMUs with very low overhead [4], and can take advantage of the same \tiktok mechanisms. [4] Border Control: Sandboxing Accelerators.
-% Overall comment: \tiktok does not seek to overthrow methods that seek to find double-fetches, and fix them. In fact, it also allows use as a sanitizer that flags such double-fetches. In the meanwhile, however, bugs do persist and are likely to persist in an environment incorporating third-party code in modules and a rapid pace of development. Here, \tiktok provides a strong, principled guarantee which is also future-proof.
+% Devices are outside the scope of the current implementation of \midas. Particularly, double-fetches from device backed memory is liable to change without any control, but already requires high privileges which the user does not have. DMA accesses to main memory, however, can be protected by the use of IOMMUs with very low overhead [4], and can take advantage of the same \midas mechanisms. [4] Border Control: Sandboxing Accelerators.
+% Overall comment: \midas does not seek to overthrow methods that seek to find double-fetches, and fix them. In fact, it also allows use as a sanitizer that flags such double-fetches. In the meanwhile, however, bugs do persist and are likely to persist in an environment incorporating third-party code in modules and a rapid pace of development. Here, \midas provides a strong, principled guarantee which is also future-proof.
 
 \subsection{Mitigations}
 
@@ -1841,7 +1842,7 @@ Previous attempts~\cite{schwartzDECAF,dftinker} to eliminate double fetch
 vulnerabilities have relied on Intel TSX, a hardware transactional 
 memory implementation, to detect adversarial writes to data read by the 
 kernel. 
-A defense based on TSX improves upon \tiktok by reducing the scope for 
+A defense based on TSX improves upon \midas by reducing the scope for 
 false sharing from a page size to a cache size. 
 However, TSX suffers from major limitations which restrict its useability
 for general kernel implementations. 
@@ -1855,10 +1856,10 @@ of computing devices~(mobile, IoT, AMD) unprotected.
 \section{Conclusion}
 %%%%%%%%%%%%%%%%%%%%
 
-\tiktok mitigates double-fetch bugs in system calls and protects the operating
+\midas mitigates double-fetch bugs in system calls and protects the operating
 system kernel by enforcing a core invariant:  \emph{through a syscall's
 lifetime, every read to a userspace object will return the same value}.
-Our \tiktok implementation creates on-demand snapshots and copies of pages that
+Our \midas implementation creates on-demand snapshots and copies of pages that
 are read and merges any writes through the execution of the system call.
 %
 Our mitigation protects the core kernel, as well as drivers by carefully
@@ -1869,9 +1870,9 @@ easy-to-exploit double fetch bugs.
 
 The performance evaluation of our prototype implementation is promising.
 Compute-bound benchmarks have negligible overhead and even syscall-intensive
-benchmarks exhibit low overhead. On one hand, \tiktok mitigates all double fetch
+benchmarks exhibit low overhead. On one hand, \midas mitigates all double fetch
 bugs in the kernel and gives developers a tool to locate such bugs. On the other
-hand, \tiktok sets the foundation for efficient, stateful system call filtering
+hand, \midas sets the foundation for efficient, stateful system call filtering
 and validation. 
 %
 We will release the source code of our
