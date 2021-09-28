@@ -1,1 +1,0 @@
-BOOT_IMAGE=/boot/vmlinuz-5.4.0-rc3+ root=UUID=a276793f-5f47-4bd6-a56b-a9032308e51c ro
