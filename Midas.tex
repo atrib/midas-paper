@@ -459,18 +459,18 @@ tsafrir2008portably} are out of scope.
 
 \begin{table}
   \begin{center}
-    \begin{tabular}{  l  M{12mm}  M{20mm}  M{20mm} }
+    \begin{tabular}{  l | M{14mm} | M{20mm} | M{20mm} }
   \toprule
       & \textbf{Userspace} & \textbf{Kernel} & \textbf{Device} \\ \cmidrule{1-2} \cmidrule{3-3} \cmidrule{4-4}
 
       % Note: this is a manually tuned fixup. multirow just sucks.
       \multirow{2}{*}[-.8em]{\shortstack{\textbf{Existing} \\\textbf{mapping}}} 
-      & Intra AS      & User mapping   & Device page       \\ \cmidrule{2-4}
+      & Intra AS      & User mapping   & Device page       \\ %\cmidrule{2-4}
       & Cross AS      & Kernel mapping & Device DMA page   \\ \cmidrule{1-4}
       \multirow{2}{*}[-2.4em]{\shortstack{\textbf{New} \\\textbf{mapping}}} 
-      & mmap          & mm\_populate   & New device page   \\ \cmidrule{2-4}
-      & clone         & --             & New device DMA    \\ \cmidrule{2-4}
-      & swap          & --             & --                \\ 
+      & mmap          & mm\_populate   & New device page   \\ %\cmidrule{2-4}
+      & clone         &                & New device DMA    \\ %\cmidrule{2-4}
+      & swap          &                &                   \\ 
   \bottomrule
   \end{tabular}
   \end{center}
@@ -478,7 +478,6 @@ tsafrir2008portably} are out of scope.
   \label{tab:attack_class}
 \end{table}
 
-\atri{\dots we could not tell if the contents of each row are related or not}
 \midas guards data processed during a syscall's execution against concurrent modification.
 We denote the data fetched twice as vulnerable data.
 In this section, we classify attacks based on two criteria: the 
@@ -528,21 +527,23 @@ but the file-system driver does explicitly find the page before writing to it.
 drivers to account for writes via kernel mappings to vulnerable data.}
 
 The kernel might create new mappings to the vulnerable data 
-between the double fetches by the target syscall, bypassing protection 
-mechanisms which instrument the first read to protect the accessed page.
+between the double fetches by the target syscall, bypassing mechanisms
+which protect the accessed page at the time of first read by 
+instrumenting the transfer function.
 An adversary can call \Code{mmap} and \Code{clone} syscalls to create 
 a new mapping to the vulnerable data before writing to it.
 % The first version is called a \emph{reflected double fetch} 
 % attack~\cite{watson2007exploiting}.
-The mapping might not be created at the time of the adversarial syscall, 
-but lazily when the attacker writes to the vulnerable data.
+The page-table mapping might not be created at the time of the adversarial 
+syscall, but lazily when the attacker writes to the vulnerable data
+due to demand paging.
 In a more involved variant, the adversary can use the kernel as a 
 confused deputy which touches the unmapped page and maps it in, 
 then writes to the vulnerable data.
 In all of the above vectors, the function populating pages for a 
 process (\Code{mm_populate} for Linux) is creating the new mapping.
-\emph{A protection mechanism must, therefore, instrument \Code{mm_populate}
-and the code of any other syscall which may create new mappings.}
+\emph{A protection mechanism must, therefore, instrument any syscalls 
+and other kernel mechanisms which can create new mappings.}
 
 A new mapping might also be created due to swapping.
 If the adversary writes to a page that was previously swapped 
@@ -682,7 +683,7 @@ well as from concurrently running tasks, updating the page as seen
 from userspace.
 %
 \midas's design draws parallels to multi-version concurrency control 
-methods for databases based on snapshot isolation~\cite{0001MK15}.
+methods for databases based on snapshot isolation~\cite{WuALXP17}.
 Transactions read from a snapshot of the database state from when 
 they started, and writes update the up-to-date state of the database.
 %
@@ -725,7 +726,7 @@ For a page, its corresponding state machine
 At every state, the page has two associated sets:
 \begin{inparaenum}[\itshape i\upshape)]
   \item the copies set $C = \{C_L, C_0, \dots\}$ holds multiple copies of the page over time, and
-  \item the snapshots set $S = \{L, S_0, S_1, \dots\}$ tracks logical versions of the page, each corresponding to one executing syscall and mapping to a copy. 
+  \item the snapshots set $S = \{L, S_0, S_1, \dots\}$ tracks logical versions of the page, each corresponding to one executing syscall and each mapping to a copy. 
 \end{inparaenum}
 Reads from kernel code in a syscall use the \emph{snapshot's corresponding copy}.
 Writes from user/kernel code and reads from userspace access the \emph{latest 
@@ -733,9 +734,9 @@ copy} $C_L$, which is mapped in processes' address spaces.
 All other copies are read-only (no matter what the original page protection is), and are used for providing snapshots to syscalls.
 Read-only pages only use states 0 and 1, and writes lead to segmentation faults
 as they do on non-\midas systems.
-Knowing which state the page is in allows \midas to differentiate faults due
-to protecting pages from faults due to programs actually writing to an 
-originally read-only page.
+Knowing which state the page is in allows \midas to differentiate between 
+faults due to \midas protecting pages and faults due to actual permissions 
+violations in userspace programs or the kernel.
 The latest copy $C_L$ of read-only pages remains read-only in both
 protected states (1 and 3).
 In the following paragraphs, we describe how the state machine for a single, 
@@ -948,7 +949,7 @@ it from ever waking up the waiting task.
 Such syscalls cannot be protected by \midas, and we implement an 
 exemption list to prevent transitions in the state machines of pages read 
 by these syscalls.
-The code for these syscalls must be manually inspected for double-fetch 
+The code for exempted syscalls must be manually inspected for double-fetch 
 vulnerabilities.
 Crucially, exempting these syscalls from \midas's protection does not 
 affect the security of other syscalls containing double fetches. 
@@ -1007,8 +1008,8 @@ Here, the two pages containing the object \Code{X} are acessed as
 The adversary tries to attack the syscall by changing the value of the 
 second page:
 \begin{inparaenum}[\itshape i\upshape)]
-\item Between the syscall's first reads of \Code{X[0]} and \Code{X[1]}, and
-\item Between the first and second fetches of X.
+\item between the syscall's first reads of \Code{X[0]} and \Code{X[1]}, and
+\item between the first and second fetches of X.
 \end{inparaenum}
 \midas ensures that both fetches return \Code{X=(42,0)}.
 Critically, any existing TOCTTOU bugs are not triggered since both fetches 
@@ -1424,7 +1425,6 @@ update instead of multiple page tables for each address space a page
 is mapped in.
 
 \paragraph{Porting to other OSs}
-
 \midas can provide \tocttou protection on other operating systems by 
 tracking the states of each page and implementing state transitions 
 as required.
@@ -1740,6 +1740,11 @@ total execution time.
 The reported breakdown accounts for overheads on the compiler, but not 
 all the other processes.
 
+Both page faults and user copies cause state changes for a page, and thereby
+change the page's access permissions in the PTE. 
+The resulting TLB flush accounts for 0.3\%, 0\% and 1.1\% overhead for 
+thread creation, compilation and Nginx respectively. 
+
 \subsection{Case study: Nginx}
 %%%%%%%%%%%%%%%%%%%%
 
@@ -1894,6 +1899,9 @@ community.
 \atri{People}
 
 \atri{Grants}
+
+\atri{Do the equal column bibliography thing.}
+\atri{Certain section references not capitalized.}
 
 %%%%%%%%%%%%%%%%%%%%
 % Bibliography
