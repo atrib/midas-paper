@@ -1837,6 +1837,7 @@ To enable the search for various classes of bugs, Google Project Zero
 Bochspwn~\cite{jurczyk2013bochspwn} project introduced
 a comprehensive emulator for \Code{x86} with callbacks to allow 
 tracing of kernel operations, including memory accesses.
+When paired with a syscall fuzzer, 
 Bochspwn successfully detected and reported double fetches from
 these access logs, but suffered from a high rate of false positives.
 Another major shortcoming of Bochspwn was its low execution throughput
@@ -1849,7 +1850,8 @@ A major limitation of DECAF is that it relies on CPU-specific behavior, which
 is sensitive to CPU parameters, subject to changes generation to 
 generation (or even from core to core) and prone to noise and false sharing. 
 Following the discovery of transient-execution attacks~\cite{kocher18spectre},
-proposals such as InvisiSpec~\cite{YanInvisispec} have tried to prevent 
+proposals such as InvisiSpec~\cite{YanInvisispec,KhasawnehKSEPA19} have 
+tried to prevent 
 information leakage via cache side-channels.
 Future generations might entirely close this channel, or introduce constraints 
 that limits this information flow. 
@@ -1902,9 +1904,8 @@ bugs in the kernel and gives developers a tool to locate such bugs. On the other
 hand, \midas sets the foundation for efficient, stateful system call filtering
 and validation. 
 %
-We will release the source code of our
-prototype as open-source and continue our interaction with the Linux kernel
-community.
+We have released the source code of our prototype as open-source at 
+\url{https://hexhive.epfl.ch/midas/}.
 
 %%%%%%%%%%%%%%%%%%%%
 \section*{Acknowledgements}
