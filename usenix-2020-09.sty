@@ -39,15 +39,14 @@
 % refs and bib
 \usepackage{cite}               % order multiple entries in \cite{...}
 \usepackage{breakurl}           % break too-long urls in refs
-\usepackage[hyphens]{url}                % allow \url in bibtex for clickable links
+\usepackage{url}                % allow \url in bibtex for clickable links
 \usepackage{xcolor}             % color definitions, to be use for...
 \usepackage[]{hyperref}         % ...clickable refs within pdf...
 \hypersetup{                    % ...like so
   colorlinks,
   linkcolor={green!80!black},
   citecolor={red!70!black},
-  urlcolor={blue!70!black},
-  breaklinks=true
+  urlcolor={blue!70!black}
 }
 
 %
@@ -73,7 +72,7 @@
 % for the reviewers' convenience.
 % 
 %
-% \pagestyle{empty}
+\pagestyle{empty}
 
 %
 % USENIX titles are in 14-point bold type, with no date, and with no
