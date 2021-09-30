@@ -1470,9 +1470,9 @@ CVE-2016-6516 is a known vulnerability in kernels prior to version
 4.7 in a file-system \Code{ioctl}. 
 The vulnerable code is shown in \autoref{lst:cve-2016-6516} and is 
 triggered when the value of the \Code{dest_count} object differs between 
-the two fetches (in lines 2 and 6).
-\Code{memdup_user} uses the value from the first fetch for allocating a buffer, 
-and copying in an array of descriptors from the user in line 6.
+the two fetches (in lines 2 and 7).
+\Code{memdup_user} uses the value from the first fetch for allocating a buffer
+and copying in an array of descriptors from the user in line 7.
 \Code{memdup_user} also contains the second fetch of \Code{dest_count}
 which is later used in the function \Code{vfs_dedupe_file_range}.
 An attacker who increases the size of \Code{dest_count} between the 
@@ -1480,11 +1480,11 @@ two fetches will cause the kernel to access the copied array out-of-bounds,
 causing a heap buffer overflow.
 
 For verifying \midas' defense, we introduce a non-faulting assertion check into the 
-function (lines 8-9) and run a known exploit.\footnote{Scott Bauer's exploit 
+function (lines 9-10) and run a known exploit.\footnote{Scott Bauer's exploit 
 from GitHub https://github.com/wpengfei/CVE-2016-6516-exploit}
 The condition checks whether the fetched value of the user object (\Code{dest_count})
 had changed, indicating a successful attack, and prints a message.
-Finally, we re-introduce the fix for the bug, changing the value of 
+Finally, we re-introduce the fix for the bug (line 12), changing the value of 
 \Code{dest_count} in \Code{same} to that from the first fetch.
 In this setup, we can detect when the conditions for triggering the bug are met, 
 but also revert the conditions to the safe state allowing the kernel to safely
@@ -1492,7 +1492,7 @@ continue.
 The exploit was able to successfully trigger the bug on the baseline kernel
 every time over 10 runs.
 With \midas enabled, the exploit was never triggered, i.e., both fetches 
-returned the same value on every call.
+returned the same value on every call.\\
 
 
 \definecolor{mygreen}{RGB}{62, 123, 49}
@@ -1524,10 +1524,14 @@ returned the same value on every call.
 \subsection{Performance evaluation}
 %%%%%%%%%%%%%%%%%%%%
 
-We evaluate \midas on microbenchmarks targeting specific 
-common syscalls, and workloads from two benchmark suites: the 
-NAS Parallel Benchmark (NPB)~\cite{npb} and select workloads 
-from the Phoronix Test Suite (PTS)~\cite{pts}. 
+We evaluate \midas on
+\begin{inparaenum}[\itshape i\upshape)]
+\item microbenchmarks targeting specific common syscalls,
+\item workloads from two benchmark suites: the NAS Parallel 
+    Benchmark (NPB)~\cite{npb} and select workloads 
+    from the Phoronix Test Suite (PTS)~\cite{pts}, and
+\item the webserver Nginx.
+\end{inparaenum}
 NPB includes compute-intensive multiprocessing workloads with a 
 low, but non-negligible syscall rate. 
 NPB therefore demonstrates the ability of \midas to 
@@ -1537,6 +1541,8 @@ PTS includes a variety of benchmarks, both compute bound and
 I/O bound representative of both desktop and server workloads.
 PTS includes syscall-heavy applications with varying degrees 
 of parallelism.
+The Nginx webserver is capable of both high request service rates
+and scalability with multiple worker processes.
 We do not include the SPEC CPU2017 benchmarks
 as they are heavily compute bound and designed to isolate userspace 
 performance without syscalls, and are impervious to kernel performance.
@@ -1713,8 +1719,8 @@ memory overhead.
 \end{figure}
 
 In this section, we explore the sources of \midas' overhead by analyzing 
-\Code{perf} traces for three workloads: thread creation (OSBench), linux 
-compilation and Nginx. 
+\Code{perf} traces for three workloads: thread creation from OSBench, linux 
+compilation from PTS and Nginx. 
 We aim to classify overheads into the various kernel function we instrumented:
 \begin{inparaenum}[\itshape i\upshape)]
 \item user copy in transfer function,
@@ -1748,6 +1754,9 @@ Both page faults and user copies cause state changes for a page, and thereby
 change the page's access permissions in the PTE. 
 The resulting TLB flush accounts for 0.3\%, 0\% and 1.1\% overhead for 
 thread creation, compilation and Nginx respectively. 
+The load generator \Code{bombardier} used for loading Nginx, however, sees 
+a much larger overhead for TLB flushing, accounting for 
+21\% of its execution time.
 
 \subsection{Case study: Nginx}
 %%%%%%%%%%%%%%%%%%%%
@@ -1761,8 +1770,9 @@ thread creation, compilation and Nginx respectively.
 \end{figure}
 
 To better understand \midas' behavior under varying syscall 
-rates and different core configurations, we studied Nginx's throughput
-while varying payload sizes and different worker counts.
+rates and different core configurations, we studied Nginx's (version 1.18) 
+throughput while varying payload sizes and different worker counts.
+Each worker is single threaded and uses one core.
 The server is loaded with requests from a separate machine running 
 a load generater (\Code{bombardier}) with 100 concurrent 
 connections (chosen to maximize throughput) over a 1Gbps link.
@@ -1771,7 +1781,6 @@ The clients send http requests for files ranging between 20B and
 
 In \autoref{fig:nginx_perf}, we plot the request rate and throughput
 for Nginx servers running with one and eight workers.
-Each worker is single threaded and uses one core.
 For all configurations, we can see that the rate of requests served 
 remains almost constant while increasing payload size until the network 
 link reaches saturation.
