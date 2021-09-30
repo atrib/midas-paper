@@ -69,6 +69,7 @@
 \newrefformat{lst}{\hyperref[#1]{Listing~\ref*{#1}}}
 \newrefformat{pat}{\hyperref[#1]{Patch~\ref*{#1}}}
 \newrefformat{alg}{\hyperref[#1]{Algorithm~\ref*{#1}}}
+\renewcommand{\sectionautorefname}{Section}
 \let\subsectionautorefname\sectionautorefname
 \let\subsubsectionautorefname\sectionautorefname
 
@@ -1522,6 +1523,7 @@ returned the same value on every call.\\
 
 
 \subsection{Performance evaluation}
+\label{sec:perf}
 %%%%%%%%%%%%%%%%%%%%
 
 We evaluate \midas on
@@ -1735,8 +1737,8 @@ the call stack, collected over 30 second periods by \Code{perf record}.
 After identifying one binary for the workload from the FlameGraph, we estimate 
 the overhead for a function as the difference in execution time attributed to 
 that function between the baseline and \midas systems.
-The total overhead is estimated from the throughput figures obtained from the 
-previous section.
+The total overhead is estimated from the throughput figures obtained from 
+\autoref{sec:perf}.
 
 \autoref{fig:overhead_class} shows the breakdown of overheads for three 
 workloads. 
@@ -1910,21 +1912,16 @@ We have released the source code of our prototype as open-source at
 %%%%%%%%%%%%%%%%%%%%
 \section*{Acknowledgements}
 %%%%%%%%%%%%%%%%%%%%
-\atri{People}
-
-\atri{Grants}
-ONR IoT-D 13000660-052
-
-\atri{Do the equal column bibliography thing.}
-\atri{Certain section references not capitalized.}
+We thank Marcel Busch for their feedback and support during the writing of this 
+paper. This work was partially supported by the ONR project ``IoT-D''
+(13000660-052).
 
 %%%%%%%%%%%%%%%%%%%%
 % Bibliography
 %%%%%%%%%%%%%%%%%%%%
+\balance
 \bibliographystyle{plain}
 \bibliography{Midas}
-
-\appendix
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \end{document}
