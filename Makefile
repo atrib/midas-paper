@@ -9,19 +9,19 @@ clean:
 midas:
 	rubber --pdf Midas.tex
 
-CRdiff:
-	latexdiff TikTok_usenix22.tex --exclude-safecmd="midas,tocttou" Midas.tex  > latexdiff.tex
-	-rubber --pdf latexdiff.tex
+# CRdiff:
+# 	latexdiff TikTok_usenix22.tex --exclude-textcmd="tocttou" --exclude-textcmd="midas" Midas.tex  > latexdiff.tex 
+# 	-rubber --pdf latexdiff.tex
 
-diff:
+CRdiff:
 	git show 972d1a40e787faf33bdf1d0a036af0cd4e8099eb:TikTok_usenix21.tex > diff.tex
-	sed -i 's/\\midas/Midas/g' diff.tex
-	sed -i 's/\\newcommand\\midas/%/g' diff.tex
-	sed  's/\\midas/Midas/g' Midas.tex >midas.tex
-	sed -i 's/\\newcommandMidas/\%/g' midas.tex
-	latexdiff diff.tex midas.tex --disable-citation-markup --config="PICTUREENV=(?:picture|DIFnomarkup|align|tabular)[\w\d*@]*" > sec22mR_diff.tex
-	-rubber --unsafe --pdf sec22mR_diff.tex
-	rm diff.tex midas.tex sec22mR_diff.tex
+	sed -i 's/\\newcommand\\tiktok/%/g' diff.tex
+	sed -i 's/\\tiktok/TikTok/g' diff.tex
+	sed 's/\\newcommand\\midas/\%/g' Midas.tex > midas.tex
+	sed -i 's/\\midas/Midas/g' midas.tex
+	latexdiff diff.tex midas.tex --disable-citation-markup --config="PICTUREENV=(?:picture|DIFnomarkup|align|tabular)[\w\d*@]*" > sec22CR_diff.tex
+	-rubber --unsafe --pdf sec22CR_diff.tex
+	rm diff.tex midas.tex sec22CR_diff.tex
 
 .PHONY: revision
 revision: *.md
