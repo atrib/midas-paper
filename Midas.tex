@@ -956,13 +956,17 @@ Crucially, exempting these syscalls from \midas' protection does not
 affect the security of other syscalls containing double fetches. 
 Any writes from these syscalls are subject to the same rules described
 in the state machine, and cannot break \midas' invariant.
-In general, a kernel's interface can contain any number of 
-syscalls which require exemption from \midas' protection, and 
-they all need to be properly added to the exemption list. 
-Finer grained exemptions based on syscall parameters can also be 
-implemented, but was found unnecessary for Linux.
-A kernel where a majority of syscalls require exemption might not 
-benefit from \midas' protection.
+\midas could also implement finer-grained exemptions based on syscall
+parameters. Those were not necessary for Linux.
+% Mat: the below is a bit stating the obvious, therefore commented.
+%
+% Other kernels may contain any number of
+% syscalls which require exemption from \midas' protection, and
+% they all need to be properly added to the exemption list.
+% Finer grained exemptions based on syscall parameters can also be
+% implemented, but was found unnecessary for Linux.
+% A kernel where a majority of syscalls require exemption might not
+% benefit from \midas' protection.
 
 
 \paragraph{Syscalls with read-write-read patterns}
@@ -1753,11 +1757,11 @@ The reported breakdown accounts for overheads on the compiler, but not
 all the other processes.
 
 Both page faults and user copies cause state changes for a page, and thereby
-change the page's access permissions in the PTE. 
-The resulting TLB flush accounts for 0.3\%, 0\% and 1.1\% overhead for 
-thread creation, compilation and Nginx respectively. 
-The load generator \Code{bombardier} used for loading Nginx, however, sees 
-a much larger overhead for TLB flushing, accounting for 
+change the page's access permissions in the PTE.
+The resulting TLB flush accounts for 0.3\%, 0\% and 1.1\% overhead for
+thread creation, compilation, and Nginx respectively.
+The load generator \Code{bombardier} used for loading Nginx, however, sees
+a much larger overhead for TLB flushing, accounting for
 21\% of its execution time.
 
 \subsection{Case study: Nginx}
@@ -1912,9 +1916,15 @@ We have released the source code of our prototype as open-source at
 %%%%%%%%%%%%%%%%%%%%
 \section*{Acknowledgements}
 %%%%%%%%%%%%%%%%%%%%
-We thank Marcel Busch for their feedback and support during the writing of this 
-paper. This work was partially supported by the ONR project ``IoT-D''
-(13000660-052).
+The authors thank Marcel Busch and the anonymous reviewers for their careful
+feedback and support during the writing of this 
+paper. 
+%
+This project has received funding from the Euro-pean Research Council (ERC)
+under grant agreement No. 850868, DARPA HR001119S0089-AMP-FP-034, and ONR award
+N00014-18-1-2674. Any findings are those ofthe authors and do not necessarily
+reflect the views of our sponsors.
+
 
 %%%%%%%%%%%%%%%%%%%%
 % Bibliography
