@@ -554,7 +554,7 @@ the adversary's mapping to the page.
 
 \midas protects against all of the aforementioned attack vectors.
 In the absence of any other syscall which can create new userspace 
-mappings to vulnerable data, \midas's protection is complete 
+mappings to vulnerable data, \midas' protection is complete 
 against writes from both user and kernel code.
 
 Finally, a device might modify vulnerable data if it is either 
@@ -601,7 +601,7 @@ need to be protected.
 Accesses to userspace objects from userspace and kernel objects by kernel 
 code remains unaffected.
 
-\midas's implementation builds on the protection mechanisms provided by 
+\midas' implementation builds on the protection mechanisms provided by 
 existing virtual memory implementations.
 On modern platforms, virtual memory protection is set up by the OS at
 page granularity by setting bits in pagetable entries (PTEs).
@@ -618,7 +618,7 @@ accesses to different parts of a page (intra-page false sharing).
 False sharing leads to unnecessary page duplications, incurring performance 
 overhead on highly shared pages, but does not affect correctness.
 
-For an object spanning multiple pages, \midas's design sequentially 
+For an object spanning multiple pages, \midas' design sequentially 
 protects each page before reading from it.
 The leading pages containing the object are protected before the
 later pages, allowing an adversary to potentially modify the later 
@@ -630,7 +630,7 @@ If the syscall code contains a \tocttou bug, the modification will
 be visible to the first fetch itself (which is used for checking for 
 validity of the data) and will lead to the data being rejected 
 straightaway.
-\midas's invariant therefore prevent exploitation of double-fetch
+\midas' invariant therefore prevent exploitation of double-fetch
 vulnerabilities even when the fetched objects span multiple pages.
 We elaborate on this case with an example in \autoref{sec:design:discussion}.
 
@@ -673,7 +673,7 @@ while the actual contents are stored in one of many copies.
 Each snapshot maps to a copy, allowing the contents of the page at the 
 time of creating the snapshot to be read. 
 If multiple snapshots are taken without intervening writes to the page, 
-these snapshots will map to a single copy, reducing \midas's space overheads 
+these snapshots will map to a single copy, reducing \midas' space overheads 
 and performance overheads for creating copies.
 \midas maintains a snapshot of every page when first read by a syscall.
 On a double fetch by the same syscall, the copy mapped to the snapshot 
@@ -682,7 +682,7 @@ The latest copy of the page is used for all writes, by the syscall as
 well as from concurrently running tasks, updating the page as seen 
 from userspace.
 %
-\midas's design draws parallels to multi-version concurrency control 
+\midas' design draws parallels to multi-version concurrency control 
 methods for databases based on snapshot isolation~\cite{WuALXP17}.
 Transactions read from a snapshot of the database state from when 
 they started, and writes update the up-to-date state of the database.
@@ -787,7 +787,7 @@ Certain syscalls such as \Code{rt_sigaction} both read and write from
 the same user page. 
 A write by \Code{rt_sigaction} to the page it has previously read will update
 the page's latest copy $C_L$, but not the duplicate copy $C_0$.
-\midas's write policy ensures that the copy $C_L$ always holds the latest 
+\midas' write policy ensures that the copy $C_L$ always holds the latest 
 contents of the page, up-to-date with all the writes to the page, from both user 
 and kernel code. 
 Further, \midas does not need to merge writes from userspace and syscall code
@@ -858,7 +858,7 @@ writes from the syscall to be merged into the latest copy.
 \end{table}
 
 \paragraph{Correctness of syscalls directly updating snapshot $L$}
-\midas's design lets all writes, including those from syscalls, to directly 
+\midas' design lets all writes, including those from syscalls, to directly 
 update the latest copy of the page $C_L$ and this property maintains correctness 
 of system execution.
 We now show that there is a valid, safe %\footnotemark 
@@ -944,41 +944,41 @@ These syscalls are listed in \autoref{tab:except_syscall}.
 The \Code{futex} syscall implements a fast synchronization mechanism
 for userspace and relies on atomic writes from concurrent userspace
 threads to update a condition the syscall is waiting for. 
-Subjecting a \Code{futex} syscall to \midas's invariant will prevent
+Subjecting a \Code{futex} syscall to \midas' invariant will prevent
 it from ever waking up the waiting task.
 Such syscalls cannot be protected by \midas, and we implement an 
 exemption list to prevent transitions in the state machines of pages read 
 by these syscalls.
 The code for exempted syscalls must be manually inspected for double-fetch 
 vulnerabilities.
-Crucially, exempting these syscalls from \midas's protection does not 
+Crucially, exempting these syscalls from \midas' protection does not 
 affect the security of other syscalls containing double fetches. 
 Any writes from these syscalls are subject to the same rules described
-in the state machine, and cannot break \midas's invariant.
+in the state machine, and cannot break \midas' invariant.
 In general, a kernel's interface can contain any number of 
-syscalls which require exemption from \midas's protection, and 
+syscalls which require exemption from \midas' protection, and 
 they all need to be properly added to the exemption list. 
 Finer grained exemptions based on syscall parameters can also be 
 implemented, but was found unnecessary for Linux.
 A kernel where a majority of syscalls require exemption might not 
-benefit from \midas's protection.
+benefit from \midas' protection.
 
 
 \paragraph{Syscalls with read-write-read patterns}
 A hypothetical syscall which reads from an object, writes to it, and
 then reads back the updated object cannot be protected using \midas.
-\midas's invariant will ensure that the second read is identical to the first,
+\midas' invariant will ensure that the second read is identical to the first,
 and does not reflect the intermediate write.
-Such syscalls must be exempted from \midas's instrumentation.
+Such syscalls must be exempted from \midas' instrumentation.
 During extensive tests, we did not find any other syscall which exhibits this behavior in the Linux
 kernel. 
 
 \paragraph{Syscalls with false sharing}
-Another hypothetical type of syscall could struggle with \midas's 
+Another hypothetical type of syscall could struggle with \midas' 
 instrumentation due to false sharing.
 Suppose a page contains two objects, $O_0$ and $O_1$, and a syscall  
 sequentially reads $O_0$ then $O_1$.
-Due to \midas's invariant being enforced at page granularity and 
+Due to \midas' invariant being enforced at page granularity and 
 false sharing of the page between these objects, \midas guarantees that
 the value of object $O_1$ read is the same as what was contained when it 
 first read object $O_0$. 
@@ -986,7 +986,7 @@ A syscall which requires the value of $O_1$ to change between these two
 points in time would, therefore, not work with \midas protections. 
 Such a hypothetical syscall, requiring concurrent modifications to its 
 arguments, could exist to support some synchronization mechanism 
-similar to a \Code{futex} and can be safely exempt from \midas's invariant.
+similar to a \Code{futex} and can be safely exempt from \midas' invariant.
 %
 During extensive tests, we did not find any other syscall which exhibits this behavior in the 
 Linux kernel. 
@@ -1018,7 +1018,7 @@ Note how the situation is identical to one where the adversarial write
 to \Code{X[1]} happens before the syscall starts.
 
 \paragraph{Preventing deadlocks by design}
-\midas's design is free of deadlocks, and exempts syscalls which 
+\midas' design is free of deadlocks, and exempts syscalls which 
 require violation of its invariant from triggering particular 
 state-machine transitions.
 Userspace reads always succeed, using the latest copy $C_L$ of the
@@ -1036,7 +1036,7 @@ A single, per-page lock can serialize operations on that page
 and assure forward progress.
 
 \paragraph{Detecting double fetches}
-\midas's state machine for pages enables the precise detection of double fetch
+\midas' state machine for pages enables the precise detection of double fetch
 bugs, turning it into an effective sanitizer and developer debugging tool in
 addition to being an efficient mitigation.
 When a syscall first reads from a user page, it creates a snapshot 
@@ -1069,15 +1069,18 @@ architecture.
 A page protected by \midas transitions between states on 
 either a kernel read to user memory, or when user or kernel code
 writes to protected, read-only memory (see \autoref{fig:midas_states}).
-\midas can be implemented on any operating system kernel that uses 
-a defined interface for reading from userspace and
-on any architecture which implements hardware-controlled access 
-control to memory through page tables. 
+\midas can be implemented on any operating system kernel that 
+\begin{inparaenum}[\itshape i\upshape)]
+\item systematically uses transfer functions for reading from userspace, and
+\item on any architecture which implements hardware-controlled access 
+control to memory through page tables.
+\end{inparaenum}
 The first requirement enables \midas to implement transitions on 
 kernel reads from user memory.
 The Linux kernel uses the \Code{raw_copy_from_user} interface which 
 we instrument for our prototype.
-The second requirement causes the hardware to raise a faults, 
+The second requirement causes the hardware to raise a fault on
+writes to \midas-protected pages, 
 directing execution on the processor to a pre-defined exception 
 handler in the OS.
 Our prototype instruments Linux' fault handler in the function 
@@ -1086,10 +1089,9 @@ from states 2 and 4.
 Overall, our prototype adds around $1,100$ lines of code and modifies 
 17. 
 Our design allows the changes to be mostly limited to the memory 
-subsystem (\Code{raw_copy_from_user}, \Code{handle_pte_fault} and 
-\Code{wp_page_copy}).
-We only modified a single syscall's code~(\Code{clone}).
-
+subsystem, and in general does not require individual syscalls to
+be modified.
+Only one syscall~(\Code{clone}) required code modification.
 
 \subsection{Tracking Page State}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1130,7 +1132,7 @@ to track the original protections for the page.
 SW3 is set whenever the page is in one of the two protected
 states (1 and 3).
 On a write-triggered protection fault, SW3 can be read to 
-efficiently determine if the fault was due to \midas's protection 
+efficiently determine if the fault was due to \midas' protection 
 mechanisms, triggering a state change, or due to buggy software
 accessing a page with illegal permissions, triggering a signal to 
 the task.
@@ -1162,7 +1164,6 @@ all address spaces for a page.
   \label{fig:copy_from_user}
 \end{figure}
 
-\atri{Introduce and use the term transfer functions}.
 Syscalls reading from user memory the first time triggers the 
 allocation of a new snapshot. 
 If the page is not protected (states 1 and 3), the read also 
@@ -1175,16 +1176,18 @@ This function also uses the kernel's \Code{mark_page_accessed}
 interface to move the page to the ``Active'' state for the 
 kernel's swapping mechanism, making the page ineligible for being 
 swapped out. 
-We also implement \Code{get_user} (used by the kernel for small 
-reads) as a call to \Code{raw_copy_from_user}.
-\atri{What about unsafe\_get\_user, copy\_in\_user, copy\_user, copy\_user\_zeroing}
+We also implement \Code{get_user} and \Code{unsafe_get_user}
+(used by the kernel for small reads) as a call to \Code{raw_copy_from_user}.
 
 \paragraph{Exemptions}
 Our prototype \midas kernel exempts a couple of functions 
-from \midas's invariant, and they are therefore not instrumented 
+from \midas' invariant in addition to those described in 
+\autoref{sec:design:discussion}, and these functions are 
+therefore not instrumented 
 to follow the aforementioned steps while accessing userspace
 memory. 
-\Code{raw_copy_from_user_inatomic} is used by the kernel to 
+First, \Code{raw_copy_from_user_inatomic} is a special 
+transfer function used by the kernel to 
 read user memory in special situations such as a kernel 
 oops\footnote{A kernel oops is triggered when the kernel detects a 
 problem while running which can affect its proper functioning, such 
@@ -1195,8 +1198,8 @@ where the kernel reads user memory to provide a backtrace.
 In this severe situation, the goal of the kernel is to collect debug 
 information before its imminent termination and no \tocttou protection 
 is needed.
-In our prototype, we also exempt the \Code{write} system 
-call's read from user memory from instrumentation.
+Second, we also exempt the \Code{write} system 
+call's reads from user memory from instrumentation.
 The \Code{write} system call takes three arguments: a 
 file descriptor passed as a register, a pointer to a user 
 buffer and a count of bytes to be written to the file.
@@ -1277,7 +1280,7 @@ are actually mapped to the COW page.
 A COW page cannot be in states 2 or 3, since they cannot have multiple
 \midas copies.
 COW pages in state 0 can be dealt with by the kernel's standard
-duplication method (not \midas's duplication).
+duplication method (not \midas' duplication).
 For a COW page in state 1, its list of snapshots can correspond to 
 reads from syscalls for threads in different address spaces.
 In \autoref{fig:fault_handling_cow}, we show snapshots $S_A$ and 
@@ -1295,7 +1298,7 @@ Finally, the new page is transitioned to its next state to allow
 for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
 
-We ensure that \midas's modifications to the fault handler 
+We ensure that \midas' modifications to the fault handler 
 correctly handle concurrent faults and do not cause additional 
 nested faults. 
 During concurrent faults for the same page, only one thread 
@@ -1307,7 +1310,7 @@ We also ensure that the only additional accesses to user memory
 within the handler (used for duplication) happen when the page 
 is assured to be in memory and correctly mapped.
 All nested faults are therefore caused by existing kernel code
-and do not interact with \midas.
+and do not interact with \midas' modifications.
 
 \subsection{Syscall Completion}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1404,7 +1407,10 @@ On most CPUs, the core updating permissions will perform a global
 shootdown to ensure that other TLBs for cores executing in the 
 same address space are also updated.
 Implemented with inter-processor interrupts, global shootdowns 
-are expensive and account for the majority of \midas overhead.
+are expensive. 
+In our evaluation, 21\% of the runtime of the load generator 
+\Code{bombardier} used for stressing the Nginx server was spent
+performing TLB shootdowns when running on the \midas kernel.
 
 A more efficient solution would be to have special hardware support
 for invalidating TLB entries globally, not just on the executing 
@@ -1428,10 +1434,10 @@ is mapped in.
 \midas can provide \tocttou protection on other operating systems by 
 tracking the states of each page and implementing state transitions 
 as required.
-Systems track page state in per-page state structures,
+OSs track page state in per-page state structures,
 such as \Code{vm_state_t} for BSD-based OSs (*BSD) such as FreeBSD and XNU.
-The prot must instrument explicit userspace read interfaces 
-(\Code{copyin} for *BSD) to transition to states 1 and 3.
+A \midas implementation on these OSs must instrument the 
+read transfer function(\Code{copyin} for *BSD) to transition to states 1 and 3.
 The OS' fault handler (\Code{vm_fault} on *BSD) will trap on writes to 
 protected pages, and needs to be modified to implement the required page 
 duplication and state change.
@@ -1446,15 +1452,13 @@ page's state.
 Such modifications are OS-specific, making it difficult to recommend
 a generic methodology.
 
-\atri{What to do with mprotect?}
-
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Evaluation}
 %%%%%%%%%%%%%%%%%%%%
 
-In this section, we emperically verify \midas's ability to mitigate 
-a known double fetch vulnerability, and quantify \midas's overhead on 
+In this section, we emperically verify \midas' ability to mitigate 
+a known double fetch vulnerability, and quantify \midas' overhead on 
 workloads with different characteristics including both compute-bound 
 applications which rarely use syscalls and a mix of syscall-heavy applications 
 which heavily rely on the kernel's performance.
@@ -1475,7 +1479,7 @@ An attacker who increases the size of \Code{dest_count} between the
 two fetches will cause the kernel to access the copied array out-of-bounds,
 causing a heap buffer overflow.
 
-For verifying \midas's defense, we introduce a non-faulting assertion check into the 
+For verifying \midas' defense, we introduce a non-faulting assertion check into the 
 function (lines 8-9) and run a known exploit.\footnote{Scott Bauer's exploit 
 from GitHub https://github.com/wpengfei/CVE-2016-6516-exploit}
 The condition checks whether the fetched value of the user object (\Code{dest_count})
@@ -1559,7 +1563,7 @@ but instruments all syscalls including \Code{write}.
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=\linewidth]{img/midas_performance.pdf}
-  \caption{\midas's performance on microbenchmarks, NPB and PTS benchmarks 
+  \caption{\midas' performance on microbenchmarks, NPB and PTS benchmarks 
           relative to the baseline kernel.}
   \label{fig:midas_performance}
 \end{figure*}
@@ -1589,7 +1593,7 @@ The programs use \Code{libc} interfaces such as \Code{fopen},
 threads, processes and for memory allocation respectively.  
 \autoref{tab:osbench_syscalls} lists the prominent syscall usage 
 for these workloads.
-\autoref{fig:midas_performance} shows \midas's performance (time/operation) 
+\autoref{fig:midas_performance} shows \midas' performance (time/operation) 
 on OSBench relative to the baseline kernel, with overheads ranging from 
 zero to 5.3\%.
 
@@ -1608,7 +1612,7 @@ processes which communicate by message passing.
 The two technology stacks have different frequency of syscalls due to 
 different communication methods.
 Communication through kernel syscalls for either stack will incur overhead
-due to \midas's protection.
+due to \midas' protection.
 Additional global TLB shootdowns (for snapshot synchronization) added by 
 \midas will also affect the performance of such parallel benchmarks.
 
@@ -1619,12 +1623,12 @@ and are all long enough for the kernel to reach equilibrium.
 Certain benchmarks require a parallelism number which is a perfect square.
 On our 8-core CPU, having 4 compute-bound threads/processes instead of 16 allows 
 all of them to run without time sharing.
-\autoref{fig:midas_performance} shows \midas's performance for both MPI and OpenMP,
+\autoref{fig:midas_performance} shows \midas' performance for both MPI and OpenMP,
 normalized to the performance of the baseline system with the same parallelization
 framework.
 On average, \midas achieved $96.3\%$ of the baseline system's performance on 
 both frameworks. 
-\midas's performance for the \Code{ep} (Embarrassingly Parallel) benchmark is 
+\midas' performance for the \Code{ep} (Embarrassingly Parallel) benchmark is 
 closest to that of the baseline, since it has low communication overheads.
 \midas shows low overhead ($3.7\%$) for compute-intensive, parallel workloads.
 
@@ -1635,7 +1639,7 @@ The Phoronix Test Suite (PTS)~\cite{pts} includes a large set ($>500$) of
 open-source benchmarks, of which we have chosen a range of benchmarks 
 suitable for evaluating both desktop and server performance.
 We biased the selection to benchmarks that require (heavy) kernel activity to
-test the overhead of \midas's instrumentation.
+test the overhead of \midas' instrumentation.
 A sole benchmark, OpenSSL, is included to represent single-threaded, 
 compute-bound workloads for which kernel performance is less relevant.
 The benchmarks are also varied, ranging from single-threaded (Pybench) to 
@@ -1644,7 +1648,7 @@ At the extreme, we have an IPC benchmark transferring tiny, 128-byte
 buffers between processes which spends all of its time in syscalls
 and whose performance is entirely dependent on kernel IPC performance.
 
-We plot \midas's performance relative to the baseline kernel on
+We plot \midas' performance relative to the baseline kernel on
 these benchmarks in \autoref{fig:midas_performance}, roughly ordering 
 workloads in increasing order of syscall dependence from left to right.
 For benchmarks for which PTS reports runtime, we compute the inverse 
@@ -1708,7 +1712,7 @@ memory overhead.
   \label{fig:overhead_class}
 \end{figure}
 
-In this section, we explore the sources of \midas's overhead by analyzing 
+In this section, we explore the sources of \midas' overhead by analyzing 
 \Code{perf} traces for three workloads: thread creation (OSBench), linux 
 compilation and Nginx. 
 We aim to classify overheads into the various kernel function we instrumented:
@@ -1756,7 +1760,7 @@ thread creation, compilation and Nginx respectively.
   \label{fig:nginx_perf}
 \end{figure}
 
-To better understand \midas's behavior under varying syscall 
+To better understand \midas' behavior under varying syscall 
 rates and different core configurations, we studied Nginx's throughput
 while varying payload sizes and different worker counts.
 The server is loaded with requests from a separate machine running 
@@ -1773,7 +1777,7 @@ remains almost constant while increasing payload size until the network
 link reaches saturation.
 Under a saturated network, the request rates for \midas match that 
 of the baseline system.
-With a single worker, \midas's overheads cause a consistent 13-14\% 
+With a single worker, \midas' overheads cause a consistent 13-14\% 
 overhead on request rate for small packet sizes.
 However, we see that \midas has practically no overhead when serving 
 requests with 8 workers even when packet sizes are too small to 
@@ -1829,7 +1833,7 @@ these access logs, but suffered from a high rate of false positives.
 Another major shortcoming of Bochspwn was its low execution throughput
 of 40-80MIPS which limited its ability to explore code paths.
 
-DECAF~\cite{schwartzDECAF} reverses \midas's adversarial model, leveraging 
+DECAF~\cite{schwartzDECAF} reverses \midas' adversarial model, leveraging 
 concurrent access to syscall parameters from userspace to detect kernel 
 accesses to the same via a cache side-channel.
 A major limitation of DECAF is that it relies on CPU-specific behavior, which 
@@ -1899,6 +1903,7 @@ community.
 \atri{People}
 
 \atri{Grants}
+ONR IoT-D 13000660-052
 
 \atri{Do the equal column bibliography thing.}
 \atri{Certain section references not capitalized.}
