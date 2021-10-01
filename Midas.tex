@@ -404,9 +404,9 @@ and therefore protect them.
 Double-fetch bugs occur when a privileged environment (such as the kernel)
 reads untrusted memory two or more times, and the read values are not 
 identical. 
-An example of such a situation is depicted in \autoref{fig:doublefetch}.
-In between two reads by the target thread, the value of \Code{X} in memory 
-is changed by an adversary.
+Such a situation is depicted in \autoref{fig:doublefetch}, 
+where the the value of \Code{X} in memory is changed by an adversary
+in between two reads by the target thread.
 The bug is a race condition since it requires accesses to memory in 
 a particular order across threads.
 The situation where the first fetch validates an object's value in memory and 
@@ -1363,8 +1363,8 @@ creates a copy of the page before writing to the latest copy.
 Our current prototype does not, however, protect out-of-tree drivers
 which are not distributed with the kernel if they do not use the 
 \Code{generic_file_write_iter} function.
-A user with superuser privileges can load a module implementing a 
-different, insecure FS driver which does not implement \midas checks.
+A user with superuser privileges can load a insecure module implementing a 
+FS driver which does not implement \midas checks.
 A malicious superuser is, however, outside our threat model.
 % Mat: IMO a very weak argument and always the case, so rather than waste
 % precious time here, I've commented out the below as it distracts from our key
@@ -1424,10 +1424,10 @@ The AMD64 architecture manual~\cite{amd64prog} lists such an instruction
 (\Code{INVLPGB}), though it is yet to be implemented in any commercially 
 available x86 processors.
 The ARM v8-A architecture manual~\cite{armv8a} lists similar instructions 
-\Code{TLBI ASIDE1IS} and \Code{TLBI ASIDE1OS} which invalidates all entries 
+\Code{TLBI ASIDE1}\texttt{\textbf{IS}} and \Code{TLBI ASIDE1}\texttt{\textbf{OS}} which invalidate all PTEs 
 of a page within a cluster of cores but not for cores in other clusters
-(called an Inner Shareable Domain) and cores across clusters (called an 
-Outer Shareable Domain) respectively.
+(Inner Shareable Domain) and cores across clusters (Outer 
+Shareable Domain) respectively.
 
 Alternate architectures~\cite{guptarebooting,ChaseLFL94} with a single, 
 system-wide translation table
@@ -1441,7 +1441,7 @@ tracking the states of each page and implementing state transitions
 as required.
 OSs track page state in per-page state structures,
 such as \Code{vm_state_t} for BSD-based OSs (*BSD) such as FreeBSD and XNU.
-A \midas implementation on these OSs must instrument the 
+An implementation on these OSs must instrument the 
 read transfer function(\Code{copyin} for *BSD) to transition to states 1 and 3.
 The OS' fault handler (\Code{vm_fault} on *BSD) will trap on writes to 
 protected pages, and needs to be modified to implement the required page 
@@ -1484,15 +1484,15 @@ An attacker who increases the size of \Code{dest_count} between the
 two fetches will cause the kernel to access the copied array out-of-bounds,
 causing a heap buffer overflow.
 
-For verifying \midas' defense, we introduce a non-faulting assertion check into the 
-function (lines 9-10) and run a known exploit.\footnote{Scott Bauer's exploit 
-from GitHub https://github.com/wpengfei/CVE-2016-6516-exploit}
+For verifying \midas' defense, we introduce a non-faulting assertion 
+check into the function~(lines 9-10) and run a known 
+exploit.\footnote{\url{https://github.com/wpengfei/CVE-2016-6516-exploit/tree/master/Scott\%20Bauer}}
 The condition checks whether the fetched value of the user object (\Code{dest_count})
 had changed, indicating a successful attack, and prints a message.
-Finally, we re-introduce the fix for the bug (line 12), changing the value of 
+Finally, we re-introduce the fix for the bug (line 12), fixing the value of 
 \Code{dest_count} in \Code{same} to that from the first fetch.
 In this setup, we can detect when the conditions for triggering the bug are met, 
-but also revert the conditions to the safe state allowing the kernel to safely
+but also revert to a correct state allowing the kernel to safely
 continue.
 The exploit was able to successfully trigger the bug on the baseline kernel
 every time over 10 runs.
@@ -1552,7 +1552,7 @@ and scalability with multiple worker processes.
 We do not include the SPEC CPU2017 benchmarks
 as they are heavily compute bound and designed to isolate userspace 
 performance without syscalls, and are impervious to kernel performance.
-SPEC CPU2017 benchmarks would unfairly bias performance in favor of
+SPEC benchmarks would unfairly bias performance in favor of
 \midas.
 
 The testbench for the evaluation consists of a desktop machine 
@@ -1598,14 +1598,15 @@ but instruments all syscalls including \Code{write}.
 
 \paragraph{Microbenchmarks}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-We tested \midas on microbenchmarks from 
+We test \midas on microbenchmarks from 
 OSBench~\cite{osbench}.
 The programs use \Code{libc} interfaces such as \Code{fopen}, 
 \Code{pthread_create}, \Code{fork} and \Code{malloc} for creating files, 
 threads, processes and for memory allocation respectively.  
 \autoref{tab:osbench_syscalls} lists the prominent syscall usage 
 for these workloads.
-\autoref{fig:midas_performance} shows \midas' performance (time/operation) 
+\autoref{fig:midas_performance} shows \midas' performance 
+(time per operation) 
 on OSBench relative to the baseline kernel, with overheads ranging from 
 zero to 5.3\%.
 
@@ -1628,13 +1629,13 @@ due to \midas' protection.
 Additional global TLB shootdowns (for snapshot synchronization) added by 
 \midas will also affect the performance of such parallel benchmarks.
 
-We evaluated NPB benchmarks of class A on our testbench, running 
-4 threads/processes in parallel.
-These benchmarks' runtime varies between 10 seconds and 8 minutes, 
+We run NPB benchmarks of class A on our testbench, executing 
+4 threads or processes in parallel.
+The benchmarks' runtime varies between 10 seconds and 8 minutes, 
 and are all long enough for the kernel to reach equilibrium.
 Certain benchmarks require a parallelism number which is a perfect square.
 On our 8-core CPU, having 4 compute-bound threads/processes instead of 16 allows 
-all of them to run without time sharing.
+all threads to run without time sharing.
 \autoref{fig:midas_performance} shows \midas' performance for both MPI and OpenMP,
 normalized to the performance of the baseline system with the same parallelization
 framework.
@@ -1650,7 +1651,7 @@ closest to that of the baseline, since it has low communication overheads.
 The Phoronix Test Suite (PTS)~\cite{pts} includes a large set ($>500$) of 
 open-source benchmarks, of which we have chosen a range of benchmarks 
 suitable for evaluating both desktop and server performance.
-We biased the selection to benchmarks that require (heavy) kernel activity to
+We bias the selection to benchmarks that require (heavy) kernel activity to
 test the overhead of \midas' instrumentation.
 A sole benchmark, OpenSSL, is included to represent single-threaded, 
 compute-bound workloads for which kernel performance is less relevant.
@@ -1735,7 +1736,7 @@ We aim to classify overheads into the various kernel function we instrumented:
 \item filesystem operations.
 \end{inparaenum}
 
-To estimate the time spent in each function, we created FlameGraphs for 
+To estimate the time spent in each function, we create FlameGraphs for 
 each workload\cite{GreggFlameGraph} using samples of processor state, including
 the call stack, collected over 30 second periods by \Code{perf record}.
 After identifying one binary for the workload from the FlameGraph, we estimate 
@@ -1776,7 +1777,7 @@ a much larger overhead for TLB flushing, accounting for
 \end{figure}
 
 To better understand \midas' behavior under varying syscall 
-rates and different core configurations, we studied Nginx's (version 1.18) 
+rates and different core configurations, we study Nginx's (version 1.18) 
 throughput while varying payload sizes and different worker counts.
 Each worker is single threaded and uses one core.
 The server is loaded with requests from a separate machine running 
@@ -1874,7 +1875,7 @@ analysis to find bugs.
 \subsection{Mitigations}
 
 Previous attempts~\cite{schwartzDECAF,dftinker} to eliminate double fetch 
-vulnerabilities have relied on Intel TSX, a hardware transactional 
+vulnerabilities rely on Intel TSX, a hardware transactional 
 memory implementation, to detect adversarial writes to data read by the 
 kernel. 
 A defense based on TSX improves upon \midas by reducing the scope for 
@@ -1882,10 +1883,11 @@ false sharing from a page size to a cache size.
 However, TSX suffers from major limitations which restrict its useability
 for general kernel implementations. 
 Of note, TSX requires that the data working set for the critical section 
-experiences no L1 evictions, even due to contention from a 
+experiences no L1 cache evictions, even due to contention from a 
 simultaneously-multithreaded (hyperthreading) core.
-Further, TSX is limited to specific processors, leaving the vast majority
-of computing devices~(mobile, IoT, AMD) unprotected.
+Further, TSX is limited to processors from a specific manufacturer (Intel), 
+leaving the vast majority
+of computing devices~(mobile, IoT, AMD processors) unprotected.
 
 %%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
