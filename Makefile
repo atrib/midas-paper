@@ -2,7 +2,7 @@ all: midas CRdiff
 
 clean:
 	rm -f *.aux *.bbl *.blg *.fdb_latexmk *.fls *.log *.out *.synctex.gz *.dvi
-	rm Midas.pdf latexdiff.pdf
+	rm -f Midas.pdf latexdiff.pdf
 
 .PHONY: all clean midas
 
@@ -21,7 +21,7 @@ CRdiff:
 	sed -i 's/\\midas/Midas/g' midas.tex
 	latexdiff diff.tex midas.tex --disable-citation-markup --config="PICTUREENV=(?:picture|DIFnomarkup|align|tabular)[\w\d*@]*" > sec22CR_diff.tex
 	-rubber --unsafe --pdf sec22CR_diff.tex
-	rm diff.tex midas.tex sec22CR_diff.tex
+	rm -f diff.tex midas.tex sec22CR_diff.tex
 
 .PHONY: revision
 revision: *.md

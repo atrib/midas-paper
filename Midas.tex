@@ -1805,8 +1805,15 @@ scalability of the Linux networking stack.
 \section{Related Work}
 %%%%%%%%%%%%%%%%%%%%
 
-\subsection{Static analysis}
+Early work on double-fetch bugs relied primarily on manual 
+code analysis to identify bugs in kernel code~\cite{YangCSS12}
+or in syscall wrappers~\cite{watson2007exploiting}. 
+In this section, we describe the automated tools that followed, 
+based on static or dynamic analysis techniques, which can be employed 
+to find and mitigate \tocttou bugs.
 
+\paragraph{Static analysis}
+%
 Static analysis proposals use code analysis to find and fix double fetch
 vulnerabilities.
 DFTinker~\cite{dftinker} improves the coverage of pattern matching rules 
@@ -1834,8 +1841,8 @@ Further, specific cases of double fetches, such as in system call wrappers
 cannot be fixed in code, and require a versioning system such as 
 \midas in order to enable deep argument inspection.
 
-\subsection{Dynamic Analysis}
-
+\paragraph{Dynamic Analysis}
+%
 Dynamic analysis techniques leverage runtime information and values 
 to detect double fetches, and are notable in their ability to 
 find bugs in binaries.
@@ -1850,11 +1857,11 @@ these access logs, but suffered from a high rate of false positives.
 Another major shortcoming of Bochspwn was its low execution throughput
 of 40-80MIPS which limited its ability to explore code paths.
 
-DECAF~\cite{schwartzDECAF} reverses \midas' adversarial model, leveraging 
+DECAF~\cite{schwartzDECAF} inverts \midas' adversarial model, leveraging 
 concurrent access to syscall parameters from userspace to detect kernel 
-accesses to the same via a cache side-channel.
-A major limitation of DECAF is that it relies on CPU-specific behavior, which 
-is sensitive to CPU parameters, subject to changes generation to 
+accesses via a cache side-channel.
+DECAF is strongly reliant on CPU-specific behavior, which 
+is sensitive to CPU parameters, subject to changes from generation to 
 generation (or even from core to core) and prone to noise and false sharing. 
 Following the discovery of transient-execution attacks~\cite{kocher18spectre},
 proposals such as InvisiSpec~\cite{YanInvisispec,KhasawnehKSEPA19} have 
@@ -1872,8 +1879,8 @@ analysis to find bugs.
 % Devices are outside the scope of the current implementation of \midas. Particularly, double fetches from device backed memory is liable to change without any control, but already requires high privileges which the user does not have. DMA accesses to main memory, however, can be protected by the use of IOMMUs with very low overhead [4], and can take advantage of the same \midas mechanisms. [4] Border Control: Sandboxing Accelerators.
 % Overall comment: \midas does not seek to overthrow methods that seek to find double fetches, and fix them. In fact, it also allows use as a sanitizer that flags such double fetches. In the meanwhile, however, bugs do persist and are likely to persist in an environment incorporating third-party code in modules and a rapid pace of development. Here, \midas provides a strong, principled guarantee which is also future-proof.
 
-\subsection{Mitigations}
-
+\paragraph{Mitigations}
+%
 Previous attempts~\cite{schwartzDECAF,dftinker} to eliminate double fetch 
 vulnerabilities rely on Intel TSX, a hardware transactional 
 memory implementation, to detect adversarial writes to data read by the 
@@ -1922,9 +1929,9 @@ The authors thank Marcel Busch and the anonymous reviewers for their careful
 feedback and support during the writing of this 
 paper. 
 %
-This project has received funding from the Euro-pean Research Council (ERC)
-under grant agreement No. 850868, DARPA HR001119S0089-AMP-FP-034, and ONR award
-N00014-18-1-2674. Any findings are those ofthe authors and do not necessarily
+This project was partially supported by European Research Council (ERC)
+grant No. 850868, DARPA HR001119S0089-AMP-FP-034, and ONR award
+N00014-18-1-2674. Any findings are those of the authors and do not necessarily
 reflect the views of our sponsors.
 
 
