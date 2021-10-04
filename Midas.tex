@@ -1,6 +1,7 @@
 \documentclass[letterpaper,twocolumn,10pt]{article}
 \usepackage{usenix-2020-09}
 
+\usepackage{adjustbox}
 \usepackage{amsmath}
 \usepackage{filecontents}
 \usepackage{tikz}
@@ -456,22 +457,26 @@ tsafrir2008portably} are out of scope.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{table}
-  \begin{center}
-    \begin{tabular}{  l | M{14mm} | M{20mm} | M{20mm} }
+  \centering
+
+    \begin{adjustbox}{width=\linewidth}
+    \begin{tabular}{  l | l | l | l }
   \toprule
       & \textbf{Userspace} & \textbf{Kernel} & \textbf{Device} \\ \midrule
 
       % Note: this is a manually tuned fixup. multirow just sucks.
-      \multirow{2}{*}[-.8em]{\shortstack{\textbf{Existing} \\\textbf{mapping}}}
-      & Intra AS       & User mapping            & Device page       \\ %\cmidrule{2-4}
-      & Cross AS       & Kernel mapping          & Device DMA page   \\ \midrule
-      \multirow{2}{*}[-2.4em]{\shortstack{\textbf{New} \\\textbf{mapping}}}
-      & \texttt{mmap}  & \texttt{mm\_populate}   & New device page   \\ %\cmidrule{2-4}
-      & \texttt{clone} &                         & New device DMA    \\ %\cmidrule{2-4}
-      & \texttt{swap}  &                         &                   \\
+      & Intra AS     & User mapping          & Device page       \\
+      \multirow{-2}{*}{\shortstack[l]{\textbf{Existing} \\ \textbf{mapping}}}
+      & Cross AS     & Kernel mapping        & Device DMA page   \\
+      \midrule
+
+      & \Code{mmap}  & \Code{mm\_populate}   & New device page   \\
+      & \Code{clone} &                       & New device DMA    \\
+      \multirow{-3}{*}{\shortstack[l]{\textbf{New} \\ \textbf{mapping}}}
+      & \Code{swap}  &                       &                   \\
   \bottomrule
   \end{tabular}
-  \end{center}
+  \end{adjustbox}
   \caption{Attack vector classification for \tocttou exploits.}
   \label{tab:attack_class}
 \end{table}
