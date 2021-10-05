@@ -129,7 +129,7 @@ Similarly,
 they fundamentally prohibit efficient, kernel-based stateful system call filtering.
 Thus, we propose \emph{\midas} to mitigate double-fetch bugs. \midas creates on-demand
 snapshots and copies of accessed data, enforcing our key invariant
-that throughout a syscall's lifetime, every read to a userspace object
+that throughout a system call's lifetime, every read to a userspace object
 will return the same value.
 
 \midas shows no noticeable drop in performance when evaluated on compute-bound
@@ -153,7 +153,7 @@ kernel. The userspace/kernel interface forms an explicit trust barrier;
 all data that crosses this boundary in either direction must be carefully
 checked by the kernel.
 %
-Userspace processes attack the kernel by issuing system calls that then trigger
+Userspace processes attack the kernel by issuing system calls (syscalls) that then trigger
 kernel bugs, elevating the privileges of the process.
 %
 A common class of kernel bugs are so-called \emph{double-fetch}
@@ -180,9 +180,9 @@ cve20168438}.
 % Considering that double-fetches also appear in drivers, legacy
 % systems with binary-only drivers cannot be patched, even if a bug is found.
 Watson~\cite{watson2007exploiting} blames an unfixable \tocttou
-constellation as a reason for the generic insecurity of \emph{system call
+constellation as a reason for the generic insecurity of \emph{syscall
 wrappers}.
-System call filtering wrappers require that data read from userspace for the
+Syscall filtering wrappers require that data read from userspace for the
 initial check remains the same when the kernel later uses it for computation.
 Therefore, such filters can currently only check arguments passed by value.
 \midas enables ``deep argument inspection'' for SecComp~\cite{seccomp_deep, seccomp}
@@ -191,11 +191,11 @@ Without \midas, such inspection is impossible: these checks
 introduce double fetches, and consequently \tocttou bugs.
 
 To mitigate double-fetch bugs in the kernel, a system must prohibit
-\emph{concurrent changes}\footnotemark to memory accessed by the system call. Attackers may
+\emph{concurrent changes}\footnotemark to memory accessed by the syscall. Attackers may
 find crafty ways to trigger such concurrent writes, including:
 \begin{inparaenum}[\itshape i\upshape)]
 \item  direct writes from userspace (e.g., from concurrent threads),
-\item  kernel writes from system calls (e.g., from concurrent system calls),
+\item  kernel writes from syscalls (e.g., from concurrent syscalls),
 \item  modifying address space mappings,
 \item  concurrent \texttt{write} syscalls to a file that alters mapped
 file pages, and
@@ -210,13 +210,14 @@ writes.}
 We base our defense on a single key invariant:
 \textbf{\emph{through a syscall's lifetime, every read to a userspace object
 will return the same value}}. From this invariant we derive a \emph{security
-property} ensuring that every read during the execution of a system call is
+property} ensuring that every read during the execution of a syscall is
 tracked. Subsequent reads from the same address will always return the same value.
 For performance, multiple versions of an object may exist simultaneously,
-depending on when the system call was started and how many
-concurrent system calls are in flight. Orthogonally, we derive a \emph{correctness
+depending on when the syscall was started and how many
+concurrent syscalls are in flight. 
+Orthogonally, we derive a \emph{correctness
 property} that ensures the sharing of the correct version among inflight
-system calls. All writes end up on the most recent version of
+syscalls. All writes end up on the most recent version of
 the objects, allowing forward progress.
 % Mat: should we split it into security, correctness, and performance
 % properties, all driven by the core invariant?
@@ -230,7 +231,7 @@ more kernel-intensive workloads from the Phoronix Test Suite is~$3.4\%$ (with
 negligible memory overhead).
 %
 Our security evaluation demonstrates how \midas successfully stops all attacks
-against vulnerable system calls.
+against vulnerable syscalls.
 %
 Our contributions are:
 
@@ -240,7 +241,7 @@ the kernel against malicious concurrent modifications,
 \item \midas, a design that prohibits and detects
 \tocttou attacks against modern kernels, prohibiting their exploitation,
 enabling developers to detect \tocttou bugs, and providing the foundation for
-safe system call interposition and validation, and
+safe syscall interposition and validation, and
 \item An efficient implementation of \midas for the Linux kernel that exhibits
 low ($3.4\%$) performance overhead.
 \end{itemize}
@@ -438,10 +439,10 @@ boundaries~\cite{lu2018untrusted}).
 % Nothing fancy -- the adversary is just trying to hack the system
 % No black magic allowed
 The attacker has access to a user account on the target machine. They can
-execute arbitrary userspace code, including system calls. Some of the system
+execute arbitrary userspace code, including syscalls. Some of the system
 calls have double-fetch vulnerabilities which the attacker wishes to exploit
 (e.g., for privilege escalation).
-The attacker may execute arbitrary sequences of system calls on multiple CPU
+The attacker may execute arbitrary sequences of syscalls on multiple CPU
 cores in parallel, or concurrently on the same core.
 
 \midas mitigates any unintended corruption or information leakage \emph{in the kernel}
@@ -505,7 +506,7 @@ vulnerable data in a \emph{confused-deputy} attack.
 When the attacker passes a pointer to the vulnerable data to
 the syscall as a user buffer in which the syscall can return some
 data, the kernel's write to the buffer can modify vulnerable data.
-For example, the \Code{read} system call takes an argument pointing
+For example, the \Code{read} syscall takes an argument pointing
 to a user buffer where the contents of a file will be copied to.
 Another example is \Code{rt_sigaction}, where the kernel writes to
 a user buffer pointed to by the \Code{oldact} argument.
@@ -648,7 +649,7 @@ The na\"ive design can deadlock because it introduces dependencies between
 tasks for forward progress, which we illustrate in the following example
 of a system with two tasks (A and B):
 \begin{inparaenum}[\itshape i\upshape)]
-  \item Task A issues a blocking system call which reads a user page and blocks, then
+  \item Task A issues a blocking syscall which reads a user page and blocks, then
   \item Task B writes to the same user page before issuing a syscall which
   resumes task A.
 \end{inparaenum}
@@ -1207,7 +1208,7 @@ information before its imminent termination and no \tocttou protection
 is needed.
 Second, we also exempt the \Code{write} system
 call's reads from user memory from instrumentation.
-The \Code{write} system call takes three arguments: a
+The \Code{write} syscall takes three arguments: a
 file descriptor passed as a register, a pointer to a user
 buffer and a count of bytes to be written to the file.
 While the write to the file's pages is sensitive, and
@@ -1271,7 +1272,7 @@ For protected pages, \midas implements the required state change based
 on whether the faulting access was a read or a write.
 
 In the remaining case, faults for a present page indicate a
-permission fault (write to a read-only page).
+permission fault (for example, a write to a read-only page).
 If the page is not a COW page, the handler then checks if the page
 is in a protected state by checking the SW3 bit.
 If the page was protected, a new copy is allocated and the page
@@ -1281,10 +1282,10 @@ violation, sending a signal to the process.
 
 COW pages represent separate virtual pages from different
 address spaces mapped to the same physical page.
-An example of a COW page protected by \midas is illustrated in
+An example of a COW page protected by \midas is shown in
 \autoref{fig:fault_handling_cow}, where logically-separate pages A and B
 are actually mapped to the COW page.
-A COW page cannot be in states 2 or 3, since they cannot have multiple
+COW pages cannot be in states 2 or 3, since they cannot have multiple
 \midas copies.
 COW pages in state 0 can be dealt with by the kernel's standard
 duplication method (not \midas' duplication).
@@ -1299,8 +1300,8 @@ Therefore, after the kernel duplicates the COW page (new page
 B created, in \autoref{fig:fault_handling_cow}), \midas moves
 the snapshots for the faulting process ($S_B$) to the new page.
 Here, \midas also updates the protected page list in the
-affected syscalls' \Code{task_struct}s so that they point to the
-new page.
+affected syscalls' \Code{task_struct}s so that these structures
+correctly refer to the new page.
 Finally, the new page is transitioned to its next state to allow
 for the write to occur, creating a new copy ($C_0$) for the
 snapshot $S_B$ to read from.
@@ -1809,11 +1810,19 @@ scalability of the Linux networking stack.
 %%%%%%%%%%%%%%%%%%%%
 
 Early work on double-fetch bugs relied primarily on manual
-code analysis to identify bugs in kernel code~\cite{YangCSS12}
+code analysis to identify bugs in kernel code~\cite{YangCSS12, twizsgrakky07ring0}
 or in syscall wrappers~\cite{watson2007exploiting}.
-In this section, we describe the automated tools that followed,
-based on static or dynamic analysis techniques, which can be employed
-to find and mitigate \tocttou bugs.
+Realizing the limited scalability of this approach, particularly
+when applied to large codebases such as the Linux kernel, subsequent 
+work focussed on automated techniques based on static or dynamic 
+analysis techniques, and on leveraging hardware features to mitigate
+such bugs.
+
+% Realizing that large projects such as the Linux kernel are not 
+% amenable to extensive man
+% In this section, we describe the automated tools that followed,
+% based on static or dynamic analysis techniques, which can be employed
+% to find and mitigate \tocttou bugs.
 
 \paragraph{Static analysis}
 %
@@ -1840,7 +1849,7 @@ Additionally, the protection allowed by static analysis methods are
 limited: only the bugs which are detected can be fixed, and static
 analyses are necessarily incomplete.
 In contrast, \midas mitigates \emph{all} \tocttou vulnerabilities.
-Further, specific cases of double fetches, such as in system call wrappers
+Further, specific cases of double fetches, such as in syscall wrappers
 cannot be fixed in code, and require a versioning system such as
 \midas in order to enable deep argument inspection.
 
@@ -1850,8 +1859,8 @@ Dynamic analysis techniques leverage runtime information and values
 to detect double fetches, and are notable in their ability to
 find bugs in binaries.
 
-To enable the search for various classes of bugs, Google Project Zero
-Bochspwn~\cite{jurczyk2013bochspwn} project introduced
+To enable the search for various classes of bugs, Google Project Zero's
+Bochspwn project~\cite{jurczyk2013bochspwn} introduced
 a comprehensive emulator for \Code{x86} with callbacks to allow
 tracing of kernel operations, including memory accesses.
 When paired with a syscall fuzzer,
@@ -1859,6 +1868,10 @@ Bochspwn successfully detected and reported double fetches from
 these access logs, but suffered from a high rate of false positives.
 Another major shortcoming of Bochspwn was its low execution throughput
 of 40-80MIPS which limited its ability to explore code paths.
+Xenpwn~\cite{wilhelm2016xenpwn} extended Bochspwn's trace-driven 
+approach to fuzz hypervisors for double-fetch bugs.
+Xenpwn found three double fetches in the Xen hypervisor, but no critical 
+vulnerabilities in KVM.
 
 DECAF~\cite{schwartzDECAF} inverts \midas' adversarial model, leveraging
 concurrent access to syscall parameters from userspace to detect kernel
