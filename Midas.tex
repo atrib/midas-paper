@@ -1226,7 +1226,7 @@ they can prove to be secure from double-fetch bugs.
 \subsection{Handling Faults}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{figure}[h]
+\begin{figure}[]
   \centering
   \includegraphics[width=\linewidth]{img/pagefault.pdf}
   \caption{Flowchart for handling a page fault. Shaded
@@ -1234,7 +1234,7 @@ they can prove to be secure from double-fetch bugs.
   \label{fig:fault_handling}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[]
   \centering
   \includegraphics[width=\linewidth]{img/pagefault_cow.pdf}
   \caption{Flowchart for handling a page fault to a COW page.}
@@ -1472,6 +1472,32 @@ which heavily rely on the kernel's performance.
 \subsection{Mitigation of CVE-2016-6516}
 %%%%%%%%%%%%%%%%%%%%
 
+\definecolor{mygreen}{RGB}{62, 123, 49}
+% \begin{minipage}{\linewidth}
+\begin{lstlisting}[language=C, escapeinside={<@}{@>},
+                  basicstyle=\ttfamily, frame=single, numbers=left,
+                  captionpos=b,
+                  label=lst:cve-2016-6516,
+                  caption={CVE-2016-6516: Vulnerable double fetch in \Code{ioctl_file_dedupe_range}.
+                          Lines in green show the fix and testing code.},
+                  float]
+  //First fetch
+  if(get_user(count,&argp->dest_count))
+  {...}
+  //Using first fetch
+  size = offsetof(..., info[count]);
+  //Secong fetch
+  same = memdup_user(argp, size);
+<@\texttt{\color{mygreen}{+ \textit{//Added check for bug}}}@>
+<@\texttt{\color{mygreen}{+ \textbf{if}(same->dest\_count != count)}}@>
+<@\texttt{\color{mygreen}{+ \ \ printk("Bug triggered");}}@>
+<@\texttt{\color{mygreen}{+ \textit{// Fix: copy over original count}}}@>
+<@\texttt{\color{mygreen}{+ same->dest\_count = count;}}@>
+  //Using second fetch
+  ret = vfs_dedupe_file_range(file,same);
+\end{lstlisting}
+% \end{minipage}
+
 CVE-2016-6516 is a known vulnerability in kernels prior to version
 4.7 in a file-system \Code{ioctl}.
 The vulnerable code is shown in \autoref{lst:cve-2016-6516} and is
@@ -1499,32 +1525,6 @@ The exploit was able to successfully trigger the bug on the baseline kernel
 every time over 10 runs.
 With \midas enabled, the exploit was never triggered, i.e., both fetches
 returned the same value on every call.\\
-
-
-\definecolor{mygreen}{RGB}{62, 123, 49}
-\begin{minipage}{\linewidth}
-\begin{lstlisting}[language=C, escapeinside={<@}{@>},
-                  basicstyle=\ttfamily, frame=single, numbers=left,
-                  captionpos=b,
-                  label=lst:cve-2016-6516,
-                  caption=CVE-2016-6516: Vulnerable double fetch in \Code{ioctl_file_dedupe_range}.
-                          Lines in green show the fix and testing code.]
-  //First fetch
-  if(get_user(count,&argp->dest_count))
-  {...}
-  //Using first fetch
-  size = offsetof(..., info[count]);
-  //Secong fetch
-  same = memdup_user(argp, size);
-<@\texttt{\color{mygreen}{+ \textit{//Added check for bug}}}@>
-<@\texttt{\color{mygreen}{+ \textbf{if}(same->dest\_count != count)}}@>
-<@\texttt{\color{mygreen}{+ \ \ printk("Bug triggered");}}@>
-<@\texttt{\color{mygreen}{+ \textit{// Fix: copy over original count}}}@>
-<@\texttt{\color{mygreen}{+ same->dest\_count = count;}}@>
-  //Using second fetch
-  ret = vfs_dedupe_file_range(file,same);
-\end{lstlisting}
-\end{minipage}
 
 
 \subsection{Performance evaluation}
@@ -1936,8 +1936,6 @@ This project was partially supported by European Research Council (ERC)
 grant No. 850868, DARPA HR001119S0089-AMP-FP-034, and ONR award
 N00014-18-1-2674. Any findings are those of the authors and do not necessarily
 reflect the views of our sponsors.
-
-\atri{Check spacing, particular by moving listing}
 
 %%%%%%%%%%%%%%%%%%%%
 % Bibliography
