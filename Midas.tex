@@ -385,7 +385,8 @@ Any unintended access outside of these functions causes a
 hardware fault, indicating a kernel bug or an attack.
 Linux implements the \Code{copy_\{from/to\}_user} functions, which
 use the access control instructions to disable SMAP before
-accessing userspace data, and then re-enable SMAP afterwards.  This makes
+accessing userspace data, and then re-enable SMAP afterwards.  
+Transfer functions make
 kernel accesses to userspace data explicit, allowing
 \midas to reliably track and protect all kernel fetches from userspace memory.
 
@@ -784,7 +785,7 @@ read-only copy $C_0$ (shown by green shading in \autoref{fig:midas_states}).
 Snapshots except $L$ (i.e. $S_0$ and $S_1$) previously mapping to $C_L$ are
 mapped to the copy $C_0$.
 The write then modifies the latest copy $C_L$, which is made writable again.
-Note how, at this state, any read using the snapshots $S_0$ or $S_1$ reads
+Note how, in this state, any read using the snapshots $S_0$ or $S_1$ reads
 from the unmodified copy $C_0$ while writes directly affect $C_L$.
 Certain syscalls such as \Code{rt_sigaction} both read and write from
 the same user page.
@@ -1112,7 +1113,7 @@ Only one syscall~(\Code{clone}) required code modification.
 \midas needs to track the state for every userspace page, including
 its snapshot and copy sets.
 \autoref{fig:midas_bookeeping} shows the data structures used to
-track this state in our prototype.
+track a page's state in our prototype.
 Linux maintains a \Code{struct page} object for every frame of
 physical memory.
 We augment \Code{struct page}  with a list holding the snapshots
@@ -1749,9 +1750,11 @@ The total overhead is estimated from the throughput figures obtained from
 workloads.
 As expected, metadata tracking and duplication causes most overheads
 for the user copy and fault handling functions respectively.
-The results for the Linux build breakdown differs in the large portion of
+The results for the Linux build breakdown differs 
+from the other workloads
+in the large portion of
 the unaccounted overhead (labelled ``Other'').
-This stems for the fact that Linux's compilation runs a large number (1000s)
+This anomaly stems for the fact that Linux's compilation runs a large number (1000s)
 of processes, of which the compiler accounts for less than~50\% of the
 total execution time.
 The reported breakdown accounts for overheads on the compiler, but not
@@ -1934,7 +1937,6 @@ grant No. 850868, DARPA HR001119S0089-AMP-FP-034, and ONR award
 N00014-18-1-2674. Any findings are those of the authors and do not necessarily
 reflect the views of our sponsors.
 
-\atri{Check uses of 'this'}
 \atri{Check spacing, particular by moving listing}
 
 %%%%%%%%%%%%%%%%%%%%
