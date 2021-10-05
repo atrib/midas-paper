@@ -534,7 +534,7 @@ drivers to account for writes via kernel mappings to vulnerable data.}
 The kernel might create new mappings to the vulnerable data
 between the double fetches by the target syscall, bypassing any 
 protective permissions installed by the transfer function in 
-page-table entries at the time of first read.
+PTEs at the time of first read.
 An attacker can call \Code{mmap} and \Code{clone} to create
 a new mapping to the vulnerable data before writing to it.
 % The first version is called a \emph{reflected double fetch}
