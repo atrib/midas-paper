@@ -530,9 +530,9 @@ but the file-system driver does explicitly find the page before writing to it.
 drivers to account for writes via kernel mappings to vulnerable data.}
 
 The kernel might create new mappings to the vulnerable data
-between the double fetches by the target syscall, bypassing the accessed page's
-protection mechanisms at the time of first read by
-instrumenting the transfer function.
+between the double fetches by the target syscall, bypassing any 
+protective permissions installed by the transfer function in 
+page-table entries at the time of first read.
 An attacker can call \Code{mmap} and \Code{clone} to create
 a new mapping to the vulnerable data before writing to it.
 % The first version is called a \emph{reflected double fetch}
@@ -548,7 +548,7 @@ process (\Code{mm_populate} on Linux) is creating the new mapping.
 \emph{A protection mechanism must instrument any syscalls
 and other kernel mechanisms which can create new mappings.}
 
-Swapping may also create a new mapping.
+Swapping may also create a new page-mapping.
 If the attacker writes to a page that was previously swapped
 to disk, but later swapped in to be read by the target syscall in
 a different address space, the kernel might lazily reinstate
@@ -578,8 +578,8 @@ our threat model and are not protected by \midas.
 However, \midas can be extended to protect against modifications by DMA devices
 on processors supporting IOMMUs or similar methods for
 access control~\cite{olsonbordercontrol}.
-As a superuser can modify kernel code, protecting against attacks from this
-user is also outside of our threat model.
+As a superuser can modify kernel code via kernel modules, protecting against 
+attacks from this user falls outside of our threat model.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -587,7 +587,7 @@ user is also outside of our threat model.
 \label{sec:design}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\midas maintains a single \emph{invariant}:
+\midas maintains a single, core, \emph{invariant}:
 \textbf{\emph{through a syscall's lifetime, every read to a userspace object
 will return the same value}}.
 By construction, the invariant guarantees that double-fetches in syscall
@@ -680,7 +680,7 @@ these snapshots will map to a single copy, reducing \midas' space overheads
 and performance overheads for creating copies.
 \midas maintains a snapshot of every page when first read by a syscall.
 On a double fetch by the same syscall, the copy mapped to the snapshot
-is accessed, ensuring the data read is the same as the first time.
+is accessed, ensuring that the data read is the same as the first time.
 The latest copy of the page is used for all writes, by the syscall as
 well as from concurrently running tasks, updating the page as seen
 from userspace.
@@ -1009,7 +1009,7 @@ Linux kernel.
 \paragraph{Example: Objects spanning multiple pages}
 \autoref{fig:copy_two_pages} shows \midas protecting a syscall which
 has a double fetch for an object spanning multiple pages.
-Here, the two pages containing the object \Code{X} are acessed as
+Here, the two pages containing the object \Code{X} are accessed as
 \Code{X[0]} and \Code{X[1]}.
 The attacker tries to attack the syscall by changing the value of the
 second page:
@@ -1936,6 +1936,7 @@ reflect the views of our sponsors.
 
 \atri{Change adversary to attacker in figures}
 \atri{Check uses of 'this'}
+\atri{Check spacing, particular by moving listing}
 
 %%%%%%%%%%%%%%%%%%%%
 % Bibliography
