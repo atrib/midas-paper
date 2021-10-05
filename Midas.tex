@@ -184,8 +184,7 @@ constellation as a reason for the generic insecurity of \emph{system call
 wrappers}.
 System call filtering wrappers require that data read from userspace for the
 initial check remains the same when the kernel later uses it for computation.
-Moreover, these filters
-can only check arguments passed by value.
+Therefore, such filters can currently only check arguments passed by value.
 \midas enables ``deep argument inspection'' for SecComp~\cite{seccomp_deep, seccomp}
 (i.e., checks arguments passed by reference).
 Without \midas, such inspection is impossible: these checks
@@ -195,11 +194,11 @@ To mitigate double-fetch bugs in the kernel, a system must prohibit
 \emph{concurrent changes}\footnotemark to memory accessed by the system call. Attackers may
 find crafty ways to trigger such concurrent writes, including:
 \begin{inparaenum}[\itshape i\upshape)]
-\item  direct writes from userspace (e.g., from concurrent threads);
-\item  kernel writes from system calls (e.g., from concurrent system calls);
-\item  modifying address space mappings;
+\item  direct writes from userspace (e.g., from concurrent threads),
+\item  kernel writes from system calls (e.g., from concurrent system calls),
+\item  modifying address space mappings,
 \item  concurrent \texttt{write} syscalls to a file that alters mapped
-file pages; and
+file pages, and
 \item  storing arguments on device-backed pages, leveraging devices to trigger
 concurrent writes.
 \end{inparaenum}
@@ -211,7 +210,7 @@ writes.}
 We base our defense on a single key invariant:
 \textbf{\emph{through a syscall's lifetime, every read to a userspace object
 will return the same value}}. From this invariant we derive a \emph{security
-property} ensuring every read during the execution of a system call is
+property} ensuring that every read during the execution of a system call is
 tracked. Subsequent reads from the same address will always return the same value.
 For performance, multiple versions of an object may exist simultaneously,
 depending on when the system call was started and how many
@@ -231,18 +230,17 @@ more kernel-intensive workloads from the Phoronix Test Suite is~$3.4\%$ (with
 negligible memory overhead).
 %
 Our security evaluation demonstrates how \midas successfully stops all attacks
-against vulnerable system calls, along with providing developers with
-sufficient information about the location of the bug.
+against vulnerable system calls.
 %
 Our contributions are:
 
 \begin{itemize}[noitemsep]
 \item Distillation of \tocttou attack vectors into an invariant that protects
-the kernel against malicious concurrent modifications;
+the kernel against malicious concurrent modifications,
 \item \midas, a design that prohibits and detects
 \tocttou attacks against modern kernels, prohibiting their exploitation,
 enabling developers to detect \tocttou bugs, and providing the foundation for
-safe system call interposition and validation; and
+safe system call interposition and validation, and
 \item An efficient implementation of \midas for the Linux kernel that exhibits
 low ($3.4\%$) performance overhead.
 \end{itemize}
@@ -334,12 +332,12 @@ to it, resulting in a separate copy.
 
 Linux maintains userspace and kernel mappings to memory in distinct
 parts of the virtual address space.
-The PTE entries for kernel mappings---located in the top half of the
-address space---have the U/S bit set.
+The PTE entries for kernel mappings, located in the top half of the
+address space, have the U/S bit set.
 These kernel mappings are identical for all address spaces, and are
 kept consistent across the corresponding page tables.
-In contrast, the PTE entries for userpace mappings---located in the bottom half
-of the address space---have the U/S bit reset.
+In contrast, the PTE entries for userpace mappings, located in the 
+bottom half of the address space, have the U/S bit reset.
 A userspace page has atleast one userspace mapping and atleast one
 kernel mapping.
 Shared userspace memory is implemented by mapping a page in more than
@@ -350,7 +348,7 @@ However, when files are read or written, parts of the file are cached
 in the kernel's page cache (which consists of pages mapped in the kernel's
 address space).
 Moreover, programs can explicitly map pages from a file, in which case
-the corresponding pages from the page cache are also mapped in to userspace
+the corresponding pages from the page cache are also mapped at userspace
 addresses in the process' page table.
 Mapped file pages can therefore be accessed by the file-system driver using
 kernel addresses, and userspace programs using userspace addresses.
@@ -365,7 +363,7 @@ the risk of the kernel confusing userspace data structures
 for kernel data structures.
 An attacker can exploit this behavior via bugs in the
 kernel.
-This requires an attacker to set up either data structures
+Essentially, the attacker needs to set up either data structures
 or code within its accessible memory, then exploit a kernel
 bug to make the kernel use these data structures, or execute
 this code.
@@ -377,11 +375,12 @@ raises a fault (depending on the state of a per-core system
 register).
 On x86-64, these features are known as Supervisor Memory Access
 Protection (SMAP, for data accesses) and Supervisor Memory Execution
-Protection (SMEP, for code accesses). Bits in the CR4 register
-and the \Code{stac}/\Code{clac} (privileged) instructions are used to enable and
-disable these protection mechanisms.
+Protection (SMEP, for code accesses). 
+Bits in the CR4 register track whether these protections are active, 
+and the privileged \Code{stac}/\Code{clac} instructions are used to 
+quickly enable and disable SMAP.
 In the OS, all accesses to userspace memory are made explicit,
-using a \emph{transfer functions} to read from and write to userspace memory.
+using \emph{transfer functions} to read from and write to userspace memory.
 Any unintended access outside of these functions causes a
 hardware fault, indicating a kernel bug or an attack.
 Linux implements the \Code{copy_\{from/to\}_user} functions, which
@@ -402,19 +401,19 @@ kernel accesses to userspace data explicit, allowing
 
 Double-fetch bugs occur when a privileged environment (such as the kernel)
 reads untrusted memory multiple times, returning different values each time.
-Such a situation is depicted in \autoref{fig:doublefetch}.
-Here, the the value of \Code{X} in memory is changed by an attacker
+Such a situation is depicted in \autoref{fig:doublefetch}, 
+where the value of \Code{X} in memory is changed by an attacker
 between two reads by the target thread.
-This leads to a race condition, due to a requirement on the ordering of memory
-accesses across threads.
-More specifically, a \emph{time-of-check to time-of-use} (\tocttou) bug occurs
-when the first fetch validates an object's value in memory and
+Exploiting such a bug requires a race condition i.e. accesses 
+to memory in a particular order across threads.
+A specific variety is the \emph{time-of-check to time-of-use}~(\tocttou) 
+bug which occurs when the first fetch validates an object's value and
 the second fetch uses the same object's value.
 \tocttou bugs are widely studied in file systems, where the
 API makes it possible to swap the file after validating the access
 rights~\cite{payer2012protecting,
 pu2006methodical, wei2010modeling, tsafrir2008portably,Garfinkel03}.
-\tocttou bugs affect both kernel code~\cite{jurczyk2013bochspwn, wang2018survey}
+\tocttou bugs affect both kernel~\cite{jurczyk2013bochspwn, wang2018survey}
 and dynamically-loaded driver code~\cite{cve201812633,cve201812633fix}.
 Wang et al.~\cite{wang2018survey} showed that double fetches appear not only
 in kernels, but wherever there is a trust boundary to cross (e.g.,
@@ -439,7 +438,7 @@ boundaries~\cite{lu2018untrusted}).
 % No black magic allowed
 The attacker has access to a user account on the target machine. They can
 execute arbitrary userspace code, including system calls. Some of the system
-calls have double-fetch vulnerabilities, which the attacker wishes to exploit
+calls have double-fetch vulnerabilities which the attacker wishes to exploit
 (e.g., for privilege escalation).
 The attacker may execute arbitrary sequences of system calls on multiple CPU
 cores in parallel, or concurrently on the same core.
@@ -459,21 +458,21 @@ tsafrir2008portably} are out of scope.
 \begin{table}
   \centering
 
-    \begin{adjustbox}{width=\linewidth}
+    \begin{adjustbox}{width=1.0\linewidth}
     \begin{tabular}{  l | l | l | l }
   \toprule
       & \textbf{Userspace} & \textbf{Kernel} & \textbf{Device} \\ \midrule
 
       % Note: this is a manually tuned fixup. multirow just sucks.
-      & Intra AS     & User mapping          & Device page       \\
+      & Intra AS     & User mapping          & DMA       \\
       \multirow{-2}{*}{\shortstack[l]{\textbf{Existing} \\ \textbf{mapping}}}
-      & Cross AS     & Kernel mapping        & Device DMA page   \\
+      & Cross AS     & Kernel mapping        & MMIO page     \\
       \midrule
 
-      & \Code{mmap}  & \Code{mm\_populate}   & New device page   \\
-      & \Code{clone} &                       & New device DMA    \\
+      & \Code{mmap}  & \Code{mm\_populate}   & New           \\
+      & \Code{clone} &                       & DMA/     \\
       \multirow{-3}{*}{\shortstack[l]{\textbf{New} \\ \textbf{mapping}}}
-      & \Code{swap}  &                       &                   \\
+      & \Code{swap}  &                       & MMIO page              \\
   \bottomrule
   \end{tabular}
   \end{adjustbox}
@@ -562,8 +561,8 @@ mappings to vulnerable data, \midas' protection is complete
 against writes from both user and kernel code.
 
 Finally, a device might modify vulnerable data if it is either
-allowed to DMA to the page, or if the page is memory mapped and is
-actually backed by the device.
+allowed to DMA (direct memory access) to the page, or if the page is memory 
+mapped (MMIO) and is actually backed by the device.
 In the latter case, external factors can change the vulnerable
 data.
 Existing discretionary access control rules typically prevent users
@@ -1935,6 +1934,8 @@ grant No. 850868, DARPA HR001119S0089-AMP-FP-034, and ONR award
 N00014-18-1-2674. Any findings are those of the authors and do not necessarily
 reflect the views of our sponsors.
 
+\atri{Change adversary to attacker in figures}
+\atri{Check uses of 'this'}
 
 %%%%%%%%%%%%%%%%%%%%
 % Bibliography
