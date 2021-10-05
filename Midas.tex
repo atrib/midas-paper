@@ -1513,7 +1513,7 @@ two fetches will cause the kernel to access the copied array out-of-bounds,
 causing a heap buffer overflow.
 
 For verifying \midas' defense, we introduce a non-faulting assertion
-check into the function~(lines 9-10) and run a known
+check into the function~(lines 9--10) and run a known
 exploit.\footnote{\url{https://github.com/wpengfei/CVE-2016-6516-exploit/tree/master/Scott\%20Bauer}}
 The condition checks whether the fetched value of the user object (\Code{dest_count})
 had changed, indicating a successful attack, and prints a message.
