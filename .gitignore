@@ -87,4 +87,5 @@ dkms.conf
 *.synctex.gz
 *.fls
 *.fdb_latexmk
+*.rubbercache
 diff.tex
